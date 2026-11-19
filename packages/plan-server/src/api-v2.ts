@@ -73,6 +73,8 @@ import {
   readPhaseRequirementsFlow,
   readProjectContextFlow,
   readProjectGuidelinesFlow,
+  startTaskFlow,
+  type TaskStartFlowRefusalCode,
   preparePhaseHandoffFlow,
   removeTaskChecklistItemFlow,
   showPhaseHandoffFlow,
@@ -187,6 +189,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         checklistAdd: "POST /api/v2/tasks/{taskRef}/checklist",
         checklistToggle: "POST /api/v2/tasks/{taskRef}/checklist/toggle",
         checklistRemove: "DELETE /api/v2/tasks/{taskRef}/checklist?item=",
+        start: "POST /api/v2/tasks/{taskRef}/start",
       },
       project: {
         discuss: "PUT /api/v2/project/discuss",
@@ -1019,6 +1022,51 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     const outcome = await readTaskContextFlow(store, auth.sessionId, tailAfter(c, `${API_V2_BASE_PATH}/context/tasks/`));
     if (!outcome.ok) return showFailure(c, outcome);
     return envelope(c, outcome);
+  });
+
+  // ── Lifecycle family ──────────────────────────────────────────────
+  // Task start runs the same orchestration as planner-task-start
+  // (plan-core task-lifecycle-flow.ts): readiness, context receipts,
+  // ownership, deviation bookkeeping and persistence verification. The
+  // session header names the caller that owns the started task.
+  const taskStartRefusalStatus: Partial<Record<TaskStartFlowRefusalCode, ContentfulStatusCode>> = {
+    TASK_NOT_FOUND: 404,
+    PERSISTENCE_VERIFICATION_FAILED: 500,
+  };
+
+  app.post("/tasks/*/start", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const taskRef = tailAfter(c, `${API_V2_BASE_PATH}/tasks/`).replace(/\/start$/, "");
+    const outcome = await startTaskFlow(store, auth.sessionId, taskRef);
+    if (!outcome.ok) {
+      return error(
+        c,
+        taskStartRefusalStatus[outcome.code] ?? 409,
+        outcome.code,
+        outcome.message,
+        {
+          ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
+          ...(outcome.requirementIds ? { requirementIds: outcome.requirementIds } : {}),
+          context: outcome.context,
+          ...(outcome.evidence ? { evidence: outcome.evidence } : {}),
+        },
+      );
+    }
+    return envelope(c, {
+      started: true,
+      alreadyStarted: outcome.alreadyStarted,
+      taskRef: outcome.taskRef,
+      phaseRef: outcome.phaseRef,
+      featureRef: outcome.featureRef || null,
+      task: outcome.task,
+      phaseContext: outcome.phaseContext,
+      advisory: outcome.advisory,
+      ...(outcome.recommendedTaskRef ? { recommendedTaskRef: outcome.recommendedTaskRef } : {}),
+      ...(outcome.resumeRequired ? { resumeRequired: outcome.resumeRequired } : {}),
+      projectContextStale: outcome.projectContextStale,
+      higherPriorityOpenPhase: outcome.higherPriorityOpenPhase,
+    });
   });
 
   // ── Search family ─────────────────────────────────────────────────

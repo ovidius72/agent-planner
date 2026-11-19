@@ -5,11 +5,11 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, findPhaseByRef, findTaskByRef, findFeatureByRef, findIdeaByRef, buildRecap, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, findPhaseByRef, findTaskByRef, findFeatureByRef, findIdeaByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -1830,213 +1830,102 @@ server.registerTool("planner-task-start", {
     return taskStartError(taskStartDenied("PLAN_NOT_FOUND", "No .planner/ found.", ["Initialize or load the planner, then retry planner-task-start."]));
   }
 
-  return st.runBatch(async () => {
-  const features = (await st.loadFeatures()).features;
-  const initialPhases = await st.loadAllPhases();
-  const found = findTaskByRef(initialPhases, features, ref);
-  if (!found) return taskStartError(taskStartDenied("TASK_NOT_FOUND", `Task not found: ${ref}`, ["Resolve the task with planner-task-list or planner-task-show, then retry planner-task-start."]));
-  const taskRef = taskCompositeRef(found.task, found.phase, features);
-  const phaseRef = formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features));
-  const parentFeature = found.phase.featureId ? features.find((candidate) => candidate.id === found.phase.featureId) : undefined;
-  const featureRef = parentFeature ? formatFeatureRef(parentFeature.number) : "";
-  if (found.task.status === "done") return taskStartError(taskStartDenied(
-    "TASK_DONE",
-    `Task ${taskRef} is done and was not reopened.`,
-    [`Use planner-task-reopen with task=${taskRef} and confirmed=true after explicit user confirmation.`, `Retry planner-task-start ${taskRef} only if reopening is not the intended operation.`],
-    { taskId: found.task.id },
-  ));
-  const project = await st.loadProject(plannerSessionId);
-  // Targeted stale-context refresh (P102(F005)/T404): task-start delivery
-  // stays scoped to feature/phase/task context, but a session that already
-  // did a full planner-load gets a non-blocking advisory when project-level
-  // context has drifted since, instead of silently going stale.
-  const projectContextReadState = await st.projectContextReadStateForSession(plannerSessionId);
-  const projectContextAdvisory = projectContextStaleAdvisory(projectContextReadState);
-  const linkedRequirements = [
-    ...(await st.linkedRequirementsForPhase(found.phase.id)),
-    ...(found.phase.featureId ? await st.linkedRequirementsForFeature(found.phase.featureId) : []),
-  ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
-  const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
-  const contextInput = {
-    sessionId: plannerSessionId,
-    taskId: found.task.id,
-    phaseId: found.phase.id,
-    ...(found.phase.featureId ? { featureId: found.phase.featureId } : {}),
-    task: found.task,
-    phase: found.phase,
-    ...(parentFeature ? { feature: parentFeature } : {}),
-    requirements: linkedRequirements,
-    requirementIds: linkedRequirementIds,
-  };
-  const contextEligibility = contextReadEligibilityForSession(contextInput);
-  const requirementEligibility = requirementReadEligibilityForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
-  const requirementsReady = requirementEligibility.eligible;
-  const projectGuidelinesReadState = projectGuidelinesReadStateForSession(project, plannerSessionId);
-  const projectGuidelinesReady = projectGuidelinesReadState === "valid" || projectGuidelinesReadState === "not-required";
-  if (!projectGuidelinesReady) return taskStartError(taskStartDenied(
-    "PROJECT_GUIDELINES_READ_REQUIRED",
-    `Project Guidelines must be read before task work. Current state: ${projectGuidelinesReadState}.`,
-    mcpContextReadActions(
-      contextEligibility,
-      { task: taskRef, phase: phaseRef, ...(featureRef ? { feature: featureRef } : {}) },
-      true,
-      !requirementsReady,
-      `Retry planner-task-start ${taskRef}`,
-    ),
-    { taskId: found.task.id },
-  ), { projectGuidelinesReadState, contextEligibility });
-  if (!contextEligibility.eligible) return taskStartError(taskStartDenied(
-    "CONTEXT_READ_REQUIRED",
-    `Required context reads are incomplete or stale. ${contextEligibility.reason}`,
-    mcpContextReadActions(
-      contextEligibility,
-      { task: taskRef, phase: phaseRef, ...(featureRef ? { feature: featureRef } : {}) },
-      false,
-      !requirementsReady,
-      `Retry planner-task-start ${taskRef}`,
-    ),
-    { taskId: found.task.id },
-  ), { contextEligibility });
-  if (!requirementsReady) {
-    return taskStartError(taskStartDenied(
-      "REQUIREMENTS_READ_REQUIRED",
-      `Linked requirements were not read; the task remains unchanged. ${requirementEligibility.reason}`,
-      [`planner-requirement-list with phaseRef=${phaseRef}`, `Retry planner-task-start ${taskRef}`],
-      { taskId: found.task.id, requirementIds: linkedRequirementIds },
-    ), { requirementEligibility });
-  }
-  if (!hasValidSessionAttestation(contextInput)) {
-    await st.recordContextRead({ sessionId: plannerSessionId, phaseId: found.phase.id, taskId: found.task.id, ...(found.phase.featureId ? { featureId: found.phase.featureId } : {}), requirementIds: linkedRequirementIds });
-  }
-  if (found.task.status === "in-progress") {
-    let claimed;
-    try { claimed = await st.claimTask(found.phase.id, found.task.id, plannerSessionId); }
-    catch (error) {
-      if (!(error instanceof PlanStoreError)) throw error;
-      return taskStartError(taskStartDenied(error.details?.errorCode as Parameters<typeof taskStartDenied>[0], error.message,
-        ["Continue with the owning caller, or use planner-session-recover after confirming it has stopped."], { taskId: found.task.id }));
+  // One lifecycle flow serves this tool and the versioned API
+  // (plan-core task-lifecycle-flow.ts). This adapter renders the pinned
+  // MCP denial/success texts and echoes the flow's evidence.
+  const outcome = await startTaskFlow(st, plannerSessionId, ref);
+  if (!outcome.ok) {
+    const { taskRef, phaseRef, featureRef, requirementReadRequired } = outcome.context;
+    const retry = `Retry planner-task-start ${taskRef}`;
+    const refs = { task: taskRef, phase: phaseRef, ...(featureRef ? { feature: featureRef } : {}) };
+    let actions: string[];
+    let structured: Record<string, unknown> = {};
+    switch (outcome.code) {
+      case "TASK_NOT_FOUND":
+        actions = ["Resolve the task with planner-task-list or planner-task-show, then retry planner-task-start."];
+        break;
+      case "TASK_DONE":
+        actions = [
+          `Use planner-task-reopen with task=${taskRef} and confirmed=true after explicit user confirmation.`,
+          `Retry planner-task-start ${taskRef} only if reopening is not the intended operation.`,
+        ];
+        break;
+      case "PROJECT_GUIDELINES_READ_REQUIRED":
+        actions = mcpContextReadActions(outcome.evidence?.contextEligibility ?? { eligible: true, reason: "" }, refs, true, Boolean(requirementReadRequired), retry);
+        structured = {
+          projectGuidelinesReadState: outcome.context.projectGuidelinesReadState,
+          contextEligibility: outcome.evidence?.contextEligibility,
+        };
+        break;
+      case "CONTEXT_READ_REQUIRED":
+        actions = mcpContextReadActions(outcome.evidence?.contextEligibility ?? { eligible: true, reason: "" }, refs, false, Boolean(requirementReadRequired), retry);
+        structured = { contextEligibility: outcome.evidence?.contextEligibility };
+        break;
+      case "REQUIREMENTS_READ_REQUIRED":
+        actions = [`planner-requirement-list with phaseRef=${phaseRef}`, retry];
+        structured = { requirementEligibility: outcome.evidence?.requirementEligibility };
+        break;
+      case "START_NOT_ALLOWED":
+        actions = ["Resolve the reported task readiness condition, then retry planner-task-start."];
+        structured = { eligibility: outcome.evidence?.startEligibility };
+        break;
+      case "ACTIVE_TASK_CONFLICT":
+        actions = outcome.context.activeTaskRef
+          ? [`Use planner-task-switch to snapshot and pause ${outcome.context.activeTaskRef}.`, retry]
+          : ["Pause or reconcile the active tasks.", retry];
+        structured = { selection: outcome.evidence?.selection };
+        break;
+      case "PERSISTENCE_VERIFICATION_FAILED":
+        actions = ["Inspect planner-task-show for the persisted state and retry only after resolving the persistence failure."];
+        break;
+      default:
+        actions = outcome.context.wasInProgress
+          ? ["Continue with the owning caller, or use planner-session-recover after confirming it has stopped."]
+          : ["Re-read the task and reconcile its owner before retrying."];
+        break;
     }
-    const outcome = taskStartSucceeded(found.task.id, true);
-    const higherPriorityPhase = findHigherPriorityOpenPhase(initialPhases, features, found.phase.id, found.phase.priority ?? found.phase.number);
-    const phaseOrderAdvisory = higherPriorityOpenPhaseAdvisory(higherPriorityPhase);
-    return text(`✅ Task already started: ${taskRef} — ${found.task.title} (in-progress)\nstarted: true${projectContextAdvisory}${phaseOrderAdvisory}`, { ...outcome, task: claimed.task, projectContextStale: projectContextReadState === "stale", higherPriorityOpenPhase: higherPriorityPhase });
+    return taskStartError(
+      taskStartDenied(outcome.code, outcome.message, actions, {
+        ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
+        ...(outcome.requirementIds ? { requirementIds: outcome.requirementIds } : {}),
+      }),
+      structured,
+    );
   }
-  const [phases, focus] = await Promise.all([st.loadAllPhases(), st.loadResume(plannerSessionId)]);
-  const eligibility = checkExplicitTaskStart(features, phases, found.task.id, project.workDeviations);
-  if (!eligibility.eligible) return taskStartError(taskStartDenied(
-    "START_NOT_ALLOWED",
-    eligibility.reason,
-    ["Resolve the reported task readiness condition, then retry planner-task-start."],
-    { taskId: found.task.id },
-  ), { eligibility });
-  const selection = (recommendNextTask as any)(features, phases, await st.listAllWorkDeviations(), focus?.currentPhaseId, plannerSessionId);
-  if (selection.kind === "conflict") {
-    return taskStartError(taskStartDenied(
-      "ACTIVE_TASK_CONFLICT",
-      selection.reason,
-      ["Pause or reconcile the active tasks.", `Retry planner-task-start ${taskRef}.`],
-      { taskId: found.task.id },
-    ), { selection });
-  }
-  if (selection.kind === "active" && selection.candidate?.task.id !== found.task.id) {
-    const activeRef = taskCompositeRef(selection.candidate!.task, selection.candidate!.phase, features);
-    return taskStartError(taskStartDenied(
-      "ACTIVE_TASK_CONFLICT",
-      `${activeRef} is active; ${taskRef} was not started.`,
-      [`Use planner-task-switch to snapshot and pause ${activeRef}.`, `Retry planner-task-start ${taskRef}.`],
-      { taskId: found.task.id },
-    ), { selection });
-  }
-  let resumeProposal:
-    | { text: string; structured: { taskId: string; phaseId: string; snapshot: { reason: string; resumeLocation: string; howToResume: string } | null } }
-    | undefined;
-  if (selection.kind === "resume" && selection.candidate && selection.candidate.task.id !== found.task.id) {
-    // Advisory only: a pending resume must be surfaced loudly, but it must
-    // not hard-block an explicit start of a different task. Capture a
-    // structured proposal so the resume-first guidance is explicit and
-    // machine-readable for the host/agent.
-    const resumeTask = selection.candidate;
-    const resumeSnapshot = resumeTask.task.pauseSnapshot
-      ?? project.workDeviations.find((deviation) =>
-        deviation.resumeTaskId === resumeTask.task.id
-        && (deviation.state === "resume-required" || deviation.state === "resolved"))?.snapshot
-      ?? null;
-    resumeProposal = buildResumeRequiredProposal({
-      ref: taskCompositeRef(resumeTask.task, resumeTask.phase, features),
-      title: resumeTask.task.title,
-      taskId: resumeTask.task.id,
-      phaseId: resumeTask.phase.id,
-      snapshot: resumeSnapshot
-        ? { reason: resumeSnapshot.reason, resumeLocation: resumeSnapshot.resumeLocation, howToResume: resumeSnapshot.howToResume }
-        : null,
-    });
-  }
-  // Assemble the mandatory parent context before changing task lifecycle state.
-  const [phaseWithRequirements, featureRequirements] = await Promise.all([
-    st.loadPhaseWithRequirements(found.phase.id),
-    parentFeature ? st.linkedRequirementsForFeature(parentFeature.id) : Promise.resolve([]),
-  ]);
-  const phaseContext = buildPhaseContextBlock(
-    phaseWithRequirements,
-    parentFeature,
-    phaseWithRequirements.linkedRequirements ?? [],
-    featureRequirements,
-    found.task,
-    project,
-  );
 
-  // A pending handoff is context, not a lock: task start RETAINS it. It is
-  // archived only when the phase completes (auto) or the user explicitly
-  // clears it.
-  const advisory = selection.candidate && selection.candidate.task.id !== found.task.id
-    ? selection.kind === "resume"
-      ? `\n\n${(() => {
-          if (resumeProposal) return resumeProposal.text;
-          return `⚠️ Resume advisory: ${taskCompositeRef(selection.candidate!.task, selection.candidate!.phase, features)} has a saved checkpoint. Evaluate its resume context before continuing with this explicit task request. Explicit task request honored.`;
-        })()}`
-      : `\n\n⚠️ Priority advisory: ${taskCompositeRef(selection.candidate.task, selection.candidate.phase, features)} is the automatic recommendation. Explicit task request honored.`
-    : "";
-  const timestamp = nowISO();
-
-  let updatedTask: Task | undefined;
-  try {
-    updatedTask = (await st.claimTask(found.phase.id, found.task.id, plannerSessionId, timestamp)).task;
-  } catch (error) {
-    if (!(error instanceof PlanStoreError)) throw error;
-    return taskStartError(taskStartDenied(error.details?.errorCode as Parameters<typeof taskStartDenied>[0], error.message,
-      ["Re-read the task and reconcile its owner before retrying."], { taskId: found.task.id }));
+  const projectContextAdvisory = outcome.projectContextStale ? projectContextStaleAdvisory("stale") : "";
+  const phaseOrderAdvisory = higherPriorityOpenPhaseAdvisory(outcome.higherPriorityOpenPhase);
+  if (outcome.alreadyStarted) {
+    const claimed = taskStartSucceeded(outcome.task.id, true);
+    return text(
+      `✅ Task already started: ${outcome.taskRef} — ${outcome.task.title} (in-progress)\nstarted: true${projectContextAdvisory}${phaseOrderAdvisory}`,
+      {
+        ...claimed,
+        task: outcome.task,
+        projectContextStale: outcome.projectContextStale,
+        higherPriorityOpenPhase: outcome.higherPriorityOpenPhase,
+      },
+    );
   }
-  await st.syncTaskStatusRollup(found.phase.id);
-  const approvedDeviation = project.workDeviations.find((deviation) =>
-    deviation.temporaryTaskId === found.task.id && deviation.state === "approved",
+  const started = taskStartSucceeded(outcome.task.id);
+  const recommendedRef = outcome.recommendedTaskRef ?? "";
+  const advisory = outcome.advisory === "resume"
+    ? `\n\n${outcome.resumeRequired
+      ? outcome.resumeRequired.text
+      : `⚠️ Resume advisory: ${recommendedRef} has a saved checkpoint. Evaluate its resume context before continuing with this explicit task request. Explicit task request honored.`}`
+    : outcome.advisory === "priority"
+      ? `\n\n⚠️ Priority advisory: ${recommendedRef} is the automatic recommendation. Explicit task request honored.`
+      : "";
+  return text(
+    `✅ Task started: ${outcome.taskRef} — ${outcome.task.title} (in-progress)${outcome.task.shortId ? ` · ${outcome.task.shortId}` : ""}\nstarted: true${outcome.phaseContext}${advisory}${projectContextAdvisory}${phaseOrderAdvisory}`,
+    {
+      ...started,
+      task: outcome.task,
+      ...(outcome.resumeRequired ? { resumeRequired: outcome.resumeRequired.structured } : {}),
+      projectContextStale: outcome.projectContextStale,
+      higherPriorityOpenPhase: outcome.higherPriorityOpenPhase,
+    },
   );
-  if (approvedDeviation) await st.setWorkDeviationState(approvedDeviation.id, "active", timestamp);
-  const resumedDeviation = project.workDeviations
-    .filter((deviation) => deviation.resumeTaskId === found.task.id
-      && (deviation.state === "resume-required" || deviation.state === "resolved"))
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
-  if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", timestamp);
-  await st.writeGenerated();
-  const persistedTask = (await st.loadPhase(found.phase.id)).tasks.find((candidate) => candidate.id === found.task.id);
-  if (!updatedTask || persistedTask?.status !== "in-progress" || persistedTask.activeOwnerSession !== plannerSessionId) {
-    return taskStartError(taskStartDenied(
-      "PERSISTENCE_VERIFICATION_FAILED",
-      `The lifecycle write could not be verified as in-progress for ${taskRef}.`,
-      ["Inspect planner-task-show for the persisted state and retry only after resolving the persistence failure."],
-      { taskId: found.task.id },
-    ));
-  }
-  const outcome = taskStartSucceeded(persistedTask.id);
-  const higherPriorityPhase = findHigherPriorityOpenPhase(phases, features, found.phase.id, found.phase.priority ?? found.phase.number);
-  const phaseOrderAdvisory = higherPriorityOpenPhaseAdvisory(higherPriorityPhase);
-  return text(`✅ Task started: ${taskRef} — ${persistedTask.title} (in-progress)${persistedTask.shortId ? ` · ${persistedTask.shortId}` : ""}\nstarted: true${phaseContext}${advisory}${projectContextAdvisory}${phaseOrderAdvisory}`, {
-    ...outcome,
-    task: persistedTask,
-    ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
-    projectContextStale: projectContextReadState === "stale",
-    higherPriorityOpenPhase: higherPriorityPhase,
-  });
-  });
 });
 
 server.registerTool("planner-task-complete", {

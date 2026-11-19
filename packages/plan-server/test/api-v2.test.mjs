@@ -1156,3 +1156,68 @@ test("context family: registered sessions receive content and durable receipts",
     await closeServerFixture(fx);
   }
 });
+
+test("lifecycle family: task start requires a session and the delivered context bundle", async () => {
+  const fx = await startServerFixture({ name: "v2-lifecycle-start" });
+  const taskRef = encodeURIComponent("P001(F001)/T001");
+  const startPath = `/api/v2/tasks/${taskRef}/start`;
+  try {
+    const anonymous = await expectError(fx, startPath, json({}), { status: 400 });
+    assert.match(anonymous.message, /SESSION_REQUIRED/);
+
+    const session = (await request(fx, "/api/v2/sessions", json({ clientKind: "mcp", agentId: "worker-1" }))).body.data.session;
+    const headers = { "X-Planner-Session": session.sessionId };
+
+    const unknownTask = await expectError(fx, `/api/v2/tasks/${encodeURIComponent("P001(F001)/T999")}/start`, {
+      method: "POST",
+      headers,
+    }, { status: 404 });
+    assert.match(unknownTask.message, /TASK_NOT_FOUND/);
+
+    // Starting before the required reads is a typed refusal that names the
+    // missing context, not a silent lifecycle write.
+    const denied = await request(fx, startPath, { method: "POST", headers, expectStatus: 409 });
+    assert.equal(denied.body.error.code, "CONTEXT_READ_REQUIRED");
+    assert.match(denied.body.error.message, /Required context reads/);
+    assert.equal(denied.body.error.context.taskRef, "P001(F001)/T001");
+    assert.equal(denied.body.error.context.phaseRef, "P001(F001)");
+    assert.equal(denied.body.error.context.featureRef, "F001");
+    assert.ok(denied.body.error.evidence.contextEligibility.requiredReads.length > 0);
+
+    // One context bundle delivers task, phase, feature and requirements.
+    const bundle = (await request(fx, `/api/v2/context/tasks/${taskRef}`, { headers })).body.data;
+    assert.equal(bundle.persisted, true);
+
+    const started = (await request(fx, startPath, { method: "POST", headers })).body.data;
+    assert.equal(started.started, true);
+    assert.equal(started.alreadyStarted, false);
+    assert.equal(started.taskRef, "P001(F001)/T001");
+    assert.equal(started.phaseRef, "P001(F001)");
+    assert.equal(started.featureRef, "F001");
+    assert.equal(started.task.status, "in-progress");
+    assert.equal(started.task.activeOwnerSession, session.sessionId);
+    assert.match(started.phaseContext, /📋 Task context/);
+    assert.equal(started.advisory, null);
+    assert.equal(started.projectContextStale, false);
+
+    // The lifecycle write is persisted, not only reported.
+    const shown = (await request(fx, `/api/v2/tasks/${taskRef}`)).body.data;
+    assert.equal(shown.task.status, "in-progress");
+    assert.equal(shown.task.activeOwnerSession, session.sessionId);
+
+    // A second start re-claims ownership without duplicating the context block.
+    const again = (await request(fx, startPath, { method: "POST", headers })).body.data;
+    assert.equal(again.started, true);
+    assert.equal(again.alreadyStarted, true);
+    assert.equal(again.phaseContext, "");
+
+    // A different session cannot re-claim a task another session owns.
+    const other = (await request(fx, "/api/v2/sessions", json({ clientKind: "cli" }))).body.data.session;
+    const otherHeaders = { "X-Planner-Session": other.sessionId };
+    await request(fx, `/api/v2/context/tasks/${taskRef}`, { headers: otherHeaders });
+    const conflict = await request(fx, startPath, { method: "POST", headers: otherHeaders, expectStatus: 409 });
+    assert.match(conflict.body.error.code, /OWNED|CONFLICT/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
