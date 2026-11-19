@@ -75,6 +75,10 @@ import {
   readProjectGuidelinesFlow,
   startTaskFlow,
   completeTaskFlow,
+  pauseTaskFlow,
+  reopenTaskFlow,
+  type TaskPauseRefusalCode,
+  type TaskReopenRefusalCode,
   type TaskCompleteRefusalCode,
   type TaskStartFlowRefusalCode,
   preparePhaseHandoffFlow,
@@ -193,6 +197,8 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         checklistRemove: "DELETE /api/v2/tasks/{taskRef}/checklist?item=",
         start: "POST /api/v2/tasks/{taskRef}/start",
         complete: "POST /api/v2/tasks/{taskRef}/complete",
+        pause: "POST /api/v2/tasks/{taskRef}/pause",
+        reopen: "POST /api/v2/tasks/{taskRef}/reopen",
       },
       project: {
         discuss: "PUT /api/v2/project/discuss",
@@ -1110,6 +1116,83 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       clearedHandoffRef: outcome.clearedHandoffRef,
       resumeRequired: outcome.resumeRequired ?? null,
     });
+  });
+
+  // Pause and reopen join the same lifecycle family. Pause captures a
+  // mandatory durable checkpoint; reopen is a confirmed correction that
+  // retains prior completion evidence.
+  const taskPauseRefusalStatus: Record<TaskPauseRefusalCode, ContentfulStatusCode> = {
+    TASK_NOT_FOUND: 404,
+    TASK_NOT_IN_PROGRESS: 409,
+  };
+  const taskReopenRefusalStatus: Record<TaskReopenRefusalCode, ContentfulStatusCode> = {
+    TASK_NOT_FOUND: 404,
+    TASK_REOPEN_CONFIRMATION_REQUIRED: 409,
+    TASK_REOPEN_NOT_DONE: 409,
+    TASK_REOPEN_FAILED: 409,
+  };
+
+  app.post("/tasks/*/pause", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const reason = optionalString(body, "reason")?.trim() ?? "";
+    const whatWasBeingDone = (optionalString(body, "whatWasBeingDone") ?? optionalString(body, "what_was_being_done") ?? "").trim();
+    const resumeLocation = (optionalString(body, "resumeLocation") ?? optionalString(body, "resume_location") ?? "").trim();
+    const howToResume = (optionalString(body, "howToResume") ?? optionalString(body, "how_to_resume") ?? "").trim();
+    const missing = [
+      ...(reason ? [] : ["reason"]),
+      ...(whatWasBeingDone ? [] : ["whatWasBeingDone"]),
+      ...(resumeLocation ? [] : ["resumeLocation"]),
+      ...(howToResume ? [] : ["howToResume"]),
+    ];
+    if (missing.length > 0) {
+      return error(c, 422, "PAUSE_CHECKPOINT_REQUIRED", `A durable checkpoint requires ${missing.join(", ")}.`, { missing });
+    }
+    const outcome = await pauseTaskFlow(store, auth.sessionId, {
+      task: tailAfter(c, `${API_V2_BASE_PATH}/tasks/`).replace(/\/pause$/, ""),
+      reason,
+      whatWasBeingDone,
+      resumeLocation,
+      howToResume,
+      pausedBy: optionalString(body, "pausedBy"),
+    });
+    if (!outcome.ok) {
+      return error(c, taskPauseRefusalStatus[outcome.code], outcome.code, outcome.message, {
+        ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
+        ...(outcome.taskRef ? { taskRef: outcome.taskRef } : {}),
+      });
+    }
+    return envelope(c, {
+      paused: true,
+      taskRef: outcome.taskRef,
+      phaseRef: outcome.phaseRef,
+      featureRef: outcome.featureRef || null,
+      task: outcome.task,
+      snapshot: outcome.snapshot,
+      resumeRequired: outcome.resumeRequired ?? null,
+    });
+  });
+
+  app.post("/tasks/*/reopen", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const outcome = await reopenTaskFlow(
+      store,
+      auth.sessionId,
+      tailAfter(c, `${API_V2_BASE_PATH}/tasks/`).replace(/\/reopen$/, ""),
+      body.confirmed === true,
+    );
+    if (!outcome.ok) {
+      return error(c, taskReopenRefusalStatus[outcome.code], outcome.code, outcome.message, {
+        ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
+        ...(outcome.taskRef ? { taskRef: outcome.taskRef } : {}),
+      });
+    }
+    return envelope(c, { reopened: true, taskRef: outcome.taskRef, task: outcome.task });
   });
 
   // ── Search family ─────────────────────────────────────────────────

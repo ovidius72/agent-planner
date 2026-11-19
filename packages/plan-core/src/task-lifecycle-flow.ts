@@ -12,6 +12,7 @@ import { findTaskByRef } from "./refs.js";
 import {
   contextReadEligibilityForSession,
   hasValidSessionAttestation,
+  invalidateReads,
   projectGuidelinesReadStateForSession,
   requirementReadEligibilityForSession,
   type ContextReadEligibility,
@@ -28,6 +29,7 @@ import {
 } from "./task-selection.js";
 import { findHigherPriorityOpenPhase, type OpenPhaseWork } from "./stranded-phase.js";
 import type { TaskStartErrorCode } from "./task-start-outcome.js";
+import { randomUUID } from "node:crypto";
 import { PlanStoreError, nowISO } from "./plan-store.js";
 import { applyTaskLifecycleDates } from "./task-lifecycle.js";
 import {
@@ -510,4 +512,162 @@ export async function completeTaskFlow(
     clearedHandoffRef,
     ...(resumeRequired ? { resumeRequired } : {}),
   };
+}
+
+// ── Pause ───────────────────────────────────────────────────────────────
+
+export type TaskPauseRefusalCode = "TASK_NOT_FOUND" | "TASK_NOT_IN_PROGRESS";
+
+export interface TaskPauseRefusal {
+  ok: false;
+  code: TaskPauseRefusalCode;
+  message: string;
+  taskId?: string;
+  taskRef?: string;
+}
+
+export interface PauseTaskInput {
+  task: string;
+  reason: string;
+  whatWasBeingDone: string;
+  resumeLocation: string;
+  howToResume: string;
+  pausedBy?: string | undefined;
+}
+
+export interface TaskPauseSuccess {
+  ok: true;
+  task: Task;
+  taskRef: string;
+  phaseRef: string;
+  featureRef: string;
+  snapshot: TaskPauseSnapshot;
+  /** Set when the paused task was approved temporary work: the preserved target must be resumed. */
+  resumeRequired?: { taskId: string; taskRef: string; title: string };
+}
+
+/**
+ * Checkpoint one in-progress task. The snapshot is durable and mandatory;
+ * reads for the session are invalidated because the task revision moved.
+ */
+export async function pauseTaskFlow(
+  store: PlanStore,
+  sessionId: string,
+  input: PauseTaskInput,
+): Promise<TaskPauseSuccess | TaskPauseRefusal> {
+  const features = (await store.loadFeatures()).features;
+  const found = findTaskByRef(await store.loadAllPhases(), features, input.task);
+  if (!found) {
+    return { ok: false, code: "TASK_NOT_FOUND", message: `Task not found: ${input.task}` };
+  }
+  const taskRef = taskCompositeRef(found.task, found.phase, features);
+  if (found.task.status !== "in-progress") {
+    return {
+      ok: false,
+      code: "TASK_NOT_IN_PROGRESS",
+      message: `Task pause denied: ${taskRef} is ${found.task.status}, not in-progress.`,
+      taskId: found.task.id,
+      taskRef,
+    };
+  }
+  const parentFeature = found.phase.featureId ? features.find((candidate) => candidate.id === found.phase.featureId) : undefined;
+  const snapshot: TaskPauseSnapshot = {
+    id: randomUUID(),
+    reason: input.reason,
+    whatWasBeingDone: input.whatWasBeingDone,
+    resumeLocation: input.resumeLocation,
+    howToResume: input.howToResume,
+    relatedTaskId: "",
+    pausedAt: nowISO(),
+    pausedBy: input.pausedBy?.trim() ?? "",
+  };
+  invalidateReads(sessionId);
+  const checkpointed = await store.pauseTask(found.phase.id, found.task.id, snapshot);
+  await store.syncTaskStatusRollup(found.phase.id);
+  const activeDeviation = (await store.loadProject(sessionId)).workDeviations
+    .filter((deviation) => (deviation.state === "approved" || deviation.state === "active")
+      && deviation.temporaryTaskId === found.task.id)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  if (activeDeviation) await store.setWorkDeviationState(activeDeviation.id, "resume-required", snapshot.pausedAt);
+  const resume = activeDeviation
+    ? findTaskByRef(await store.loadAllPhases(), features, activeDeviation.resumeTaskId)
+    : undefined;
+  await store.writeGenerated();
+  return {
+    ok: true,
+    task: checkpointed,
+    taskRef,
+    phaseRef: formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features)),
+    featureRef: parentFeature ? formatFeatureRef(parentFeature.number) : "",
+    snapshot,
+    ...(resume
+      ? { resumeRequired: { taskId: resume.task.id, taskRef: taskCompositeRef(resume.task, resume.phase, features), title: resume.task.title } }
+      : {}),
+  };
+}
+
+// ── Reopen ──────────────────────────────────────────────────────────────
+
+export type TaskReopenRefusalCode =
+  | "TASK_NOT_FOUND"
+  | "TASK_REOPEN_CONFIRMATION_REQUIRED"
+  | "TASK_REOPEN_NOT_DONE"
+  | "TASK_REOPEN_FAILED";
+
+const REOPEN_REFUSAL_CODES: readonly TaskReopenRefusalCode[] = [
+  "TASK_NOT_FOUND",
+  "TASK_REOPEN_CONFIRMATION_REQUIRED",
+  "TASK_REOPEN_NOT_DONE",
+  "TASK_REOPEN_FAILED",
+];
+
+export interface TaskReopenRefusal {
+  ok: false;
+  code: TaskReopenRefusalCode;
+  message: string;
+  taskId?: string;
+  taskRef?: string;
+}
+
+export interface TaskReopenSuccess {
+  ok: true;
+  task: Task;
+  taskRef: string;
+}
+
+/**
+ * Reopen a completed task atomically. Prior completion evidence is
+ * retained; the caller must confirm explicitly because reopening a
+ * finished task is a correction, not a routine transition.
+ */
+export async function reopenTaskFlow(
+  store: PlanStore,
+  sessionId: string,
+  ref: string,
+  confirmed: boolean,
+): Promise<TaskReopenSuccess | TaskReopenRefusal> {
+  const features = (await store.loadFeatures()).features;
+  const found = findTaskByRef(await store.loadAllPhases(), features, ref);
+  if (!found) {
+    return { ok: false, code: "TASK_NOT_FOUND", message: `Task not found: ${ref}` };
+  }
+  const taskRef = taskCompositeRef(found.task, found.phase, features);
+  try {
+    const reopened = await store.reopenTask(found.phase.id, found.task.id, { confirmed, ownerSessionId: sessionId });
+    await store.syncTaskStatusRollup(found.phase.id);
+    await store.writeGenerated();
+    return { ok: true, task: reopened, taskRef };
+  } catch (error) {
+    const rawCode = error instanceof PlanStoreError && typeof error.details?.errorCode === "string"
+      ? error.details.errorCode
+      : "";
+    const code = REOPEN_REFUSAL_CODES.find((candidate) => candidate === rawCode) ?? "TASK_REOPEN_FAILED";
+    return {
+      ok: false,
+      code,
+      message: error instanceof Error ? error.message : "unknown error",
+      taskId: found.task.id,
+      taskRef,
+    };
+  }
 }

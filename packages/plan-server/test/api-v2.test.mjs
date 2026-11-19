@@ -1319,3 +1319,100 @@ test("lifecycle family: forced completion records the override instead of tickin
     await closeServerFixture(fx);
   }
 });
+
+test("lifecycle family: pause captures a durable checkpoint and refuses other states", async () => {
+  const fx = await startServerFixture({ name: "v2-lifecycle-pause" });
+  const taskRef = encodeURIComponent("P001(F001)/T001");
+  const pausePath = `/api/v2/tasks/${taskRef}/pause`;
+  try {
+    const session = (await request(fx, "/api/v2/sessions", json({ clientKind: "mcp", agentId: "worker-1" }))).body.data.session;
+    const headers = { "X-Planner-Session": session.sessionId, "Content-Type": "application/json" };
+
+    const checkpointBody = {
+      reason: "Need the gateway contract first",
+      whatWasBeingDone: "Wiring the login route to the auth client",
+      resumeLocation: "packages/plan-server/src/serve.ts:login route",
+      howToResume: "Read the gateway contract, then finish the route wiring.",
+    };
+
+    // A planned task cannot be checkpointed.
+    const notInProgress = await request(fx, pausePath, { method: "POST", headers, body: JSON.stringify(checkpointBody), expectStatus: 409 });
+    assert.equal(notInProgress.body.error.code, "TASK_NOT_IN_PROGRESS");
+
+    const incomplete = await request(fx, pausePath, { method: "POST", headers, body: JSON.stringify({ reason: "only reason" }), expectStatus: 422 });
+    assert.equal(incomplete.body.error.code, "PAUSE_CHECKPOINT_REQUIRED");
+    assert.deepEqual(incomplete.body.error.missing, ["whatWasBeingDone", "resumeLocation", "howToResume"]);
+
+    const missingTask = await request(fx, `/api/v2/tasks/${encodeURIComponent("P001(F001)/T999")}/pause`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(checkpointBody),
+      expectStatus: 404,
+    });
+    assert.equal(missingTask.body.error.code, "TASK_NOT_FOUND");
+
+    // Start, then checkpoint the in-progress task.
+    await request(fx, `/api/v2/context/tasks/${taskRef}`, { headers });
+    await request(fx, `/api/v2/tasks/${taskRef}/start`, { method: "POST", headers });
+
+    const paused = (await request(fx, pausePath, { method: "POST", headers, body: JSON.stringify(checkpointBody) })).body.data;
+    assert.equal(paused.paused, true);
+    assert.equal(paused.task.status, "planned");
+    assert.equal(paused.task.activeOwnerSession, "");
+    assert.equal(paused.snapshot.reason, checkpointBody.reason);
+    assert.equal(paused.snapshot.whatWasBeingDone, checkpointBody.whatWasBeingDone);
+    assert.equal(paused.snapshot.resumeLocation, checkpointBody.resumeLocation);
+    assert.equal(paused.snapshot.howToResume, checkpointBody.howToResume);
+    assert.match(paused.snapshot.pausedAt, /^\d{4}-\d{2}-\d{2}T/);
+
+    const shown = (await request(fx, `/api/v2/tasks/${taskRef}`)).body.data;
+    assert.equal(shown.task.pauseSnapshot.id, paused.snapshot.id);
+    assert.equal(shown.task.statusLog.at(-1).toStatus, "planned");
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("lifecycle family: reopen requires confirmation and a completed task", async () => {
+  const fx = await startServerFixture({ name: "v2-lifecycle-reopen" });
+  const taskRef = encodeURIComponent("P001(F001)/T001");
+  const reopenPath = `/api/v2/tasks/${taskRef}/reopen`;
+  try {
+    const session = (await request(fx, "/api/v2/sessions", json({ clientKind: "cli" }))).body.data.session;
+    const headers = { "X-Planner-Session": session.sessionId, "Content-Type": "application/json" };
+
+    const notDone = await request(fx, reopenPath, { method: "POST", headers, body: JSON.stringify({ confirmed: true }), expectStatus: 409 });
+    assert.equal(notDone.body.error.code, "TASK_REOPEN_NOT_DONE");
+
+    const completed = (await request(fx, `/api/v2/tasks/${taskRef}/complete`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        descriptionUpdate: "Shipped the route and verified the focused suite.",
+        force: true,
+        motivation: "Checklist tracked an item that moved to another task.",
+      }),
+    })).body.data;
+    assert.equal(completed.completed, true);
+
+    const unconfirmed = await request(fx, reopenPath, { method: "POST", headers, body: JSON.stringify({}), expectStatus: 409 });
+    assert.equal(unconfirmed.body.error.code, "TASK_REOPEN_CONFIRMATION_REQUIRED");
+
+    const reopened = (await request(fx, reopenPath, { method: "POST", headers, body: JSON.stringify({ confirmed: true }) })).body.data;
+    assert.equal(reopened.reopened, true);
+    assert.equal(reopened.task.status, "in-progress");
+    assert.equal(reopened.task.completedAt, "");
+    assert.equal(reopened.task.activeOwnerSession, session.sessionId);
+    assert.match(reopened.task.description, /Shipped the route and verified the focused suite/, "completion evidence is retained");
+
+    const missingTask = await request(fx, `/api/v2/tasks/${encodeURIComponent("P001(F001)/T999")}/reopen`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ confirmed: true }),
+      expectStatus: 404,
+    });
+    assert.equal(missingTask.body.error.code, "TASK_NOT_FOUND");
+  } finally {
+    await closeServerFixture(fx);
+  }
+});

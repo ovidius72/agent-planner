@@ -9,7 +9,7 @@ import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, findPh
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Phase, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -1596,36 +1596,31 @@ server.registerTool("planner-task-pause", {
 }, async ({ task: ref, reason, what_was_being_done, resume_location, how_to_resume, paused_by }, extra) => {
   const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
-  const features = (await st.loadFeatures()).features;
-  const found = findTaskByRef(await st.loadAllPhases(), features, ref);
-  if (!found) return text(`Task not found: ${ref}`);
-  if (found.task.status !== "in-progress") return text(`Task pause denied: ${taskCompositeRef(found.task, found.phase, features)} is ${found.task.status}, not in-progress.`);
-  const snapshot = {
-    id: crypto.randomUUID(), reason, whatWasBeingDone: what_was_being_done,
-    resumeLocation: resume_location, howToResume: how_to_resume, relatedTaskId: "",
-    pausedAt: nowISO(), pausedBy: paused_by?.trim() ?? "",
-  };
-  invalidateReads(plannerSessionId);
-  const checkpointed = await st.pauseTask(found.phase.id, found.task.id, snapshot);
-  await st.syncTaskStatusRollup(found.phase.id);
-  const activeDeviation = (await st.loadProject(plannerSessionId)).workDeviations
-    .filter((deviation) => (deviation.state === "approved" || deviation.state === "active")
-      && deviation.temporaryTaskId === found.task.id)
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
-  if (activeDeviation) await st.setWorkDeviationState(activeDeviation.id, "resume-required", snapshot.pausedAt);
-  const resume = activeDeviation
-    ? findTaskByRef(await st.loadAllPhases(), features, activeDeviation.resumeTaskId)
-    : undefined;
-  const resumeNotice = resume
-    ? `\n↩️ RESUME REQUIRED: ${taskCompositeRef(resume.task, resume.phase, features)} — ${resume.task.title}`
+  // Same checkpoint orchestration as the versioned API
+  // (plan-core task-lifecycle-flow.ts pauseTaskFlow).
+  const outcome = await pauseTaskFlow(st, plannerSessionId, {
+    task: ref,
+    reason,
+    whatWasBeingDone: what_was_being_done,
+    resumeLocation: resume_location,
+    howToResume: how_to_resume,
+    pausedBy: paused_by,
+  });
+  if (!outcome.ok) return text(outcome.message);
+  const resumeNotice = outcome.resumeRequired
+    ? `\n↩️ RESUME REQUIRED: ${outcome.resumeRequired.taskRef} — ${outcome.resumeRequired.title}`
     : "";
   return writeAndSummarize(st, [
-    `💾 Resume checkpoint saved: ${taskCompositeRef(checkpointed, found.phase, features)} — ${checkpointed.title}`,
-    `Why: ${snapshot.reason}`,
-    `Checkpoint: ${snapshot.whatWasBeingDone}`,
-    `Resume from: ${snapshot.resumeLocation}`,
-    `How to resume: ${snapshot.howToResume}${resumeNotice}`,
-  ].join("\n"), { task: checkpointed, snapshot, ...(resume ? { resumeRequired: { taskId: resume.task.id } } : {}) });
+    `💾 Resume checkpoint saved: ${outcome.taskRef} — ${outcome.task.title}`,
+    `Why: ${outcome.snapshot.reason}`,
+    `Checkpoint: ${outcome.snapshot.whatWasBeingDone}`,
+    `Resume from: ${outcome.snapshot.resumeLocation}`,
+    `How to resume: ${outcome.snapshot.howToResume}${resumeNotice}`,
+  ].join("\n"), {
+    task: outcome.task,
+    snapshot: outcome.snapshot,
+    ...(outcome.resumeRequired ? { resumeRequired: { taskId: outcome.resumeRequired.taskId } } : {}),
+  });
 });
 
 server.registerTool("planner-task-switch", {
@@ -1789,18 +1784,16 @@ server.registerTool("planner-task-reopen", {
   inputSchema: { task: z.string().min(1), confirmed: z.boolean().optional().default(false) },
 }, async ({ task: ref, confirmed }, extra) => {
   const st = await requireStore();
-  const features = (await st.loadFeatures()).features;
-  const found = findTaskByRef(await st.loadAllPhases(), features, ref);
-  if (!found) return { ...text(`Task not found: ${ref}`, { reopened: false, errorCode: "TASK_NOT_FOUND" }), isError: true };
-  try {
-    const reopened = await st.reopenTask(found.phase.id, found.task.id, { confirmed, ownerSessionId: plannerSessionIdFor(extra) });
-    await st.syncTaskStatusRollup(found.phase.id);
-    await st.writeGenerated();
-    return text(`✅ Task reopened: ${taskCompositeRef(reopened, found.phase, features)} — ${reopened.title} (in-progress)`, { reopened: true, task: reopened });
-  } catch (error) {
-    const details = error instanceof PlanStoreError ? error.details : undefined;
-    return { ...text(`Task reopen denied: ${error instanceof Error ? error.message : "unknown error"}`, { reopened: false, errorCode: details?.errorCode ?? "TASK_REOPEN_FAILED" }), isError: true };
+  // Same reopen orchestration as the versioned API
+  // (plan-core task-lifecycle-flow.ts reopenTaskFlow).
+  const outcome = await reopenTaskFlow(st, plannerSessionIdFor(extra), ref, confirmed);
+  if (!outcome.ok) {
+    if (outcome.code === "TASK_NOT_FOUND") {
+      return { ...text(`Task not found: ${ref}`, { reopened: false, errorCode: "TASK_NOT_FOUND" }), isError: true };
+    }
+    return { ...text(`Task reopen denied: ${outcome.message}`, { reopened: false, errorCode: outcome.code }), isError: true };
   }
+  return text(`✅ Task reopened: ${outcome.taskRef} — ${outcome.task.title} (in-progress)`, { reopened: true, task: outcome.task });
 });
 
 server.registerTool("planner-session-recover", {
