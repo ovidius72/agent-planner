@@ -5,11 +5,11 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, findPhaseByRef, findTaskByRef, findFeatureByRef, findIdeaByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, isStartableTaskStatus, recommendNextTask, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, findPhaseByRef, findTaskByRef, findFeatureByRef, findIdeaByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Phase, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -1562,25 +1562,25 @@ server.registerTool("planner-task-deviation", {
   description: "Record a user-approved temporary task deviation. It preserves the recommended/resume task and never starts, pauses, or blocks work; use normal lifecycle tools for those transitions.",
   inputSchema: { temporary_task: z.string().min(1), resume_task: z.string().min(1).optional(), reason: z.string().min(1) },
 }, async ({ temporary_task, resume_task, reason }, extra) => {
-  const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
-  const [features, phases, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadResume(plannerSessionId)]);
-  const temporary = findTaskByRef(phases, features.features, temporary_task);
-  if (!temporary) return text(`Task not found: ${temporary_task}`);
-  const selected = recommendNextTask(features.features, phases, await st.listAllWorkDeviations(), focus?.currentPhaseId, plannerSessionId);
-  const resume = resume_task ? findTaskByRef(phases, features.features, resume_task) : selected.candidate;
-  if (!resume) return text(`No resume task is available. Provide resume_task explicitly. ${selected.reason}`);
-  if (temporary.task.id === resume.task.id) return text("A temporary task must differ from its resume target.");
-  if (!isStartableTaskStatus(temporary.task.status)) return text(`Temporary task is not startable: ${temporary.task.status}.`);
-  const timestamp = nowISO();
-  const record = {
-    id: crypto.randomUUID(), recommendedTaskId: selected.candidate?.task.id ?? resume.task.id,
-    temporaryTaskId: temporary.task.id, resumeTaskId: resume.task.id, reason, snapshot: null,
-    requestedBy: "user" as const, approvedBy: "user", state: "approved" as const,
-    createdAt: timestamp, activatedAt: "", resumeRequiredAt: "", resolvedAt: "", resumedAt: "",
-  };
-  await st.addWorkDeviation(record, plannerSessionId);
-  return writeAndSummarize(st, `✅ Approved deviation: ${taskCompositeRef(temporary.task, temporary.phase, features.features)} temporarily overrides ${taskCompositeRef(resume.task, resume.phase, features.features)}. Resume target retained.`, { deviation: record });
+  // Same bookkeeping as the versioned API (plan-core deviation-flow.ts
+  // recordDeviationFlow). This tool records intent only; it never
+  // transitions a task.
+  const outcome = await recordDeviationFlow(st, plannerSessionIdFor(extra), {
+    temporaryTask: temporary_task,
+    resumeTask: resume_task,
+    reason,
+  });
+  if (!outcome.ok) {
+    if (outcome.code === "NO_RESUME_TASK") {
+      return text(`No resume task is available. Provide resume_task explicitly. ${outcome.selectionReason ?? ""}`.trimEnd());
+    }
+    return text(outcome.message);
+  }
+  return text(
+    `✅ Approved deviation: ${outcome.temporaryRef} temporarily overrides ${outcome.resumeRef}. Resume target retained.`,
+    { deviation: outcome.deviation },
+  );
 });
 
 server.registerTool("planner-task-pause", {
@@ -1728,14 +1728,21 @@ server.registerTool("planner-session-recover", {
   inputSchema: { task: z.string().min(1), confirmed: z.boolean() },
 }, async ({ task: ref, confirmed }, extra) => {
   const st = await requireStore();
-  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
-  if (!found) return { ...text(`Task not found: ${ref}`, { recovered: false, errorCode: "TASK_NOT_FOUND" }), isError: true };
-  try {
-    const result = await st.recoverSessionForTask(found.phase.id, found.task.id, plannerSessionIdFor(extra), confirmed);
-    return text("Session recovered. Existing tasks, checkpoints and return stack are preserved; read the task context before continuing.", { recovered: true, ...result });
-  } catch (error) {
-    return { ...text(`Session recovery denied: ${error instanceof Error ? error.message : String(error)}`, { recovered: false, errorCode: error instanceof PlanStoreError ? error.details?.errorCode ?? "SESSION_RECOVERY_FAILED" : "SESSION_RECOVERY_FAILED" }), isError: true };
+  // Same recovery as the versioned API (plan-core deviation-flow.ts
+  // recoverSessionFlow): the store verifies the previous process is gone
+  // and that this caller owns nothing already.
+  const outcome = await recoverSessionFlow(st, plannerSessionIdFor(extra), ref, confirmed);
+  if (!outcome.ok) {
+    if (outcome.code === "TASK_NOT_FOUND") {
+      return { ...text(`Task not found: ${ref}`, { recovered: false, errorCode: outcome.code }), isError: true };
+    }
+    return { ...text(`Session recovery denied: ${outcome.message}`, { recovered: false, errorCode: outcome.code }), isError: true };
   }
+  return text("Session recovered. Existing tasks, checkpoints and return stack are preserved; read the task context before continuing.", {
+    recovered: true,
+    taskIds: outcome.taskIds,
+    deviationIds: outcome.deviationIds,
+  });
 });
 
 server.registerTool("planner-task-start", {

@@ -1556,3 +1556,149 @@ test("lifecycle family: switch pauses the source, claims the target and records 
     await closeServerFixture(fx);
   }
 });
+
+test("deviations family: an approved detour is recorded without touching task state", async () => {
+  const fx = await startServerFixture({ name: "v2-deviations" });
+  const resumeRef = "P001(F001)/T001";
+  const resumePath = encodeURIComponent(resumeRef);
+  try {
+    const anonymous = await request(fx, "/api/v2/deviations", {
+      ...json({ temporaryTask: resumeRef, reason: "Detour" }),
+      expectStatus: 400,
+    });
+    assert.equal(anonymous.body.error.code, "SESSION_REQUIRED");
+
+    const session = (await request(fx, "/api/v2/sessions", json({ clientKind: "mcp", agentId: "worker-1" }))).body.data.session;
+    const headers = { "X-Planner-Session": session.sessionId, "Content-Type": "application/json" };
+    const temporary = (await request(fx, "/api/v2/phases/P001/tasks", json({
+      feature: "F001",
+      title: "Approved detour",
+      description: "A detour task long enough to pass the flow's fifty-character execution-context rule.",
+    }))).body.data;
+    const temporaryRef = temporary.taskRef;
+
+    const incomplete = await request(fx, "/api/v2/deviations", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ temporaryTask: temporaryRef }),
+      expectStatus: 422,
+    });
+    assert.equal(incomplete.body.error.code, "DEVIATION_INPUT_REQUIRED");
+    assert.deepEqual(incomplete.body.error.missing, ["reason"]);
+
+    const unknown = await request(fx, "/api/v2/deviations", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ temporaryTask: "P001(F001)/T999", reason: "Detour" }),
+      expectStatus: 404,
+    });
+    assert.equal(unknown.body.error.code, "TASK_NOT_FOUND");
+
+    const sameTask = await request(fx, "/api/v2/deviations", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ temporaryTask: resumeRef, resumeTask: resumeRef, reason: "Detour" }),
+      expectStatus: 422,
+    });
+    assert.equal(sameTask.body.error.code, "DEVIATION_SAME_TASK");
+
+    const before = await readPlanSnapshot(fx.planRoot);
+    const resumeTaskId = before.phases[0].tasks.find((task) => task.title === "Implement login").id;
+
+    const approved = (await request(fx, "/api/v2/deviations", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ temporaryTask: temporaryRef, resumeTask: resumeRef, reason: "Seed work must unblock the detour" }),
+    })).body.data;
+    assert.equal(approved.approved, true);
+    assert.equal(approved.temporaryRef, temporaryRef);
+    assert.equal(approved.resumeRef, resumeRef);
+    assert.equal(approved.deviation.state, "approved");
+    assert.equal(approved.deviation.ownerSession, session.sessionId);
+    assert.equal(approved.deviation.resumeTaskId, resumeTaskId);
+    assert.equal(approved.deviation.temporaryTaskId, temporary.task.id);
+    assert.equal(approved.deviation.snapshot, null);
+
+    // Bookkeeping only: neither task changed status or ownership.
+    const after = await readPlanSnapshot(fx.planRoot);
+    assert.deepEqual(
+      after.phases[0].tasks.map((task) => [task.id, task.status, task.activeOwnerSession]),
+      before.phases[0].tasks.map((task) => [task.id, task.status, task.activeOwnerSession]),
+    );
+    // Deviations live in worktree-local .local/deviations.json, never in
+    // shared project.json.
+    const stored = JSON.parse(await readFile(join(fx.planRoot, ".local", "deviations.json"), "utf-8")).at(-1);
+    assert.equal(stored.id, approved.deviation.id);
+    assert.equal(stored.reason, "Seed work must unblock the detour");
+    assert.equal(stored.ownerSession, session.sessionId);
+
+    const shown = (await request(fx, `/api/v2/tasks/${resumePath}`)).body.data;
+    assert.equal(shown.task.status, "planned");
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("session family: recovery is confirmed, identified by task ref and moves ownership", async () => {
+  const fx = await startServerFixture({ name: "v2-session-recover" });
+  const taskRef = "P001(F001)/T001";
+  const taskPath = encodeURIComponent(taskRef);
+  try {
+    const session = (await request(fx, "/api/v2/sessions", json({ clientKind: "mcp", agentId: "worker-1" }))).body.data.session;
+    const headers = { "X-Planner-Session": session.sessionId, "Content-Type": "application/json" };
+    await request(fx, `/api/v2/context/tasks/${taskPath}`, { headers });
+    await request(fx, `/api/v2/tasks/${taskPath}/start`, { method: "POST", headers });
+
+    const heir = (await request(fx, "/api/v2/sessions", json({ clientKind: "cli" }))).body.data.session;
+    const heirHeaders = { "X-Planner-Session": heir.sessionId, "Content-Type": "application/json" };
+    const recoverPath = "/api/v2/sessions/recover";
+
+    const anonymous = await request(fx, recoverPath, {
+      ...json({ task: taskRef, confirmed: true }),
+      expectStatus: 400,
+    });
+    assert.equal(anonymous.body.error.code, "SESSION_REQUIRED");
+
+    const noTask = await request(fx, recoverPath, { method: "POST", headers: heirHeaders, body: JSON.stringify({ confirmed: true }), expectStatus: 422 });
+    assert.equal(noTask.body.error.code, "TASK_REF_REQUIRED");
+
+    const unknown = await request(fx, recoverPath, {
+      method: "POST",
+      headers: heirHeaders,
+      body: JSON.stringify({ task: "P001(F001)/T999", confirmed: true }),
+      expectStatus: 404,
+    });
+    assert.equal(unknown.body.error.code, "TASK_NOT_FOUND");
+
+    const unconfirmed = await request(fx, recoverPath, {
+      method: "POST",
+      headers: heirHeaders,
+      body: JSON.stringify({ task: taskRef, confirmed: false }),
+      expectStatus: 409,
+    });
+    assert.equal(unconfirmed.body.error.code, "SESSION_RECOVERY_CONFIRMATION_REQUIRED");
+
+    const before = await readPlanSnapshot(fx.planRoot);
+    assert.equal(before.phases[0].tasks[0].activeOwnerSession, session.sessionId);
+
+    const recovered = (await request(fx, recoverPath, {
+      method: "POST",
+      headers: heirHeaders,
+      body: JSON.stringify({ task: taskRef, confirmed: true }),
+    })).body.data;
+    assert.equal(recovered.recovered, true);
+    assert.equal(recovered.taskRef, taskRef);
+    assert.equal(recovered.phaseRef, "P001(F001)");
+    assert.equal(recovered.featureRef, "F001");
+    assert.deepEqual(recovered.taskIds, [before.phases[0].tasks[0].id]);
+    assert.deepEqual(recovered.deviationIds, []);
+
+    // Ownership moved; status, checkpoint and read gates are untouched.
+    const shown = (await request(fx, `/api/v2/tasks/${taskPath}`)).body.data;
+    assert.equal(shown.task.status, "in-progress");
+    assert.equal(shown.task.activeOwnerSession, heir.sessionId);
+    assert.equal(shown.task.startedAt, before.phases[0].tasks[0].startedAt);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});

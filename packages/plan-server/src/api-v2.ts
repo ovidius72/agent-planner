@@ -78,6 +78,10 @@ import {
   pauseTaskFlow,
   reopenTaskFlow,
   switchTaskFlow,
+  recordDeviationFlow,
+  recoverSessionFlow,
+  type DeviationRefusalCode,
+  type RecoveryRefusalCode,
   type TaskSwitchRefusalCode,
   type TaskPauseRefusalCode,
   type TaskReopenRefusalCode,
@@ -203,6 +207,9 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         reopen: "POST /api/v2/tasks/{taskRef}/reopen",
         switch: "POST /api/v2/tasks/switch",
       },
+      deviations: {
+        approve: "POST /api/v2/deviations",
+      },
       project: {
         discuss: "PUT /api/v2/project/discuss",
       },
@@ -223,6 +230,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         register: "POST /api/v2/sessions",
         heartbeat: "POST /api/v2/sessions/{sessionId}/heartbeat",
         end: "DELETE /api/v2/sessions/{sessionId}",
+        recover: "POST /api/v2/sessions/recover",
       },
     },
   }));
@@ -946,6 +954,42 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     }
   });
 
+  // Recovery is a session operation identified by the task the stopped
+  // caller owned (or was returning to), not by a client-held id.
+  const recoveryRefusalStatus: Record<RecoveryRefusalCode, ContentfulStatusCode> = {
+    TASK_NOT_FOUND: 404,
+    SESSION_RECOVERY_CONFIRMATION_REQUIRED: 409,
+    SESSION_RECOVERY_AMBIGUOUS: 409,
+    SESSION_OWNER_UNVERIFIED: 409,
+    SESSION_OWNER_ACTIVE: 409,
+    SESSION_RECOVERY_CONFLICT: 409,
+    SESSION_RECOVERY_VERIFICATION_FAILED: 500,
+    SESSION_RECOVERY_FAILED: 500,
+  };
+
+  app.post("/sessions/recover", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const task = (optionalString(body, "task") ?? "").trim();
+    if (!task) return error(c, 422, "TASK_REF_REQUIRED", "A task ref is required: the task the stopped caller owned or was returning to.");
+    const outcome = await recoverSessionFlow(store, auth.sessionId, task, body.confirmed === true);
+    if (!outcome.ok) {
+      return error(c, recoveryRefusalStatus[outcome.code], outcome.code, outcome.message, {
+        ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
+      });
+    }
+    return envelope(c, {
+      recovered: true,
+      taskRef: outcome.taskRef,
+      phaseRef: outcome.phaseRef,
+      featureRef: outcome.featureRef || null,
+      taskIds: outcome.taskIds,
+      deviationIds: outcome.deviationIds,
+    });
+  });
+
   app.post("/sessions/*/heartbeat", async (c) => {
     const sessionId = collectionTail(c, "sessions").replace(/\/heartbeat$/, "");
     try {
@@ -1261,6 +1305,49 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       targetPhaseRef: outcome.targetPhaseRef,
       deviation: outcome.deviation,
       snapshot: outcome.snapshot,
+    });
+  });
+
+  // An approved deviation is bookkeeping, not a lifecycle transition: it
+  // preserves the recommended/resume task and never starts or pauses work.
+  const deviationRefusalStatus: Record<DeviationRefusalCode, ContentfulStatusCode> = {
+    TASK_NOT_FOUND: 404,
+    NO_RESUME_TASK: 422,
+    DEVIATION_SAME_TASK: 422,
+    TEMPORARY_TASK_NOT_STARTABLE: 409,
+  };
+
+  app.post("/deviations", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const temporaryTask = (optionalString(body, "temporaryTask") ?? optionalString(body, "temporary_task") ?? "").trim();
+    const reason = (optionalString(body, "reason") ?? "").trim();
+    const missing = [
+      ...(temporaryTask ? [] : ["temporaryTask"]),
+      ...(reason ? [] : ["reason"]),
+    ];
+    if (missing.length > 0) {
+      return error(c, 422, "DEVIATION_INPUT_REQUIRED", `An approved deviation requires ${missing.join(", ")}.`, { missing });
+    }
+    const outcome = await recordDeviationFlow(store, auth.sessionId, {
+      temporaryTask,
+      resumeTask: optionalString(body, "resumeTask") ?? optionalString(body, "resume_task"),
+      reason,
+    });
+    if (!outcome.ok) {
+      return error(c, deviationRefusalStatus[outcome.code], outcome.code, outcome.message, {
+        ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
+        ...(outcome.selectionReason ? { selectionReason: outcome.selectionReason } : {}),
+        ...(outcome.temporaryStatus ? { temporaryStatus: outcome.temporaryStatus } : {}),
+      });
+    }
+    return envelope(c, {
+      approved: true,
+      deviation: outcome.deviation,
+      temporaryRef: outcome.temporaryRef,
+      resumeRef: outcome.resumeRef,
     });
   });
 

@@ -36,6 +36,7 @@ export * from "./search-flow.js";
 export * from "./session-registry.js";
 export * from "./context-flow.js";
 export * from "./task-lifecycle-flow.js";
+export * from "./deviation-flow.js";
 export * from "./handoff-reply.js";
 export * from "./mutation-reply.js";
 export * from "./recommend-reply.js";
