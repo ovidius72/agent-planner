@@ -48,6 +48,9 @@ import {
   discussFeatureFlow,
   discussPhaseFlow,
   discussProjectFlow,
+  updateProjectGuidelinesFlow,
+  updateProjectLanguageFlow,
+  type ProjectRefusalCode,
   discussTaskFlow,
   listFeatureSummaries,
   listPhaseHandoffsFlow,
@@ -231,6 +234,8 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       },
       project: {
         discuss: "PUT /api/v2/project/discuss",
+        guidelines: "PUT /api/v2/project/guidelines",
+        language: "PUT /api/v2/project/language",
       },
       documents: {
         list: "GET /api/v2/documents",
@@ -1488,6 +1493,57 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     } catch (err) {
       return discussFailure(c, err, "PROJECT_DISCUSS_FAILED");
     }
+  });
+
+  // ── Project settings family ───────────────────────────────────────
+  // Operator-owned single-record settings on project.json. The guidelines
+  // write accepts an optional optimistic guard: a stale expected timestamp
+  // is a 409 PLAN_STALE_WRITE, never a silent overwrite.
+  const projectRefusalStatus: Record<ProjectRefusalCode, ContentfulStatusCode> = {
+    PLAN_STALE_WRITE: 409,
+    PROJECT_UPDATE_FAILED: 500,
+  };
+  const projectFailure = (
+    c: Context,
+    outcome: { code: ProjectRefusalCode; message: string; details?: Record<string, unknown> },
+  ) => error(c, projectRefusalStatus[outcome.code], outcome.code, outcome.message, outcome.details ?? {});
+
+  app.put("/project/guidelines", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const content = optionalString(body, "content");
+    if (content === undefined) {
+      return error(c, 422, "PROJECT_GUIDELINES_CONTENT_REQUIRED", "content is required; pass an empty string to clear the section.");
+    }
+    const expected = optionalString(body, "expectedUpdatedAt")
+      ?? optionalString(body, "expectedGuidelinesUpdatedAt");
+    const outcome = await updateProjectGuidelinesFlow(store, {
+      content,
+      ...(expected !== undefined ? { expectedGuidelinesUpdatedAt: expected } : {}),
+    });
+    if (!outcome.ok) return projectFailure(c, outcome);
+    return envelope(c, {
+      updated: true,
+      cleared: outcome.cleared,
+      projectGuidelines: outcome.projectGuidelines,
+    });
+  });
+
+  app.put("/project/language", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const contentLanguage = optionalString(body, "contentLanguage");
+    const chatLanguage = optionalString(body, "chatLanguage");
+    const outcome = await updateProjectLanguageFlow(store, {
+      ...(contentLanguage !== undefined ? { contentLanguage } : {}),
+      ...(chatLanguage !== undefined ? { chatLanguage } : {}),
+    });
+    if (!outcome.ok) return projectFailure(c, outcome);
+    return envelope(c, {
+      saved: true,
+      contentLanguage: outcome.contentLanguage,
+      chatLanguage: outcome.chatLanguage,
+    });
   });
 
   app.put("/features/*/discuss", async (c) => {

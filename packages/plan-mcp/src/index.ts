@@ -9,7 +9,7 @@ import { PlanStore, PlanStoreError, ExportService, findPhaseByRef, findTaskByRef
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, deleteTaskFlow, listIdeasFlow, showIdeaFlow, createIdeaFlow, updateIdeaFlow, deleteIdeaFlow, beginIdeaPromotionFlow, finalizeIdeaPromotionFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, deleteTaskFlow, listIdeasFlow, showIdeaFlow, createIdeaFlow, updateIdeaFlow, deleteIdeaFlow, beginIdeaPromotionFlow, finalizeIdeaPromotionFlow, updateProjectGuidelinesFlow, updateProjectLanguageFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Phase, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -502,13 +502,11 @@ server.registerTool("planner-project-language", {
     chatLanguage: z.string().optional(),
   },
 }, async ({ contentLanguage, chatLanguage }) => {
-  const st = await requireStore();
-  const project = await st.updateProject((current) => ({
-    ...current,
-    ...(contentLanguage !== undefined ? { contentLanguage: contentLanguage.trim() } : {}),
-    ...(chatLanguage !== undefined ? { chatLanguage: chatLanguage.trim() } : {}),
-  }));
-  return writeAndSummarize(st, `Saved language preferences: content=${project.contentLanguage || "(unset)"}, chat=${project.chatLanguage || "(unset)"}`);
+  const outcome = await updateProjectLanguageFlow(await requireStore(), { contentLanguage, chatLanguage });
+  if (!outcome.ok) return text(outcome.message);
+  return text(
+    `Saved language preferences: content=${outcome.contentLanguage || "(unset)"}, chat=${outcome.chatLanguage || "(unset)"}`,
+  );
 });
 
 server.registerTool("planner-project-discuss", {
@@ -584,18 +582,13 @@ server.registerTool("planner-project-guidelines-update", {
   },
 }, async ({ content }) => {
   const st = await requireStore();
-  const project = await st.loadProject();
-  await st.updateProject((current) => ({
-    ...current,
-    projectGuidelines: { ...current.projectGuidelines, content: content.trim() },
-  }), { expectedGuidelinesUpdatedAt: project.projectGuidelines.updatedAt });
-  const refreshed = await st.loadProject();
-  return writeAndSummarize(
-    st,
-    refreshed.projectGuidelines.content
-      ? `Project Guidelines updated. Updated at ${refreshed.projectGuidelines.updatedAt}.`
-      : "Project Guidelines cleared.",
-    { updated: true, projectGuidelines: refreshed.projectGuidelines },
+  const outcome = await updateProjectGuidelinesFlow(st, { content });
+  if (!outcome.ok) return text(outcome.message);
+  return text(
+    outcome.cleared
+      ? "Project Guidelines cleared."
+      : `Project Guidelines updated. Updated at ${outcome.projectGuidelines.updatedAt}.`,
+    { updated: true, projectGuidelines: outcome.projectGuidelines },
   );
 });
 

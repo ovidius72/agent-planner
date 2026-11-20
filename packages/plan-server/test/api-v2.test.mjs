@@ -1847,3 +1847,67 @@ test("ideas family: CRUD and the two-step confirmed promotion", async () => {
     await closeServerFixture(fx);
   }
 });
+
+test("project family: guidelines keep an optimistic guard and language is partial", async () => {
+  const fx = await startServerFixture({ name: "v2-project-settings" });
+  try {
+    const missing = await request(fx, "/api/v2/project/guidelines", { ...put({}), expectStatus: 422 });
+    assert.equal(missing.body.error.code, "PROJECT_GUIDELINES_CONTENT_REQUIRED");
+
+    const written = (await request(fx, "/api/v2/project/guidelines", put({
+      content: "  Always run the planner gate before a release.  ",
+    }))).body.data;
+    assert.equal(written.updated, true);
+    assert.equal(written.cleared, false);
+    assert.equal(written.projectGuidelines.content, "Always run the planner gate before a release.");
+    assert.notEqual(written.projectGuidelines.updatedAt, "");
+
+    const persisted = (await readPlanSnapshot(fx.planRoot)).project.projectGuidelines;
+    assert.equal(persisted.content, "Always run the planner gate before a release.");
+    assert.equal(persisted.updatedAt, written.projectGuidelines.updatedAt);
+
+    const stale = await request(fx, "/api/v2/project/guidelines", {
+      ...put({ content: "Overwrite from an obsolete read.", expectedUpdatedAt: "2000-01-01T00:00:00.000Z" }),
+      expectStatus: 409,
+    });
+    assert.equal(stale.body.error.code, "PLAN_STALE_WRITE");
+    assert.equal(stale.body.error.entity, "project");
+    assert.equal(stale.body.error.expectedUpdatedAt, "2000-01-01T00:00:00.000Z");
+    assert.equal(stale.body.error.actualUpdatedAt, written.projectGuidelines.updatedAt);
+    assert.equal((await readPlanSnapshot(fx.planRoot)).project.projectGuidelines.content, "Always run the planner gate before a release.");
+
+    const guarded = (await request(fx, "/api/v2/project/guidelines", put({
+      content: "Guarded rewrite.",
+      expectedUpdatedAt: written.projectGuidelines.updatedAt,
+    }))).body.data;
+    assert.equal(guarded.projectGuidelines.content, "Guarded rewrite.");
+    assert.notEqual(guarded.projectGuidelines.updatedAt, written.projectGuidelines.updatedAt);
+
+    const cleared = (await request(fx, "/api/v2/project/guidelines", put({ content: "   " }))).body.data;
+    assert.equal(cleared.cleared, true);
+    assert.equal(cleared.projectGuidelines.content, "");
+    assert.equal(cleared.projectGuidelines.updatedAt, "");
+
+    const language = (await request(fx, "/api/v2/project/language", put({
+      contentLanguage: "it",
+      chatLanguage: "en",
+    }))).body.data;
+    assert.equal(language.saved, true);
+    assert.equal(language.contentLanguage, "it");
+    assert.equal(language.chatLanguage, "en");
+
+    const partial = (await request(fx, "/api/v2/project/language", put({ chatLanguage: "it" }))).body.data;
+    assert.equal(partial.contentLanguage, "it", "omitted fields keep their value");
+    assert.equal(partial.chatLanguage, "it");
+
+    const stored = (await readPlanSnapshot(fx.planRoot)).project;
+    assert.equal(stored.contentLanguage, "it");
+    assert.equal(stored.chatLanguage, "it");
+
+    const noop = (await request(fx, "/api/v2/project/language", put({}))).body.data;
+    assert.equal(noop.contentLanguage, "it");
+    assert.equal(noop.chatLanguage, "it");
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
