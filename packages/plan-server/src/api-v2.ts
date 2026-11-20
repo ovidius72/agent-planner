@@ -78,6 +78,15 @@ import {
   pauseTaskFlow,
   reopenTaskFlow,
   switchTaskFlow,
+  deleteTaskFlow,
+  listIdeasFlow,
+  showIdeaFlow,
+  createIdeaFlow,
+  updateIdeaFlow,
+  deleteIdeaFlow,
+  beginIdeaPromotionFlow,
+  finalizeIdeaPromotionFlow,
+  type IdeaRefusalCode,
   recordDeviationFlow,
   recoverSessionFlow,
   type DeviationRefusalCode,
@@ -206,6 +215,16 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         pause: "POST /api/v2/tasks/{taskRef}/pause",
         reopen: "POST /api/v2/tasks/{taskRef}/reopen",
         switch: "POST /api/v2/tasks/switch",
+        delete: "DELETE /api/v2/tasks/{taskRef}",
+      },
+      ideas: {
+        list: "GET /api/v2/ideas",
+        show: "GET /api/v2/ideas/{ideaRef}",
+        create: "POST /api/v2/ideas",
+        update: "PUT /api/v2/ideas/{ideaRef}",
+        delete: "DELETE /api/v2/ideas/{ideaRef}?confirmed=true",
+        promotionBegin: "POST /api/v2/ideas/{ideaRef}/promotion/begin",
+        promotionFinalize: "POST /api/v2/ideas/{ideaRef}/promotion/finalize",
       },
       deviations: {
         approve: "POST /api/v2/deviations",
@@ -1760,6 +1779,28 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     }
   });
 
+  // Deleting a task is destructive, so the route requires an explicit
+  // intent flag; the flow keeps phase.taskIds consistent and refreshes the
+  // derived phase status.
+  app.delete("/tasks/*", async (c) => {
+    const taskRef = tailAfter(c, `${API_V2_BASE_PATH}/tasks/`);
+    if (c.req.query("confirmed") !== "true") {
+      return error(c, 409, "TASK_DELETE_CONFIRMATION_REQUIRED", "Task deletion requires confirmed=true.");
+    }
+    try {
+      const outcome = await deleteTaskFlow(store, taskRef);
+      return envelope(c, {
+        deleted: true,
+        taskId: outcome.taskId,
+        ref: outcome.ref,
+        shortId: outcome.shortId,
+        phaseRef: outcome.phaseRef,
+      });
+    } catch (err) {
+      return taskFailure(c, err, "TASK_DELETE_FAILED");
+    }
+  });
+
   app.post("/tasks/move", async (c) => {
     const body = await readJsonBody(c);
     if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
@@ -1784,6 +1825,118 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     }
     const reply = buildTaskMoveReply(outcome.result, `planner-task-show ${outcome.result.targetPhaseRef} full=true`);
     return envelope(c, reply.structured);
+  });
+
+  // ── Ideas family ──────────────────────────────────────────────────
+  // Ideas never affect feature/phase/task rollups. Promotion is the
+  // two-step protocol: a discussion that persists nothing, then a
+  // confirmed finalize that records an already-created target.
+  const ideaRefusalStatus: Record<IdeaRefusalCode, ContentfulStatusCode> = {
+    IDEA_NOT_FOUND: 404,
+    IDEA_TITLE_REQUIRED: 422,
+    IDEA_NO_MUTABLE_FIELDS: 422,
+    IDEA_DELETE_CONFIRMATION_REQUIRED: 409,
+    IDEA_ALREADY_PROMOTED: 409,
+    IDEA_PROMOTION_CONFIRMATION_REQUIRED: 409,
+    IDEA_PROMOTION_TARGET_NOT_FOUND: 404,
+  };
+
+  const ideaRefOf = (c: Context, suffix = ""): string => {
+    const tail = tailAfter(c, `${API_V2_BASE_PATH}/ideas/`);
+    return suffix && tail.endsWith(suffix) ? tail.slice(0, -suffix.length) : tail;
+  };
+
+  const ideaFailure = (c: Context, outcome: {
+    code: IdeaRefusalCode;
+    message: string;
+    ideaRef?: string;
+    mutableFields?: string[];
+    targetRef?: string;
+    targetType?: string;
+  }) =>
+    error(c, ideaRefusalStatus[outcome.code], outcome.code, outcome.message, {
+      ...(outcome.ideaRef ? { ideaRef: outcome.ideaRef } : {}),
+      ...(outcome.mutableFields ? { mutableFields: outcome.mutableFields } : {}),
+      ...(outcome.targetRef ? { targetRef: outcome.targetRef } : {}),
+      ...(outcome.targetType ? { targetType: outcome.targetType } : {}),
+    });
+
+  app.get("/ideas", async (c) => {
+    const outcome = await listIdeasFlow(store);
+    return envelope(c, { ideas: outcome.ideas, total: outcome.ideas.length });
+  });
+
+  app.get("/ideas/*", async (c) => {
+    const outcome = await showIdeaFlow(store, ideaRefOf(c));
+    if (!outcome.ok) return ideaFailure(c, outcome);
+    return envelope(c, { idea: outcome.idea });
+  });
+
+  app.post("/ideas", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const outcome = await createIdeaFlow(store, {
+      title: optionalString(body, "title") ?? "",
+      description: optionalString(body, "description"),
+    });
+    if (!outcome.ok) return ideaFailure(c, outcome);
+    return envelope(c, { created: true, idea: outcome.idea }, 201);
+  });
+
+  app.put("/ideas/*", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const outcome = await updateIdeaFlow(store, ideaRefOf(c), {
+      title: optionalString(body, "title"),
+      description: optionalString(body, "description"),
+    });
+    if (!outcome.ok) return ideaFailure(c, outcome);
+    return envelope(c, { updated: true, idea: outcome.idea, updatedFields: outcome.updatedFields });
+  });
+
+  app.delete("/ideas/*", async (c) => {
+    const outcome = await deleteIdeaFlow(store, ideaRefOf(c), c.req.query("confirmed") === "true");
+    if (!outcome.ok) return ideaFailure(c, outcome);
+    return envelope(c, { deleted: true, ideaRef: outcome.ideaRef, ideaId: outcome.ideaId });
+  });
+
+  app.post("/ideas/*/promotion/begin", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const targetType = optionalString(body, "targetType");
+    if (targetType !== "feature" && targetType !== "phase" && targetType !== "task") {
+      return error(c, 422, "IDEA_TARGET_TYPE_INVALID", "targetType must be feature, phase or task.");
+    }
+    const outcome = await beginIdeaPromotionFlow(store, ideaRefOf(c, "/promotion/begin"), targetType);
+    if (!outcome.ok) return ideaFailure(c, outcome);
+    return envelope(c, {
+      persisted: false,
+      idea: outcome.idea,
+      targetType: outcome.targetType,
+      recommendation: outcome.recommendation,
+      grillMeSkill: outcome.grillMeSkill,
+      nextActions: outcome.nextActions,
+    });
+  });
+
+  app.post("/ideas/*/promotion/finalize", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const targetType = optionalString(body, "targetType");
+    if (targetType !== "feature" && targetType !== "phase" && targetType !== "task") {
+      return error(c, 422, "IDEA_TARGET_TYPE_INVALID", "targetType must be feature, phase or task.");
+    }
+    const targetRef = (optionalString(body, "targetRef") ?? "").trim();
+    if (!targetRef) return error(c, 422, "IDEA_TARGET_REF_REQUIRED", "A confirmed targetRef is required.");
+    const outcome = await finalizeIdeaPromotionFlow(store, {
+      idea: ideaRefOf(c, "/promotion/finalize"),
+      targetType,
+      targetRef,
+      discussionCompleted: body.discussionCompleted === true,
+      confirmed: body.confirmed === true,
+    });
+    if (!outcome.ok) return ideaFailure(c, outcome);
+    return envelope(c, { promoted: true, idea: outcome.idea, targetRef: outcome.targetRef });
   });
 
   return app;

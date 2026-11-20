@@ -1702,3 +1702,148 @@ test("session family: recovery is confirmed, identified by task ref and moves ow
     await closeServerFixture(fx);
   }
 });
+
+test("tasks family: delete requires explicit confirmation and keeps phase ids consistent", async () => {
+  const fx = await startServerFixture({ name: "v2-task-delete" });
+  const taskRef = encodeURIComponent("P001(F001)/T001");
+  try {
+    const unconfirmed = await request(fx, `/api/v2/tasks/${taskRef}`, { method: "DELETE", expectStatus: 409 });
+    assert.equal(unconfirmed.body.error.code, "TASK_DELETE_CONFIRMATION_REQUIRED");
+
+    const unknown = await request(fx, `/api/v2/tasks/${encodeURIComponent("P001(F001)/T999")}?confirmed=true`, {
+      method: "DELETE",
+      expectStatus: 404,
+    });
+    assert.equal(unknown.body.error.code, "TASK_NOT_FOUND");
+
+    const before = await readPlanSnapshot(fx.planRoot);
+    const phase = before.phases[0];
+    const taskId = phase.tasks[0].id;
+    assert.equal(phase.taskIds.includes(taskId), true);
+
+    const deleted = (await request(fx, `/api/v2/tasks/${taskRef}?confirmed=true`, { method: "DELETE" })).body.data;
+    assert.equal(deleted.deleted, true);
+    assert.equal(deleted.taskId, taskId);
+    assert.equal(deleted.ref, "P001(F001)/T001");
+    assert.equal(deleted.phaseRef, "P001(F001)");
+
+    const after = await readPlanSnapshot(fx.planRoot);
+    assert.equal(after.phases[0].tasks.some((task) => task.id === taskId), false);
+    assert.equal(after.phases[0].taskIds.includes(taskId), false, "phase.taskIds tracks the deletion");
+    await request(fx, `/api/v2/tasks/${taskRef}`, { expectStatus: 404 });
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("ideas family: CRUD and the two-step confirmed promotion", async () => {
+  const fx = await startServerFixture({ name: "v2-ideas" });
+  const ideaPath = (ref, suffix = "") => `/api/v2/ideas/${encodeURIComponent(ref)}${suffix}`;
+  try {
+    const emptyTitle = await request(fx, "/api/v2/ideas", { ...json({ title: "  " }), expectStatus: 422 });
+    assert.equal(emptyTitle.body.error.code, "IDEA_TITLE_REQUIRED");
+
+    const created = (await request(fx, "/api/v2/ideas", json({
+      title: "Coordinated authority",
+      description: "Route every client through one service.",
+    }))).body.data;
+    assert.equal(created.created, true);
+    assert.equal(created.idea.number, 1);
+    assert.match(created.idea.shortId, /^[A-Z2-9]{5}$/);
+
+    const list = (await request(fx, "/api/v2/ideas")).body.data;
+    assert.equal(list.total, 1);
+    assert.equal(list.ideas[0].id, created.idea.id);
+
+    const shown = (await request(fx, ideaPath("I001"))).body.data;
+    assert.equal(shown.idea.title, "Coordinated authority");
+    const missing = await request(fx, ideaPath("I999"), { expectStatus: 404 });
+    assert.equal(missing.body.error.code, "IDEA_NOT_FOUND");
+
+    const updated = (await request(fx, ideaPath("I001"), put({ title: "One planner authority", description: "Edited." }))).body.data;
+    assert.equal(updated.updated, true);
+    assert.deepEqual(updated.updatedFields, ["title", "description"]);
+    assert.equal(updated.idea.title, "One planner authority");
+
+    const noFields = await request(fx, ideaPath("I001"), { ...put({}), expectStatus: 422 });
+    assert.equal(noFields.body.error.code, "IDEA_NO_MUTABLE_FIELDS");
+    assert.deepEqual(noFields.body.error.mutableFields, ["title", "description"]);
+
+    const badTargetType = await request(fx, ideaPath("I001", "/promotion/begin"), {
+      ...json({ targetType: "idea" }),
+      expectStatus: 422,
+    });
+    assert.equal(badTargetType.body.error.code, "IDEA_TARGET_TYPE_INVALID");
+
+    const begun = (await request(fx, ideaPath("I001", "/promotion/begin"), json({ targetType: "phase" }))).body.data;
+    assert.equal(begun.persisted, false);
+    assert.match(begun.recommendation, /Recommended parent feature: F001/);
+    assert.match(begun.grillMeSkill, /Ask the questions one at a time/);
+    assert.deepEqual(begun.nextActions, [
+      "Follow grill-me one question at a time.",
+      "Obtain explicit parent and target confirmation.",
+      "Create the agreed target through the normal feature/phase/task creation tool.",
+      "Call planner-idea-promotion-finalize with discussionCompleted=true and confirmed=true.",
+    ]);
+
+    const unconfirmed = await request(fx, ideaPath("I001", "/promotion/finalize"), {
+      ...json({
+      targetType: "feature",
+      targetRef: "F001",
+      discussionCompleted: false,
+      confirmed: false,
+      }),
+      expectStatus: 409,
+    });
+    assert.equal(unconfirmed.body.error.code, "IDEA_PROMOTION_CONFIRMATION_REQUIRED");
+
+    const missingTarget = await request(fx, ideaPath("I001", "/promotion/finalize"), {
+      ...json({
+      targetType: "feature",
+      targetRef: "F999",
+      discussionCompleted: true,
+      confirmed: true,
+      }),
+      expectStatus: 404,
+    });
+    assert.equal(missingTarget.body.error.code, "IDEA_PROMOTION_TARGET_NOT_FOUND");
+
+    const noTargetRef = await request(fx, ideaPath("I001", "/promotion/finalize"), {
+      ...json({
+      targetType: "feature",
+      discussionCompleted: true,
+      confirmed: true,
+      }),
+      expectStatus: 422,
+    });
+    assert.equal(noTargetRef.body.error.code, "IDEA_TARGET_REF_REQUIRED");
+
+    const feature = (await request(fx, "/api/v2/features/F001")).body.data.feature;
+    const promoted = (await request(fx, ideaPath("I001", "/promotion/finalize"), json({
+      targetType: "feature",
+      targetRef: "F001",
+      discussionCompleted: true,
+      confirmed: true,
+    }))).body.data;
+    assert.equal(promoted.promoted, true);
+    assert.equal(promoted.targetRef, "F001");
+    assert.equal(promoted.idea.promotion.targetType, "feature");
+    assert.equal(promoted.idea.promotion.targetId, feature.id);
+
+    const alreadyPromoted = await request(fx, ideaPath("I001", "/promotion/begin"), {
+      ...json({ targetType: "task" }),
+      expectStatus: 409,
+    });
+    assert.equal(alreadyPromoted.body.error.code, "IDEA_ALREADY_PROMOTED");
+
+    const unconfirmedDelete = await request(fx, ideaPath("I001"), { method: "DELETE", expectStatus: 409 });
+    assert.equal(unconfirmedDelete.body.error.code, "IDEA_DELETE_CONFIRMATION_REQUIRED");
+
+    const deleted = (await request(fx, ideaPath("I001") + "?confirmed=true", { method: "DELETE" })).body.data;
+    assert.equal(deleted.deleted, true);
+    assert.equal(deleted.ideaRef, "I001");
+    assert.equal((await request(fx, "/api/v2/ideas")).body.data.total, 0);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});

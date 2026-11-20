@@ -572,3 +572,40 @@ export async function removeTaskDependencyFlow(
     dependsOn: [...result.dependsOn],
   };
 }
+
+export interface DeleteTaskFlowOutcome {
+  taskId: string;
+  /** Canonical ref of the task before deletion. */
+  ref: string;
+  shortId: string;
+  phaseId: string;
+  phaseRef: string;
+}
+
+/**
+ * Delete one task, keeping the phase's taskIds list consistent and
+ * refreshing the derived phase status. Deletion is destructive: every
+ * surface must obtain explicit intent before calling this.
+ */
+export async function deleteTaskFlow(store: PlanStore, taskRef: string): Promise<DeleteTaskFlowOutcome> {
+  const features = (await store.loadFeatures()).features;
+  const found = findTaskByRef(await store.loadAllPhases(), features, taskRef);
+  if (!found) throw new TaskFlowRefusal("TASK_NOT_FOUND", `Task not found: ${taskRef}`);
+  const ref = taskCompositeRef(found.task, found.phase, features);
+  const phaseRef = formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features));
+  await store.updatePhase(found.phase.id, (phase) => {
+    phase.tasks = phase.tasks.filter((task) => task.id !== found.task.id);
+    phase.taskIds = phase.taskIds.filter((id) => id !== found.task.id);
+    phase.updatedAt = nowISO();
+    return phase;
+  });
+  await store.syncTaskStatusRollup(found.phase.id);
+  await store.writeGenerated();
+  return {
+    taskId: found.task.id,
+    ref,
+    shortId: found.task.shortId,
+    phaseId: found.phase.id,
+    phaseRef,
+  };
+}
