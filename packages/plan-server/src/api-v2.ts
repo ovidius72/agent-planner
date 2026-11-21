@@ -117,12 +117,14 @@ import {
   type ShowFlowRefusalCode,
   type Phase,
   type Task,
+  PLANNER_API_V2_BASE_PATH,
+  PLANNER_API_V2_VERSION,
 } from "@agent-plan/core";
 
 /** Mount point, fixed: the version is part of the URL. */
-export const API_V2_BASE_PATH = "/api/v2";
+export const API_V2_BASE_PATH = PLANNER_API_V2_BASE_PATH;
 /** v2 is current until a superseding generation is designed. */
-export const API_V2_VERSION = "2";
+export const API_V2_VERSION = PLANNER_API_V2_VERSION;
 
 /** Routes are relative: mount the result at API_V2_BASE_PATH. */
 export function createApiV2App(store: PlanStore, security: { bootId: string; originRef: { current: string | undefined } }): Hono {

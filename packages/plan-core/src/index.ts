@@ -39,6 +39,7 @@ export * from "./task-lifecycle-flow.js";
 export * from "./deviation-flow.js";
 export * from "./idea-flow.js";
 export * from "./project-flow.js";
+export * from "./api-client.js";
 export * from "./handoff-reply.js";
 export * from "./mutation-reply.js";
 export * from "./recommend-reply.js";

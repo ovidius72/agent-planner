@@ -757,6 +757,13 @@ test("MCP Ideas CRUD and promotion are confirmation-safe over real stdio transpo
     assert.equal(created.structuredContent.created, true);
     assert.match(toolText(created), /I001/);
 
+    // The tool is a bridge: it resolved the local service and read the reply
+    // through the versioned application API, so the service record exists for
+    // this plan root even though nothing asked for the dashboard.
+    const serverRecord = JSON.parse(await readFile(join(plannerRoot, ".local", "server.json"), "utf-8"));
+    assert.equal(serverRecord.root, plannerRoot);
+    assert.equal(serverRecord.kind, "embedded");
+
     const snapshot = await st.loadIdeas();
     const denied = await session.client.callTool({ name: "planner-idea-promotion-finalize", arguments: { idea: "I001", targetType: "feature", targetRef: "F001", discussionCompleted: false, confirmed: false } });
     assert.equal(denied.structuredContent.promoted, false);

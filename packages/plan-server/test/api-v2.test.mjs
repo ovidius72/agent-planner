@@ -17,6 +17,7 @@ import {
   expectError,
 } from "../../../test/helpers/server-fixture.mjs";
 import { readPlanSnapshot } from "../../../test/helpers/fixtures.mjs";
+import { PlannerApiClient, PlannerApiError } from "../../plan-core/dist/index.js";
 import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -45,6 +46,41 @@ test("discovery advertises the protocol, boot identity and family links", async 
     assert.equal(body.data.protocolVersion, "1");
     assert.match(body.data.bootId, /^[0-9a-f-]{36}$/);
     assert.ok(body.data.families.handoffs.prepare.startsWith("GET /api/v2/phases/"));
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("client: the shared PlannerApiClient unwraps data and surfaces refusal codes", async () => {
+  const fx = await startServerFixture({ name: "v2-client" });
+  try {
+    const client = new PlannerApiClient({ baseUrl: fx.handle.localUrl });
+    const created = await client.request("POST", "/ideas", { title: "Bridged idea" });
+    assert.equal(created.created, true);
+    const listed = await client.request("GET", "/ideas");
+    assert.equal(listed.total, 1);
+
+    await assert.rejects(
+      () => client.request("GET", `/ideas/${encodeURIComponent("I999")}`),
+      (error) => {
+        assert.ok(error instanceof PlannerApiError, "refusals are typed");
+        assert.equal(error.status, 404);
+        assert.equal(error.code, "IDEA_NOT_FOUND");
+        assert.match(error.message, /I999/);
+        return true;
+      },
+    );
+
+    // A relative path is resolved against the versioned mount; an absolute
+    // API path is used as given.
+    const absolute = await client.request("GET", "/api/v2/ideas");
+    assert.equal(absolute.total, 1);
+
+    // An endpoint that is not the v2 surface is reported, never silently parsed.
+    await assert.rejects(
+      () => new PlannerApiClient({ baseUrl: fx.handle.localUrl }).request("GET", "/health"),
+      (error) => error instanceof PlannerApiError && error.code === "API_VERSION_MISMATCH",
+    );
   } finally {
     await closeServerFixture(fx);
   }

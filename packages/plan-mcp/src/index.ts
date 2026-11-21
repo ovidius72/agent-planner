@@ -5,12 +5,12 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, findPhaseByRef, findTaskByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
-import { serve } from "@agent-plan/server";
-import type { ServeHandle } from "@agent-plan/server";
+import { PlannerApiError, PlanStore, PlanStoreError, ExportService, findPhaseByRef, findTaskByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import type { PlannerServiceStartup } from "./service.js";
+import { ensurePlannerService, plannerApi, plannerServiceStatus, stopPlannerService } from "./service.js";
 import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, deleteTaskFlow, listIdeasFlow, showIdeaFlow, createIdeaFlow, updateIdeaFlow, deleteIdeaFlow, beginIdeaPromotionFlow, finalizeIdeaPromotionFlow, readProjectGuidelinesFlow, updateProjectGuidelinesFlow, updateProjectLanguageFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
-import type { Phase, Task } from "@agent-plan/core/schema";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, deleteTaskFlow, readProjectGuidelinesFlow, updateProjectGuidelinesFlow, updateProjectLanguageFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import type { Idea, Phase, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -168,23 +168,10 @@ async function requireStore(): Promise<PlanStore> {
   return st;
 }
 
-// In-process web server handle, managed by the planner-web tool and planner-load.
-// Lives as long as this MCP stdio process (i.e. the host session). Null when not running.
-let webHandle: ServeHandle | null = null;
-
-/** Start the web dashboard on the loopback interface (127.0.0.1, OS-assigned
- *  port) if not already running. Returns the local URL. No-op (empty url) when
- *  no .planner/ exists. LAN mode was removed (T490): the service binds the
- *  loopback interface only. */
-interface PlannerWebStartup {
-  localUrl: string;
-  lanUrl?: string | undefined;
-  mode?: string;
-  bindHost?: string;
-  error?: string;
-}
-
-function plannerWebMetadata(web: PlannerWebStartup): Record<string, unknown> {
+/** The service is the single authority for a plan root: a live one is reused,
+ *  otherwise `serve()` starts inside this process (loopback only, OS-assigned
+ *  port). See service.ts. */
+function plannerWebMetadata(web: PlannerServiceStartup): Record<string, unknown> {
   const address = web.lanUrl || web.localUrl;
   let host = web.bindHost ?? "";
   let port = 0;
@@ -207,19 +194,6 @@ function plannerWebMetadata(web: PlannerWebStartup): Record<string, unknown> {
     mode: web.mode ?? "",
     ...(web.error ? { errorCode: "PLANNER_WEB_START_FAILED", error: web.error } : {}),
   };
-}
-
-async function ensureWebStarted(): Promise<PlannerWebStartup> {
-  if (webHandle) return { localUrl: webHandle.localUrl, lanUrl: webHandle.lanUrl, mode: webHandle.mode, bindHost: webHandle.bindHost };
-  const root = planRoot();
-  const st = new PlanStore(root);
-  if (!(await st.exists())) return { localUrl: "", error: "Planner workspace does not exist." };
-  try {
-    webHandle = await serve({ planRoot: root, port: 0, quiet: true });
-    return { localUrl: webHandle.localUrl, lanUrl: webHandle.lanUrl, mode: webHandle.mode, bindHost: webHandle.bindHost };
-  } catch (error) {
-    return { localUrl: "", error: error instanceof Error ? error.message : String(error) };
-  }
 }
 
 async function writeAndSummarize(st: PlanStore, message: string, structuredContent?: Record<string, unknown>): Promise<ToolResult> {
@@ -2086,10 +2060,11 @@ server.registerTool("planner-idea-list", {
   description: "List top-level Ideas Inbox entries. Ideas never affect feature, phase, or task rollups.",
   inputSchema: {},
 }, async () => {
-  const outcome = await listIdeasFlow(await requireStore());
+  const api = await plannerApi(planRoot());
+  const data = await api.request<{ ideas: Idea[] }>("GET", "/ideas");
   return text(
-    outcome.ideas.map((idea) => `- ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}${idea.promotion ? ` → ${idea.promotion.targetRef}` : ""}`).join("\n") || "No ideas",
-    { ideas: outcome.ideas },
+    data.ideas.map((idea) => `- ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}${idea.promotion ? ` → ${idea.promotion.targetRef}` : ""}`).join("\n") || "No ideas",
+    { ideas: data.ideas },
   );
 });
 
@@ -2097,110 +2072,151 @@ server.registerTool("planner-idea-show", {
   description: "Show one Idea Inbox entry by I-number, short ID, UUID, or title.",
   inputSchema: { idea: z.string().min(1) },
 }, async ({ idea: ref }) => {
-  const outcome = await showIdeaFlow(await requireStore(), ref);
-  if (!outcome.ok) return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND" });
-  const idea = outcome.idea;
-  return text(`${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}\n\n${idea.description || "(no description)"}`, { idea });
+  const api = await plannerApi(planRoot());
+  try {
+    const data = await api.request<{ idea: Idea }>("GET", `/ideas/${encodeURIComponent(ref)}`);
+    const idea = data.idea;
+    return text(`${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}\n\n${idea.description || "(no description)"}`, { idea });
+  } catch (error) {
+    if (error instanceof PlannerApiError && error.code === "IDEA_NOT_FOUND") return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND" });
+    throw error;
+  }
 });
 
 server.registerTool("planner-idea-create", {
   description: "Create a rollup-independent Ideas Inbox entry.",
   inputSchema: { title: z.string().min(1), description: z.string().optional() },
 }, async ({ title, description }) => {
-  const outcome = await createIdeaFlow(await requireStore(), { title, description });
-  if (!outcome.ok) return text(outcome.message);
-  const idea = outcome.idea;
-  return text(`Idea created: ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}`, { idea, created: true });
+  const api = await plannerApi(planRoot());
+  try {
+    const data = await api.request<{ idea: Idea }>("POST", "/ideas", {
+      title,
+      ...(description !== undefined ? { description } : {}),
+    });
+    const idea = data.idea;
+    return text(`Idea created: ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}`, { idea, created: true });
+  } catch (error) {
+    if (error instanceof PlannerApiError && error.code === "IDEA_TITLE_REQUIRED") return text(error.message);
+    throw error;
+  }
 });
 
 server.registerTool("planner-idea-update", {
   description: "Update an unpromoted or promoted Idea Inbox entry title or description.",
   inputSchema: { idea: z.string().min(1), title: z.string().min(1).optional(), description: z.string().optional() },
 }, async ({ idea: ref, title, description }) => {
-  const st = await requireStore();
-  const outcome = await updateIdeaFlow(st, ref, { title, description });
-  if (!outcome.ok) {
-    if (outcome.code === "IDEA_NOT_FOUND") return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND", updated: false });
-    if (outcome.code === "IDEA_TITLE_REQUIRED") return text(outcome.message, { errorCode: "IDEA_TITLE_REQUIRED", updated: false });
-    if (outcome.code === "IDEA_NO_MUTABLE_FIELDS") {
+  const api = await plannerApi(planRoot());
+  try {
+    const data = await api.request<{ idea: Idea; updatedFields: string[] }>("PUT", `/ideas/${encodeURIComponent(ref)}`, {
+      ...(title !== undefined ? { title } : {}),
+      ...(description !== undefined ? { description } : {}),
+    });
+    const idea = data.idea;
+    const ideaUpdateReply = buildMutationReply({
+      identity: { entity: "idea", ref: formatIdeaRef(idea.number), id: idea.id, title: idea.title },
+      operation: "update",
+      updatedFields: data.updatedFields,
+      changedValues: idea as unknown as Record<string, unknown>,
+      readBackCommand: `planner-idea-show ${formatIdeaRef(idea.number)}`,
+    });
+    return text(ideaUpdateReply.text, ideaUpdateReply.structured);
+  } catch (error) {
+    if (!(error instanceof PlannerApiError)) throw error;
+    if (error.code === "IDEA_NOT_FOUND") return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND", updated: false });
+    if (error.code === "IDEA_TITLE_REQUIRED") return text(error.message, { errorCode: "IDEA_TITLE_REQUIRED", updated: false });
+    if (error.code === "IDEA_NO_MUTABLE_FIELDS") {
       return mcpMutationNoFieldsFailure({
         entity: "idea",
         ref,
         operation: "update",
-        mutableFields: ["title", "description"],
+        mutableFields: Array.isArray(error.details.mutableFields) ? error.details.mutableFields as string[] : ["title", "description"],
         retryCommand: `planner-idea-update ${ref}`,
       });
     }
-    return text(outcome.message);
+    throw error;
   }
-  const idea = outcome.idea;
-  const ideaUpdateReply = buildMutationReply({
-    identity: { entity: "idea", ref: formatIdeaRef(idea.number), id: idea.id, title: idea.title },
-    operation: "update",
-    updatedFields: outcome.updatedFields,
-    changedValues: idea as unknown as Record<string, unknown>,
-    readBackCommand: `planner-idea-show ${formatIdeaRef(idea.number)}`,
-  });
-  return text(ideaUpdateReply.text, ideaUpdateReply.structured);
 });
 
 server.registerTool("planner-idea-delete", {
   description: "Delete an Idea Inbox entry. Confirm the exact idea with the user before calling.",
   inputSchema: { idea: z.string().min(1), confirmed: z.boolean() },
 }, async ({ idea: ref, confirmed }) => {
-  const outcome = await deleteIdeaFlow(await requireStore(), ref, confirmed);
-  if (!outcome.ok) {
-    if (outcome.code === "IDEA_NOT_FOUND") return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND", deleted: false });
-    if (outcome.code === "IDEA_DELETE_CONFIRMATION_REQUIRED") {
-      return text(outcome.message, { errorCode: "CONFIRMATION_REQUIRED", deleted: false });
+  const api = await plannerApi(planRoot());
+  try {
+    const data = await api.request<{ ideaRef: string }>("DELETE", `/ideas/${encodeURIComponent(ref)}?confirmed=${confirmed ? "true" : "false"}`);
+    return text(`Idea deleted: ${data.ideaRef}.`, { deleted: true, ideaRef: data.ideaRef });
+  } catch (error) {
+    if (!(error instanceof PlannerApiError)) throw error;
+    if (error.code === "IDEA_NOT_FOUND") return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND", deleted: false });
+    if (error.code === "IDEA_DELETE_CONFIRMATION_REQUIRED") {
+      return text(error.message, { errorCode: "CONFIRMATION_REQUIRED", deleted: false });
     }
-    return text(outcome.message, { errorCode: outcome.code, deleted: false });
+    return text(error.message, { errorCode: error.code, deleted: false });
   }
-  return text(`Idea deleted: ${outcome.ideaRef}.`, { deleted: true, ideaRef: outcome.ideaRef });
 });
 
 server.registerTool("planner-idea-promotion-begin", {
   description: "Begin an Idea promotion discussion without persisting a target or promotion. Returns the project-local grill-me instructions; follow them one question at a time, then use planner-idea-promotion-finalize only after target confirmation.",
   inputSchema: { idea: z.string().min(1), targetType: z.enum(["feature", "phase", "task"]) },
 }, async ({ idea: ref, targetType }) => {
-  const outcome = await beginIdeaPromotionFlow(await requireStore(), ref, targetType);
-  if (!outcome.ok) {
-    if (outcome.code === "IDEA_NOT_FOUND") return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND" });
-    return text(outcome.message, { errorCode: "ALREADY_PROMOTED", idea: outcome.idea });
+  const api = await plannerApi(planRoot());
+  try {
+    const data = await api.request<{
+      idea: Idea;
+      targetType: "feature" | "phase" | "task";
+      recommendation: string;
+      grillMeSkill: string;
+      persisted: boolean;
+      nextActions: string[];
+    }>("POST", `/ideas/${encodeURIComponent(ref)}/promotion/begin`, { targetType });
+    return text(`Promotion discussion started for ${formatIdeaRef(data.idea.number)}. ${data.recommendation}`, {
+      idea: data.idea,
+      targetType: data.targetType,
+      recommendation: data.recommendation,
+      grillMeSkill: data.grillMeSkill,
+      persisted: data.persisted,
+      nextActions: data.nextActions,
+    });
+  } catch (error) {
+    if (!(error instanceof PlannerApiError)) throw error;
+    if (error.code === "IDEA_NOT_FOUND") return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND" });
+    if (error.code === "IDEA_ALREADY_PROMOTED") {
+      // The refusal names the idea; echo the same payload the direct read produced.
+      let idea: Idea | undefined;
+      const ideaRef = typeof error.details.ideaRef === "string" ? error.details.ideaRef : ref;
+      try {
+        idea = (await api.request<{ idea: Idea }>("GET", `/ideas/${encodeURIComponent(ideaRef)}`)).idea;
+      } catch {
+        idea = undefined;
+      }
+      return text(error.message, { errorCode: "ALREADY_PROMOTED", idea });
+    }
+    throw error;
   }
-  return text(`Promotion discussion started for ${formatIdeaRef(outcome.idea.number)}. ${outcome.recommendation}`, {
-    idea: outcome.idea,
-    targetType: outcome.targetType,
-    recommendation: outcome.recommendation,
-    grillMeSkill: outcome.grillMeSkill,
-    persisted: false,
-    nextActions: outcome.nextActions,
-  });
 });
 
 server.registerTool("planner-idea-promotion-finalize", {
   description: "Record a promotion only after grill-me discussion, explicit target confirmation, and successful target creation. targetRef must be the already-created agreed target; no raw UUID is returned.",
   inputSchema: { idea: z.string().min(1), targetType: z.enum(["feature", "phase", "task"]), targetRef: z.string().min(1), discussionCompleted: z.boolean(), confirmed: z.boolean() },
 }, async ({ idea: ref, targetType, targetRef, discussionCompleted, confirmed }) => {
-  const outcome = await finalizeIdeaPromotionFlow(await requireStore(), {
-    idea: ref,
-    targetType,
-    targetRef,
-    discussionCompleted,
-    confirmed,
-  });
-  if (!outcome.ok) {
-    if (outcome.code === "IDEA_NOT_FOUND") return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND", promoted: false });
-    if (outcome.code === "IDEA_PROMOTION_TARGET_NOT_FOUND") {
-      return text(outcome.message, { errorCode: "TARGET_NOT_FOUND", promoted: false });
-    }
-    return text(outcome.message, { errorCode: "IDEA_PROMOTION_CONFIRMATION_REQUIRED", promoted: false });
+  const api = await plannerApi(planRoot());
+  try {
+    const data = await api.request<{ idea: Idea; promoted: boolean; targetRef: string }>(
+      "POST",
+      `/ideas/${encodeURIComponent(ref)}/promotion/finalize`,
+      { targetType, targetRef, discussionCompleted, confirmed },
+    );
+    return text(`Idea promoted: ${formatIdeaRef(data.idea.number)} → ${data.targetRef}`, {
+      idea: data.idea,
+      promoted: true,
+      targetRef: data.targetRef,
+    });
+  } catch (error) {
+    if (!(error instanceof PlannerApiError)) throw error;
+    if (error.code === "IDEA_NOT_FOUND") return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND", promoted: false });
+    if (error.code === "IDEA_PROMOTION_TARGET_NOT_FOUND") return text(error.message, { errorCode: "TARGET_NOT_FOUND", promoted: false });
+    return text(error.message, { errorCode: "IDEA_PROMOTION_CONFIRMATION_REQUIRED", promoted: false });
   }
-  return text(`Idea promoted: ${formatIdeaRef(outcome.idea.number)} → ${outcome.targetRef}`, {
-    idea: outcome.idea,
-    promoted: true,
-    targetRef: outcome.targetRef,
-  });
 });
 
 server.registerTool("planner-handoff-write", {
@@ -2344,44 +2360,48 @@ server.registerTool("planner-handoff-clear", {
 });
 
 server.registerTool("planner-web", {
-  description: "Manage the planner web dashboard (start/status/stop) from MCP stdio. Runs an in-process HTTP+WS server bound to LAN; it lives as long as this MCP process. plan-root comes from AGENT_PLAN_ROOT or cwd()/.planner.",
+  description: "Manage the planner web dashboard (start/status/stop) from MCP stdio. Reuses the live local service for this plan root or starts one on the loopback interface; it lives as long as its owner. plan-root comes from AGENT_PLAN_ROOT or cwd()/.planner.",
   inputSchema: {
     action: z.enum(["start", "stop", "status"]).default("status"),
   },
 }, async ({ action }) => {
+  const root = planRoot();
   if (action === "start") {
-    if (webHandle) {
-      const web = { localUrl: webHandle.localUrl, lanUrl: webHandle.lanUrl, mode: webHandle.mode, bindHost: webHandle.bindHost };
-      return text(`planner-web already running: ${webHandle.localUrl}${webHandle.lanUrl ? ` — LAN: ${webHandle.lanUrl}` : ""} (mode: ${webHandle.mode})`, plannerWebMetadata(web));
-    }
-    const root = planRoot();
-    const storeCheck = new PlanStore(root);
-    if (!(await storeCheck.exists())) {
+    if (!(await new PlanStore(root).exists())) {
       return text(`planner-web start: no .planner/ found at ${root}. Run planner-init first.`, { running: false, address: "", localUrl: "", lanUrl: "", host: "", port: 0, mode: "", errorCode: "PLANNER_NOT_INITIALIZED" });
     }
-    try {
-      // port: 0 → OS assigns a free port (no conflict with plan-server CLI / Pi).
-      // host: 0.0.0.0 → bind LAN (reachable from other devices), like Pi /planner load.
-      webHandle = await serve({ planRoot: root, port: 0, quiet: true });
-      const web = { localUrl: webHandle.localUrl, lanUrl: webHandle.lanUrl, mode: webHandle.mode, bindHost: webHandle.bindHost };
-      return text(`planner-web started: ${webHandle.localUrl}${webHandle.lanUrl ? ` — LAN: ${webHandle.lanUrl}` : ""} (mode: ${webHandle.mode})`, plannerWebMetadata(web));
-    } catch (err) {
-      webHandle = null;
-      const web = { localUrl: "", error: (err as Error).message };
-      return text(`planner-web start failed: ${web.error}`, plannerWebMetadata(web));
+    const service = await ensurePlannerService(root);
+    if (!service.localUrl) {
+      return text(`planner-web start failed: ${service.error ?? "unknown error"}`, plannerWebMetadata(service));
     }
+    return text(
+      service.reused
+        ? `planner-web already running: ${service.localUrl}${service.lanUrl ? ` — LAN: ${service.lanUrl}` : ""} (mode: ${service.mode ?? "local"})`
+        : `planner-web started: ${service.localUrl}${service.lanUrl ? ` — LAN: ${service.lanUrl}` : ""} (mode: ${service.mode ?? "local"})`,
+      plannerWebMetadata(service),
+    );
   }
   if (action === "stop") {
-    if (!webHandle) return text("planner-web not running.", { running: false, address: "", localUrl: "", lanUrl: "", host: "", port: 0, mode: "" });
-    const stoppedUrl = webHandle.localUrl;
-    await webHandle.close().catch(() => {});
-    webHandle = null;
-    return text(`planner-web stopped (was ${stoppedUrl}).`, { running: false, address: "", localUrl: "", lanUrl: "", host: "", port: 0, mode: "" });
+    const outcome = await stopPlannerService();
+    if (outcome.stopped) {
+      return text(`planner-web stopped (was ${outcome.url}).`, { running: false, address: "", localUrl: "", lanUrl: "", host: "", port: 0, mode: "" });
+    }
+    if (outcome.foreign) {
+      // Another program owns this service: stopping it here would kill that host.
+      return text(
+        `planner-web is running in another process (${outcome.url}); stop it from that process.`,
+        { ...plannerWebMetadata({ localUrl: outcome.url, mode: "local" }), running: true },
+      );
+    }
+    return text("planner-web not running.", { running: false, address: "", localUrl: "", lanUrl: "", host: "", port: 0, mode: "" });
   }
   // status
-  if (webHandle) {
-    const web = { localUrl: webHandle.localUrl, lanUrl: webHandle.lanUrl, mode: webHandle.mode, bindHost: webHandle.bindHost };
-    return text(`planner-web running: ${webHandle.localUrl}${webHandle.lanUrl ? ` — LAN: ${webHandle.lanUrl}` : ""} (mode: ${webHandle.mode}, bindHost: ${webHandle.bindHost})`, plannerWebMetadata(web));
+  const running = await plannerServiceStatus(root);
+  if (running) {
+    return text(
+      `planner-web running: ${running.localUrl}${running.lanUrl ? ` — LAN: ${running.lanUrl}` : ""} (mode: ${running.mode ?? "local"}, bindHost: ${running.bindHost ?? "127.0.0.1"})`,
+      plannerWebMetadata(running),
+    );
   }
   return text("planner-web not running. Use planner-web with action=start to start the dashboard.", { running: false, address: "", localUrl: "", lanUrl: "", host: "", port: 0, mode: "" });
 });
@@ -2408,7 +2428,7 @@ server.registerTool("planner-load", {
   }
   const plannerSkill = await st.syncPlannerSkill();
   await st.syncGrillMeSkill();
-  const web = await ensureWebStarted();
+  const web = await ensurePlannerService(planRoot());
   const recap = await buildRecap(st, web, { harness: "mcp", sessionId: plannerSessionId });
   const plan = await st.loadAll();
 
