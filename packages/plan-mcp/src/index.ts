@@ -9,7 +9,7 @@ import { PlanStore, PlanStoreError, ExportService, findPhaseByRef, findTaskByRef
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, deleteTaskFlow, listIdeasFlow, showIdeaFlow, createIdeaFlow, updateIdeaFlow, deleteIdeaFlow, beginIdeaPromotionFlow, finalizeIdeaPromotionFlow, updateProjectGuidelinesFlow, updateProjectLanguageFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, deleteTaskFlow, listIdeasFlow, showIdeaFlow, createIdeaFlow, updateIdeaFlow, deleteIdeaFlow, beginIdeaPromotionFlow, finalizeIdeaPromotionFlow, readProjectGuidelinesFlow, updateProjectGuidelinesFlow, updateProjectLanguageFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Phase, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -560,18 +560,15 @@ server.registerTool("planner-project-guidelines-show", {
   description: "Read the canonical Project Guidelines / Coding Standard section for this project. Call this when planner-task-start or planner-task-switch nextActions require it, and keep the guidance in working memory while doing task work.",
 }, async (extra) => {
   const plannerSessionId = plannerSessionIdFor(extra);
-  const st = await requireStore();
-  const project = await st.loadProject();
-  if (project.projectGuidelines.content.trim()) {
-    await st.recordProjectGuidelinesRead({ sessionId: plannerSessionId });
-  }
-  const refreshed = await st.loadProject();
-  const content = refreshed.projectGuidelines.content.trim();
+  // Same read flow as GET /api/v2/context/guidelines: the receipt is only
+  // recorded when non-empty guidelines were actually delivered.
+  const outcome = await readProjectGuidelinesFlow(await requireStore(), plannerSessionId);
+  const content = outcome.projectGuidelines.content.trim();
   return text(
     content
       ? ["## Project Guidelines", content].join("\n\n")
       : "No project guidelines set.",
-    { projectGuidelines: refreshed.projectGuidelines, readRecorded: Boolean(content) },
+    { projectGuidelines: outcome.projectGuidelines, readRecorded: outcome.readRecorded },
   );
 });
 

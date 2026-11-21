@@ -50,6 +50,120 @@ test("discovery advertises the protocol, boot identity and family links", async 
   }
 });
 
+test("discovery inventory is the frozen complete application surface", async () => {
+  const fx = await startServerFixture({ name: "v2-inventory" });
+  try {
+    const body = (await request(fx, "/api/v2")).body;
+    assert.equal(body.data.sessionHeader, "x-planner-session");
+    // Operations are pinned family by family: dropping an operation from the
+    // versioned surface must be a deliberate edit of this inventory, not a
+    // silent regression of P128/T490 C2.
+    assert.deepEqual(body.data.families, {
+      handoffs: {
+        list: "GET /api/v2/handoffs?page=&pageSize=",
+        prepare: "GET /api/v2/phases/{phaseRef}/handoff/prepare",
+        show: "GET /api/v2/phases/{phaseRef}/handoff",
+        write: "POST /api/v2/phases/{phaseRef}/handoff",
+        verify: "POST /api/v2/phases/{phaseRef}/handoff/verify",
+        clear: "DELETE /api/v2/phases/{phaseRef}/handoff",
+      },
+      recommend: "GET /api/v2/recommend",
+      search: "GET /api/v2/search?q=&limit=",
+      requirements: {
+        list: "GET /api/v2/requirements",
+        create: "POST /api/v2/requirements",
+        update: "PUT /api/v2/requirements/{requirementId}",
+        delete: "DELETE /api/v2/requirements/{requirementId}",
+      },
+      acceptedDecisions: {
+        list: "GET /api/v2/accepted-decisions?targetType=&targetRef=",
+        create: "POST /api/v2/accepted-decisions",
+        update: "PUT /api/v2/accepted-decisions/{decisionId}",
+        delete: "DELETE /api/v2/accepted-decisions/{decisionId}?targetType=&targetRef=&confirmed=true",
+      },
+      features: {
+        list: "GET /api/v2/features?featureRef=",
+        show: "GET /api/v2/features/{featureRef}",
+        create: "POST /api/v2/features",
+        update: "PUT /api/v2/features/{featureRef}",
+        discuss: "PUT /api/v2/features/{featureRef}/discuss",
+        delete: "DELETE /api/v2/features/{featureRef}?cascade=true",
+      },
+      phases: {
+        list: "GET /api/v2/phases?featureRef=&status=",
+        show: "GET /api/v2/phases/{phaseRef}",
+        create: "POST /api/v2/phases",
+        update: "PUT /api/v2/phases/{phaseRef}",
+        discuss: "PUT /api/v2/phases/{phaseRef}/discuss",
+        delete: "DELETE /api/v2/phases/{phaseRef}",
+      },
+      tasks: {
+        list: "GET /api/v2/tasks?featureRef=&phaseRef=&status=",
+        show: "GET /api/v2/tasks/{taskRef}",
+        create: "POST /api/v2/phases/{phaseRef}/tasks",
+        update: "PUT /api/v2/tasks/{taskRef}",
+        discuss: "PUT /api/v2/tasks/{taskRef}/discuss",
+        move: "POST /api/v2/tasks/move",
+        dependencyAdd: "POST /api/v2/tasks/{taskRef}/dependencies",
+        dependencyRemove: "DELETE /api/v2/tasks/{taskRef}/dependencies?dependsOn=&confirmed=true",
+        checklistAdd: "POST /api/v2/tasks/{taskRef}/checklist",
+        checklistToggle: "POST /api/v2/tasks/{taskRef}/checklist/toggle",
+        checklistRemove: "DELETE /api/v2/tasks/{taskRef}/checklist?item=",
+        start: "POST /api/v2/tasks/{taskRef}/start",
+        complete: "POST /api/v2/tasks/{taskRef}/complete",
+        pause: "POST /api/v2/tasks/{taskRef}/pause",
+        reopen: "POST /api/v2/tasks/{taskRef}/reopen",
+        switch: "POST /api/v2/tasks/switch",
+        delete: "DELETE /api/v2/tasks/{taskRef}",
+      },
+      ideas: {
+        list: "GET /api/v2/ideas",
+        show: "GET /api/v2/ideas/{ideaRef}",
+        create: "POST /api/v2/ideas",
+        update: "PUT /api/v2/ideas/{ideaRef}",
+        delete: "DELETE /api/v2/ideas/{ideaRef}?confirmed=true",
+        promotionBegin: "POST /api/v2/ideas/{ideaRef}/promotion/begin",
+        promotionFinalize: "POST /api/v2/ideas/{ideaRef}/promotion/finalize",
+      },
+      deviations: {
+        approve: "POST /api/v2/deviations",
+      },
+      project: {
+        discuss: "PUT /api/v2/project/discuss",
+        guidelines: "PUT /api/v2/project/guidelines",
+        language: "PUT /api/v2/project/language",
+      },
+      documents: {
+        list: "GET /api/v2/documents",
+        view: "GET /api/v2/documents/view?path=",
+        save: "PUT /api/v2/documents/save",
+      },
+      context: {
+        project: "GET /api/v2/context/project?maxChars=",
+        guidelines: "GET /api/v2/context/guidelines",
+        requirements: "GET /api/v2/context/requirements?phaseRef=",
+        feature: "GET /api/v2/context/features/{featureRef}",
+        phase: "GET /api/v2/context/phases/{phaseRef}",
+        task: "GET /api/v2/context/tasks/{taskRef}",
+      },
+      sessions: {
+        register: "POST /api/v2/sessions",
+        heartbeat: "POST /api/v2/sessions/{sessionId}/heartbeat",
+        end: "DELETE /api/v2/sessions/{sessionId}",
+        recover: "POST /api/v2/sessions/recover",
+      },
+    });
+    for (const [family, operations] of Object.entries(body.data.families)) {
+      const entries = typeof operations === "string" ? { [family]: operations } : operations;
+      for (const [operation, entry] of Object.entries(entries)) {
+        assert.match(entry, /^(GET|POST|PUT|DELETE) \/api\/v2\//, `${family}.${operation} advertises a versioned route`);
+      }
+    }
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
 test("handoff family: prepare → confirmed write → show → verify → clear", async () => {
   const fx = await startServerFixture({ name: "v2-handoff" });
   const base = "/api/v2/phases/P001/handoff";
