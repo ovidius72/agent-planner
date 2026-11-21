@@ -652,7 +652,12 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     const target = await resolveTarget(c, targetType, targetRef);
     if ("failure" in target) return target.failure;
     if (c.req.query("confirmed") !== "true") {
-      return error(c, 409, "ACCEPTED_DECISION_DELETE_NOT_CONFIRMED", `Delete not confirmed for accepted decision ${decisionId}. Retry with confirmed=true.`);
+      return error(c, 409, "ACCEPTED_DECISION_DELETE_NOT_CONFIRMED", `Delete not confirmed for accepted decision ${decisionId}. Retry with confirmed=true.`, {
+        targetType,
+        targetRef: target.resolution.ref,
+        decisionId,
+        confirmRequired: true,
+      });
     }
     try {
       const acceptedDecision = await store.deleteAcceptedDecision(target.resolution.owner, decisionId);

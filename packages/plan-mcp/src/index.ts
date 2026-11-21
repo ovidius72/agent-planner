@@ -5,13 +5,13 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlannerApiError, PlanStore, PlanStoreError, ExportService, findPhaseByRef, findTaskByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlannerApiError, PlanStore, PlanStoreError, ExportService, findPhaseByRef, findTaskByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, resolveFeatureRefStrict, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import type { PlannerServiceStartup } from "./service.js";
 import { ensurePlannerService, plannerApi, plannerServiceStatus, stopPlannerService } from "./service.js";
 import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
 import { HandoffFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, deleteTaskFlow, readProjectGuidelinesFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Idea, Phase, Requirement, Task } from "@agent-plan/core/schema";
-import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
+import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput, PlanStoreErrorDetails } from "@agent-plan/core";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
 const PHASE_STATUS_VALUES = ["draft", "discovery", ...STATUS_VALUES] as const;
@@ -90,6 +90,23 @@ function mcpMutationNoFieldsFailure(input: Parameters<typeof noMutableFieldsRece
     content: [{ type: "text", text: outcome.message }],
     structuredContent: { ...outcome },
   };
+}
+
+/** Render a v2 accepted-decision refusal as the pinned MCP failure.
+ *
+ * The API returns the same flow/store failure the adapter used to raise
+ * locally: the code is the store's errorCode and `details.details` is its
+ * typed detail record. Rebuilding the typed error keeps one rendering
+ * (`acceptedDecisionMutationFailureReply`) for both transports. Null means
+ * "not this family's failure" — the caller rethrows.
+ */
+function acceptedDecisionApiFailure(error: PlannerApiError, outcome: "created" | "updated" | "deleted"): ToolResult | null {
+  if (error.code === "ACCEPTED_DECISION_TARGET_NOT_FOUND") {
+    return { isError: true, content: [{ type: "text", text: error.message }], structuredContent: { [outcome]: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" } };
+  }
+  if (!error.code.startsWith("ACCEPTED_DECISION_")) return null;
+  const details = (typeof error.details.details === "object" && error.details.details !== null ? error.details.details : {}) as PlanStoreErrorDetails;
+  return mcpAcceptedDecisionMutationFailure(new PlanStoreError(error.message, undefined, { ...details, errorCode: error.code }), outcome);
 }
 
 function mcpAcceptedDecisionMutationFailure(error: unknown, outcome: "created" | "updated" | "deleted"): ToolResult {
@@ -642,25 +659,27 @@ server.registerTool("planner-accepted-decision-create", {
     implementationNotes: z.string().optional(),
   },
 }, async ({ targetType, targetRef, title, decision, rationale, implementationNotes }) => {
-  const st = await requireStore();
-  const target = await resolveAcceptedDecisionTarget(st, targetType, targetRef);
-  if (!target.ok) return { isError: true, content: [{ type: "text", text: target.error }], structuredContent: { created: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" } };
-  const createInput = {
-    title,
-    ...(decision !== undefined ? { decision } : {}),
-    ...(rationale !== undefined ? { rationale } : {}),
-    ...(implementationNotes !== undefined ? { implementationNotes } : {}),
-  };
+  const api = await plannerApi(planRoot());
   try {
-    const acceptedDecision = await st.createAcceptedDecision(target.owner, createInput);
-    return writeAndSummarize(st, `Accepted decision created on ${target.ref}: ${acceptedDecision.title}`, {
+    const data = await api.request<{ targetRef: string; acceptedDecision: { title: string } }>("POST", "/accepted-decisions", {
+      targetType,
+      ...(targetRef !== undefined ? { targetRef } : {}),
+      title,
+      ...(decision !== undefined ? { decision } : {}),
+      ...(rationale !== undefined ? { rationale } : {}),
+      ...(implementationNotes !== undefined ? { implementationNotes } : {}),
+    });
+    return text(`Accepted decision created on ${data.targetRef}: ${data.acceptedDecision.title}`, {
       created: true,
       targetType,
-      targetRef: target.ref,
-      acceptedDecision,
+      targetRef: data.targetRef,
+      acceptedDecision: data.acceptedDecision,
     });
   } catch (error) {
-    return mcpAcceptedDecisionMutationFailure(error, "created");
+    if (!(error instanceof PlannerApiError)) throw error;
+    const failure = acceptedDecisionApiFailure(error, "created");
+    if (!failure) throw error;
+    return failure;
   }
 });
 
@@ -688,25 +707,31 @@ server.registerTool("planner-accepted-decision-update", {
       readBackCommand: "planner-show or the owning entity show tool",
     });
   }
-  const st = await requireStore();
-  const target = await resolveAcceptedDecisionTarget(st, targetType, targetRef);
-  if (!target.ok) return { isError: true, content: [{ type: "text", text: target.error }], structuredContent: { updated: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" } };
-  const updateInput = {
-    ...(title !== undefined ? { title } : {}),
-    ...(decision !== undefined ? { decision } : {}),
-    ...(rationale !== undefined ? { rationale } : {}),
-    ...(implementationNotes !== undefined ? { implementationNotes } : {}),
-  };
+  const api = await plannerApi(planRoot());
   try {
-    const acceptedDecision = await st.updateAcceptedDecision(target.owner, decisionId, updateInput);
-    return writeAndSummarize(st, `Accepted decision updated on ${target.ref}: ${acceptedDecision.title}`, {
+    const data = await api.request<{ targetRef: string; acceptedDecision: { title: string } }>(
+      "PUT",
+      `/accepted-decisions/${encodeURIComponent(decisionId)}`,
+      {
+        targetType,
+        ...(targetRef !== undefined ? { targetRef } : {}),
+        ...(title !== undefined ? { title } : {}),
+        ...(decision !== undefined ? { decision } : {}),
+        ...(rationale !== undefined ? { rationale } : {}),
+        ...(implementationNotes !== undefined ? { implementationNotes } : {}),
+      },
+    );
+    return text(`Accepted decision updated on ${data.targetRef}: ${data.acceptedDecision.title}`, {
       updated: true,
       targetType,
-      targetRef: target.ref,
-      acceptedDecision,
+      targetRef: data.targetRef,
+      acceptedDecision: data.acceptedDecision,
     });
   } catch (error) {
-    return mcpAcceptedDecisionMutationFailure(error, "updated");
+    if (!(error instanceof PlannerApiError)) throw error;
+    const failure = acceptedDecisionApiFailure(error, "updated");
+    if (!failure) throw error;
+    return failure;
   }
 });
 
@@ -719,29 +744,38 @@ server.registerTool("planner-accepted-decision-delete", {
     confirmed: z.boolean().describe("Must be true to confirm deleting this accepted decision."),
   },
 }, async ({ targetType, targetRef, decisionId, confirmed }) => {
-  const st = await requireStore();
-  const target = await resolveAcceptedDecisionTarget(st, targetType, targetRef);
-  if (!target.ok) return { isError: true, content: [{ type: "text", text: target.error }], structuredContent: { deleted: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" } };
-  if (!confirmed) {
-    return text(`Delete not confirmed for accepted decision ${decisionId} on ${target.ref}. Retry with confirmed=true.`, {
-      deleted: false,
-      confirmRequired: true,
-      targetType,
-      targetRef: target.ref,
-      decisionId,
-    });
-  }
+  const api = await plannerApi(planRoot());
+  const query = new URLSearchParams({ targetType, confirmed: confirmed ? "true" : "false" });
+  if (targetRef !== undefined) query.set("targetRef", targetRef);
   try {
-    const acceptedDecision = await st.deleteAcceptedDecision(target.owner, decisionId);
-    return writeAndSummarize(st, `Accepted decision deleted from ${target.ref}: ${acceptedDecision.title}`, {
+    const data = await api.request<{ targetRef: string; acceptedDecision: { title: string } }>(
+      "DELETE",
+      `/accepted-decisions/${encodeURIComponent(decisionId)}?${query.toString()}`,
+    );
+    return text(`Accepted decision deleted from ${data.targetRef}: ${data.acceptedDecision.title}`, {
       deleted: true,
       targetType,
-      targetRef: target.ref,
+      targetRef: data.targetRef,
       decisionId,
-      acceptedDecision,
+      acceptedDecision: data.acceptedDecision,
     });
   } catch (error) {
-    return mcpAcceptedDecisionMutationFailure(error, "deleted");
+    if (!(error instanceof PlannerApiError)) throw error;
+    if (error.code === "ACCEPTED_DECISION_DELETE_NOT_CONFIRMED") {
+      // The API refusal carries the resolved target so the confirmation reply
+      // is byte-identical to the in-process one.
+      const resolvedRef = typeof error.details.targetRef === "string" ? error.details.targetRef : (targetRef ?? "");
+      return text(`Delete not confirmed for accepted decision ${decisionId} on ${resolvedRef}. Retry with confirmed=true.`, {
+        deleted: false,
+        confirmRequired: true,
+        targetType,
+        targetRef: resolvedRef,
+        decisionId,
+      });
+    }
+    const failure = acceptedDecisionApiFailure(error, "deleted");
+    if (!failure) throw error;
+    return failure;
   }
 });
 

@@ -451,6 +451,11 @@ test("accepted-decisions family: list → create → update → delete on one re
 
     const unconfirmed = await expectError(fx, `/api/v2/accepted-decisions/${decisionId}?targetType=phase&targetRef=P001`, del, { status: 409 });
     assert.match(unconfirmed.message, /ACCEPTED_DECISION_DELETE_NOT_CONFIRMED/);
+    // The refusal carries the resolved target facts, so a bridging client can
+    // render the same confirmation reply it rendered in-process.
+    assert.match(unconfirmed.message, /"targetType":"phase"/);
+    assert.match(unconfirmed.message, /"targetRef":"P001\(F001\)"/);
+    assert.match(unconfirmed.message, /"confirmRequired":true/);
 
     const deleted = (await request(fx, `/api/v2/accepted-decisions/${decisionId}?targetType=phase&targetRef=P001&confirmed=true`, del)).body;
     assert.equal(deleted.data.deleted, true);

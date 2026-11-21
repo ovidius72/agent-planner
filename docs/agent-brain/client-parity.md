@@ -47,6 +47,21 @@ Project settings:
 - `planner-project-guidelines-update` → `PUT /api/v2/project/guidelines`
 - `planner-project-language` → `PUT /api/v2/project/language`
 
+Accepted decisions:
+
+- `planner-accepted-decision-create` → `POST /api/v2/accepted-decisions`
+- `planner-accepted-decision-update` → `PUT /api/v2/accepted-decisions/{decisionId}`
+  (the no-mutable-fields check stays a pure input guard before the request)
+- `planner-accepted-decision-delete` → `DELETE /api/v2/accepted-decisions/{decisionId}?targetType=&targetRef=&confirmed=true`
+
+The target is resolved by the service, not the adapter: a 404
+`ACCEPTED_DECISION_TARGET_NOT_FOUND` carries the resolver's message, and the
+409 `ACCEPTED_DECISION_DELETE_NOT_CONFIRMED` carries `targetType`, the resolved
+`targetRef`, `decisionId` and `confirmRequired`, so the adapter's confirmation
+reply is byte-identical to the in-process one. Other refusals carry the
+store's errorCode plus `details`, which the adapter rebuilds into the pinned
+`acceptedDecisionMutationFailureReply` rendering.
+
 The adapter resolves the service (`reuse the live server record, else start an
 embedded one`), never opens the store, and maps `PlannerApiError.code` to its
 own texts and structured payloads. MCP suite unchanged at 115/115.
@@ -59,7 +74,6 @@ own texts and structured payloads. MCP suite unchanged at 115/115.
 | Phases | `planner-phase-list/show/add/update/discuss/delete` | `/phases` family |
 | Tasks | `planner-task-list/show/add/update/discuss/move/delete`, `planner-task-checklist-add/toggle/remove`, `planner-task-dependency-add/delete` | `/tasks` family |
 | Requirements (scoped read) | `planner-requirement-list` with `phaseRef` | `GET /context/requirements?phaseRef=` (session) |
-| Accepted decisions | `planner-accepted-decision-create/update/delete` | `/accepted-decisions` family |
 | Context reads | `planner-project-guidelines-show` | `GET /context/guidelines` (session) |
 | Handoffs | `planner-handoff-list/prepare/show/write/verify/clear` | `/phases/{ref}/handoff` family |
 | Lifecycle | `planner-task-start/complete/pause/reopen/switch/deviation` | `/tasks/{ref}/*`, `/deviations` (session) |

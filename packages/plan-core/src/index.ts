@@ -61,4 +61,5 @@ export * from "./guard-state.js";
 export { PlanStore, PlanStoreError, PlanStaleWriteError, PlanUnsupportedAllocationKindError, assertPlannerRevision, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, nowISO, type IdeaCreateInput, type IdeaUpdateInput, type IdeaPromotionTargetInput, type AcceptedDecisionOwner, type AcceptedDecisionCreateInput, type AcceptedDecisionUpdateInput, type RecordProjectContextReadInput, type RecordProjectContextReadResult, type PhaseHandoffSummary, type OrphanPhaseSummary } from "./plan-store.js";
 export { PlanRenderer } from "./renderer.js";
 export { ExportService } from "./export-service.js";
+export type { PlanStoreErrorDetails } from "./plan-store.js";
 export type { CodebaseProfile, ResumeFocus, ActivityEntry, ActivityLog, AmbientFacts } from "./schema.js";
