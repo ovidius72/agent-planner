@@ -31,6 +31,22 @@ Ideas Inbox — the first family converted, because it needs no session:
 - `planner-idea-promotion-begin` → `POST /api/v2/ideas/{ideaRef}/promotion/begin`
 - `planner-idea-promotion-finalize` → `POST /api/v2/ideas/{ideaRef}/promotion/finalize`
 
+Requirements — CRUD plus the unscoped inventory:
+
+- `planner-requirement-create` → `POST /api/v2/requirements`
+- `planner-requirement-update` → `PUT /api/v2/requirements/{requirementId}`
+- `planner-requirement-delete` → `DELETE /api/v2/requirements/{requirementId}`
+- `planner-requirement-list` → `GET /api/v2/requirements` for the unscoped
+  inventory. The phase-scoped branch stays `flow-backed` until the adapter
+  adopts the service-issued session id: a receipt written under a different
+  session id would not satisfy the local start gate.
+
+Project settings:
+
+- `planner-project-discuss` → `PUT /api/v2/project/discuss`
+- `planner-project-guidelines-update` → `PUT /api/v2/project/guidelines`
+- `planner-project-language` → `PUT /api/v2/project/language`
+
 The adapter resolves the service (`reuse the live server record, else start an
 embedded one`), never opens the store, and maps `PlannerApiError.code` to its
 own texts and structured payloads. MCP suite unchanged at 115/115.
@@ -42,9 +58,8 @@ own texts and structured payloads. MCP suite unchanged at 115/115.
 | Features | `planner-feature-list/show/add/update/discuss/delete` | `/features` family |
 | Phases | `planner-phase-list/show/add/update/discuss/delete` | `/phases` family |
 | Tasks | `planner-task-list/show/add/update/discuss/move/delete`, `planner-task-checklist-add/toggle/remove`, `planner-task-dependency-add/delete` | `/tasks` family |
-| Requirements | `planner-requirement-list/create/update/delete` | `/requirements` family |
+| Requirements (scoped read) | `planner-requirement-list` with `phaseRef` | `GET /context/requirements?phaseRef=` (session) |
 | Accepted decisions | `planner-accepted-decision-create/update/delete` | `/accepted-decisions` family |
-| Project settings | `planner-project-discuss`, `planner-project-guidelines-update`, `planner-project-language` | `/project/*` |
 | Context reads | `planner-project-guidelines-show` | `GET /context/guidelines` (session) |
 | Handoffs | `planner-handoff-list/prepare/show/write/verify/clear` | `/phases/{ref}/handoff` family |
 | Lifecycle | `planner-task-start/complete/pause/reopen/switch/deviation` | `/tasks/{ref}/*`, `/deviations` (session) |

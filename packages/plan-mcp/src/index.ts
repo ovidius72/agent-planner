@@ -9,8 +9,8 @@ import { PlannerApiError, PlanStore, PlanStoreError, ExportService, findPhaseByR
 import type { PlannerServiceStartup } from "./service.js";
 import { ensurePlannerService, plannerApi, plannerServiceStatus, stopPlannerService } from "./service.js";
 import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, deleteTaskFlow, readProjectGuidelinesFlow, updateProjectGuidelinesFlow, updateProjectLanguageFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
-import type { Idea, Phase, Task } from "@agent-plan/core/schema";
+import { HandoffFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, deleteTaskFlow, readProjectGuidelinesFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import type { Idea, Phase, Requirement, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -476,11 +476,19 @@ server.registerTool("planner-project-language", {
     chatLanguage: z.string().optional(),
   },
 }, async ({ contentLanguage, chatLanguage }) => {
-  const outcome = await updateProjectLanguageFlow(await requireStore(), { contentLanguage, chatLanguage });
-  if (!outcome.ok) return text(outcome.message);
-  return text(
-    `Saved language preferences: content=${outcome.contentLanguage || "(unset)"}, chat=${outcome.chatLanguage || "(unset)"}`,
-  );
+  const api = await plannerApi(planRoot());
+  try {
+    const data = await api.request<{ contentLanguage: string; chatLanguage: string }>("PUT", "/project/language", {
+      ...(contentLanguage !== undefined ? { contentLanguage } : {}),
+      ...(chatLanguage !== undefined ? { chatLanguage } : {}),
+    });
+    return text(
+      `Saved language preferences: content=${data.contentLanguage || "(unset)"}, chat=${data.chatLanguage || "(unset)"}`,
+    );
+  } catch (error) {
+    if (error instanceof PlannerApiError) return text(error.message);
+    throw error;
+  }
 });
 
 server.registerTool("planner-project-discuss", {
@@ -497,36 +505,34 @@ server.registerTool("planner-project-discuss", {
     decisions: z.array(z.string()).optional().describe("Deprecated legacy field. Read-only history now; supplying it returns LEGACY_DECISIONS_ARRAY_READ_ONLY. Use planner-accepted-decision-create for new durable decisions."),
   },
 }, async (params) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await discussProjectFlow(st, params);
+    const data = await api.request<{ project: { name: string }; updatedFields: string[] }>("PUT", "/project/discuss", params);
     return text(
-      `Project discussed/updated: ${outcome.project.name}. Fields saved: ${outcome.updatedFields.join(", ")}.`,
-      { project: outcome.project, discussed: true, updatedFields: outcome.updatedFields },
+      `Project discussed/updated: ${data.project.name}. Fields saved: ${data.updatedFields.join(", ")}.`,
+      { project: data.project, discussed: true, updatedFields: data.updatedFields },
     );
   } catch (error) {
-    if (error instanceof DiscussFlowRefusal) {
-      if (error.code === "PROJECT_LEGACY_DECISIONS_READ_ONLY") {
-        return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "project" } };
-      }
-      if (error.code === "PROJECT_NO_MUTABLE_FIELDS") {
-        return mcpMutationNoFieldsFailure({
-          entity: "project",
-          ref: error.details.ref as string,
-          operation: "discuss",
-          mutableFields: error.details.mutableFields as string[],
-          retryCommand: "planner-project-discuss with a concise description summary and the intended metadata",
-          readBackCommand: "planner-show",
-          descriptionFallback: {
-            inputField: "description",
-            storedField: "project description",
-            descriptionRefField: "descriptionRef",
-          },
-        });
-      }
-      return text(error.message, { updated: false, errorCode: error.code });
+    if (!(error instanceof PlannerApiError)) throw error;
+    if (error.code === "PROJECT_LEGACY_DECISIONS_READ_ONLY") {
+      return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "project" } };
     }
-    throw error;
+    if (error.code === "PROJECT_NO_MUTABLE_FIELDS") {
+      return mcpMutationNoFieldsFailure({
+        entity: "project",
+        ref: String(error.details.ref ?? ""),
+        operation: "discuss",
+        mutableFields: Array.isArray(error.details.mutableFields) ? error.details.mutableFields as string[] : [],
+        retryCommand: "planner-project-discuss with a concise description summary and the intended metadata",
+        readBackCommand: "planner-show",
+        descriptionFallback: {
+          inputField: "description",
+          storedField: "project description",
+          descriptionRefField: "descriptionRef",
+        },
+      });
+    }
+    return text(error.message, { updated: false, errorCode: error.code });
   }
 });
 
@@ -552,15 +558,19 @@ server.registerTool("planner-project-guidelines-update", {
     content: z.string().describe("Full Project Guidelines markdown/text. Pass an empty string to clear the section."),
   },
 }, async ({ content }) => {
-  const st = await requireStore();
-  const outcome = await updateProjectGuidelinesFlow(st, { content });
-  if (!outcome.ok) return text(outcome.message);
-  return text(
-    outcome.cleared
-      ? "Project Guidelines cleared."
-      : `Project Guidelines updated. Updated at ${outcome.projectGuidelines.updatedAt}.`,
-    { updated: true, projectGuidelines: outcome.projectGuidelines },
-  );
+  const api = await plannerApi(planRoot());
+  try {
+    const data = await api.request<{ cleared: boolean; projectGuidelines: { updatedAt: string } }>("PUT", "/project/guidelines", { content });
+    return text(
+      data.cleared
+        ? "Project Guidelines cleared."
+        : `Project Guidelines updated. Updated at ${data.projectGuidelines.updatedAt}.`,
+      { updated: true, projectGuidelines: data.projectGuidelines },
+    );
+  } catch (error) {
+    if (error instanceof PlannerApiError) return text(error.message);
+    throw error;
+  }
 });
 
 server.registerTool("planner-project-context-migrate", {
@@ -1943,16 +1953,24 @@ server.registerTool("planner-requirement-list", {
     phaseRef: z.string().min(1).optional().describe("Optional target phase ref. When supplied, return full target-relevant requirements and record only those delivered requirements as read."),
   },
 }, async ({ phaseRef }, extra) => {
-  const plannerSessionId = plannerSessionIdFor(extra);
-  const st = await requireStore();
-  const requirements = await st.loadRequirements();
   if (!phaseRef?.trim()) {
-    return text(requirements.requirements.map((req) => `- ${req.id} — ${req.title}`).join("\n") || "No requirements", {
-      requirements,
+    // Unscoped inventory: no attestation, so it needs no session and runs
+    // through the service like every other bridged read.
+    const api = await plannerApi(planRoot());
+    const data = await api.request<{ requirements: Requirement[] }>("GET", "/requirements");
+    return text(data.requirements.map((req) => `- ${req.id} — ${req.title}`).join("\n") || "No requirements", {
+      requirements: { requirements: data.requirements },
       attestedRequirementIds: [],
       readScope: "inventory",
     });
   }
+  // Phase-scoped delivery stays in-process until the adapter adopts the
+  // service-issued session id for its read attestations (C3 session slice):
+  // a receipt written under a different session id would not satisfy the
+  // local start gate.
+  const plannerSessionId = plannerSessionIdFor(extra);
+  const st = await requireStore();
+  const requirements = await st.loadRequirements();
   const features = (await st.loadFeatures()).features;
   const phase = findPhaseByRef(await st.loadAllPhases(), features, phaseRef.trim());
   if (!phase) return { ...text(`Phase not found: ${phaseRef}`, { attestedRequirementIds: [] }), isError: true };
@@ -1989,14 +2007,17 @@ server.registerTool("planner-requirement-create", {
     })).optional(),
   },
 }, async ({ title, description, linkedPhaseIds, macroTasks }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const requirement = await createRequirementFlow(st, { title, description, linkedPhaseIds, macroTasks });
-    return writeAndSummarize(st, `Requirement created: ${requirement.id}.`, { requirement, created: true });
+    const data = await api.request<{ requirement: Requirement }>("POST", "/requirements", {
+      title,
+      ...(description !== undefined ? { description } : {}),
+      linkedPhaseIds,
+      ...(macroTasks !== undefined ? { macroTasks } : {}),
+    });
+    return text(`Requirement created: ${data.requirement.id}.`, { requirement: data.requirement, created: true });
   } catch (error) {
-    if (error instanceof RequirementFlowRefusal) {
-      return text(`❌ ${error.message}`, { created: false, errorCode: error.code });
-    }
+    if (error instanceof PlannerApiError) return text(`❌ ${error.message}`, { created: false, errorCode: error.code });
     throw error;
   }
 });
@@ -2016,7 +2037,6 @@ server.registerTool("planner-requirement-update", {
     })).optional(),
   },
 }, async ({ requirementId, title, description, linkedPhaseIds, macroTasks }) => {
-  const st = await requireStore();
   if (title === undefined && description === undefined && linkedPhaseIds === undefined && macroTasks === undefined) {
     return mcpMutationNoFieldsFailure({
       entity: "requirement",
@@ -2026,21 +2046,29 @@ server.registerTool("planner-requirement-update", {
       retryCommand: `planner-requirement-update ${requirementId}`,
     });
   }
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await updateRequirementFlow(st, requirementId, { title, description, linkedPhaseIds, macroTasks });
-    const next = outcome.requirement;
+    const data = await api.request<{ requirement: Requirement; updatedFields: string[] }>(
+      "PUT",
+      `/requirements/${encodeURIComponent(requirementId)}`,
+      {
+        ...(title !== undefined ? { title } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(linkedPhaseIds !== undefined ? { linkedPhaseIds } : {}),
+        ...(macroTasks !== undefined ? { macroTasks } : {}),
+      },
+    );
+    const next = data.requirement;
     const requirementUpdateReply = buildMutationReply({
       identity: { entity: "requirement", ref: next.id, id: next.id, title: next.title },
       operation: "update",
-      updatedFields: outcome.updatedFields,
+      updatedFields: data.updatedFields,
       changedValues: next as unknown as Record<string, unknown>,
       readBackCommand: "planner-requirement-list",
     });
-    return writeAndSummarize(st, requirementUpdateReply.text, requirementUpdateReply.structured);
+    return text(requirementUpdateReply.text, requirementUpdateReply.structured);
   } catch (error) {
-    if (error instanceof RequirementFlowRefusal) {
-      return text(`❌ ${error.message}`, { updated: false, errorCode: error.code });
-    }
+    if (error instanceof PlannerApiError) return text(`❌ ${error.message}`, { updated: false, errorCode: error.code });
     throw error;
   }
 });
@@ -2049,10 +2077,16 @@ server.registerTool("planner-requirement-delete", {
   description: "Permanently delete a top-level requirement. Confirm the intended requirement first.",
   inputSchema: { requirementId: z.string().min(1) },
 }, async ({ requirementId }) => {
-  const st = await requireStore();
-  const { deleted } = await deleteRequirementFlow(st, requirementId);
-  if (!deleted) return text(`❌ Requirement not found: ${requirementId}`, { deleted: false, errorCode: "REQUIREMENT_NOT_FOUND" });
-  return writeAndSummarize(st, `Requirement deleted: ${requirementId}.`, { deleted: true, requirementId });
+  const api = await plannerApi(planRoot());
+  try {
+    await api.request("DELETE", `/requirements/${encodeURIComponent(requirementId)}`);
+    return text(`Requirement deleted: ${requirementId}.`, { deleted: true, requirementId });
+  } catch (error) {
+    if (error instanceof PlannerApiError && error.code === "REQUIREMENT_NOT_FOUND") {
+      return text(`❌ Requirement not found: ${requirementId}`, { deleted: false, errorCode: "REQUIREMENT_NOT_FOUND" });
+    }
+    throw error;
+  }
 });
 
 
