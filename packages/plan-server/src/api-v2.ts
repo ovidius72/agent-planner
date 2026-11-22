@@ -303,12 +303,18 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     HANDOFF_PREFLIGHT_REQUIRED: 409,
     HANDOFF_REASON_REQUIRED: 422,
   };
+  // A handoff refusal and a handoff contract violation both surface as 4xx
+  // with their own code, but a client renders them differently: a refusal is
+  // usually a plain sentence, while a contract violation gets the pinned
+  // `❌ Handoff <action> denied [CODE]` rendering with its typed details. The
+  // `failureKind` marker lets a bridging adapter rebuild the same typed error
+  // (and therefore the same rendering) instead of duplicating the code sets.
   const flowFailure = (c: Context, err: unknown, fallbackCode: string, fallbackStatus: ContentfulStatusCode, extra: Record<string, unknown> = {}) => {
     if (err instanceof HandoffFlowRefusal) {
-      return error(c, refusalStatus[err.code] ?? 422, err.code, err.message, err.details);
+      return error(c, refusalStatus[err.code] ?? 422, err.code, err.message, { ...err.details, failureKind: "refusal" });
     }
     if (err instanceof HandoffContractError) {
-      return error(c, 409, err.code, err.message, { details: err.details });
+      return error(c, 409, err.code, err.message, { ...err.details, failureKind: "contract" });
     }
     return error(c, fallbackStatus, fallbackCode, err instanceof Error ? err.message : String(err), extra);
   };
@@ -335,9 +341,23 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
 
   app.get("/phases/*/handoff/prepare", async (c) => {
     const phaseRef = phaseRefOf(c).replace(/\/handoff\/prepare$/, "");
+    // GET has no body, so an already-known supportingDocuments manifest
+    // arrives as JSON in the query string. It is optional and usually
+    // unnecessary: oversized content is externalized automatically.
+    const rawManifest = c.req.query("supportingDocuments");
+    let supportingDocuments: Array<{ path: string; description: string }> | undefined;
+    if (rawManifest !== undefined) {
+      try {
+        const parsed = JSON.parse(rawManifest);
+        if (!Array.isArray(parsed)) throw new Error("not an array");
+        supportingDocuments = parsed as Array<{ path: string; description: string }>;
+      } catch {
+        return error(c, 422, "HANDOFF_SUPPORTING_DOCUMENTS_INVALID", "supportingDocuments must be a JSON array of { path, description }.");
+      }
+    }
     try {
-      const reply = await preparePhaseHandoffFlow(store, phaseRef, undefined);
-      return envelope(c, reply.structured, 200);
+      const reply = await preparePhaseHandoffFlow(store, phaseRef, supportingDocuments);
+      return envelope(c, { ...reply.structured, message: reply.text }, 200);
     } catch (err) {
       return flowFailure(c, err, "HANDOFF_PREPARE_FAILED", 500);
     }
@@ -347,7 +367,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     const phaseRef = phaseRefOf(c).replace(/\/handoff$/, "");
     try {
       const reply = await showPhaseHandoffFlow(store, phaseRef);
-      return envelope(c, reply.structured);
+      return envelope(c, { ...reply.structured, message: reply.text });
     } catch (err) {
       return flowFailure(c, err, "HANDOFF_SHOW_FAILED", 500);
     }
@@ -391,6 +411,16 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         verificationRequired: true,
       }, 202);
     } catch (err) {
+      // The write flow validates the submitted sync block with plain Errors
+      // (missing phaseNoUpdateReason, a task outside the phase, incomplete
+      // completion evidence). That is a refusal of this request, not a
+      // service fault — and PlanStore retained the submitted body against
+      // phaseRef + expectedHandoffUpdatedAt, so the client may retry without
+      // resending it. Typed flow/contract refusals and store failures keep
+      // their own mapping.
+      if (!(err instanceof HandoffFlowRefusal) && !(err instanceof HandoffContractError) && !(err instanceof PlanStoreError)) {
+        return error(c, 422, "HANDOFF_WRITE_INVALID", err instanceof Error ? err.message : String(err), { failureKind: "validation" });
+      }
       return flowFailure(c, err, "HANDOFF_WRITE_FAILED", 500);
     }
   });

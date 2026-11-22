@@ -551,10 +551,11 @@ test("consistent status/handoff results after reopening MCP server", async () =>
     const handoffShow = await callTool(reopened, "planner-handoff-show", { phaseRef: "P002" });
     assert.match(toolText(handoffShow), /^No handoff set/);
 
-    // The service was explicitly stopped above, which removed its record, so
-    // a fresh client must see not-running and be able to start it again.
+    // The handoff read just above went through the local planner service,
+    // which restarted the single authority for this plan root. planner-web
+    // therefore reports it running; stop/start still work from here.
     const webStatus = await callTool(reopened, "planner-web", {});
-    assert.match(toolText(webStatus), /planner-web not running/);
+    assert.match(toolText(webStatus), /planner-web running:/);
 
     await callTool(reopened, "planner-web", { action: "start" });
     await waitForServer(200);

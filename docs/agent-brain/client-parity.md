@@ -99,6 +99,24 @@ The checklist mutations and task creation return the flow's `message`, and the
 dependency replies return the persisted `task`, so the adapter prints and
 renders without a second read.
 
+Handoffs:
+
+- `planner-handoff-list` → `GET /api/v2/handoffs?page=&pageSize=`
+- `planner-handoff-prepare` → `GET /api/v2/phases/{phaseRef}/handoff/prepare`
+  (an already-known `supportingDocuments` manifest travels as a JSON query
+  value; the no-phaseRef guidance text stays adapter-local)
+- `planner-handoff-show` → `GET /api/v2/phases/{phaseRef}/handoff`
+- `planner-handoff-write` → `POST /api/v2/phases/{phaseRef}/handoff`
+- `planner-handoff-verify` → `POST /api/v2/phases/{phaseRef}/handoff/verify`
+- `planner-handoff-clear` → `DELETE /api/v2/phases/{phaseRef}/handoff`
+
+Prepare and show print the flow's `message`. The adapter rebuilds the typed
+handoff error from `details.failureKind` (`refusal` / `contract` / `validation`)
+plus the code and the remaining details, so `handoffRefusalResult` and
+`handoffContractFailureReply` stay the single renderers for both transports.
+The write's `nextActions` are adapter action labels, not flow output, so they
+stay in the adapter.
+
 `planner-feature-show` and `planner-phase-show` stay `flow-backed`: with
 `full=true` they record a canonical full-read attestation for the calling
 session, which moves with the session slice.
@@ -113,7 +131,9 @@ store's errorCode plus `details`, which the adapter rebuilds into the pinned
 
 The adapter resolves the service (`reuse the live server record, else start an
 embedded one`), never opens the store, and maps `PlannerApiError.code` to its
-own texts and structured payloads. MCP suite unchanged at 115/115.
+own texts and structured payloads. The MCP suite stays at 115/115; the only
+assertions changed were the two that asserted the old per-process web server
+status, now that application calls run through the shared service.
 
 ### Flow-backed (v2 route exists; bridge pending)
 
@@ -123,10 +143,8 @@ own texts and structured payloads. MCP suite unchanged at 115/115.
 | Task read/update/recommend | `planner-task-show`, `planner-task-update`, `planner-task-recommend` | `GET/PUT /tasks/{ref}`, `GET /recommend` (session) |
 | Requirements (scoped read) | `planner-requirement-list` with `phaseRef` | `GET /context/requirements?phaseRef=` (session) |
 | Context reads | `planner-project-guidelines-show` | `GET /context/guidelines` (session) |
-| Handoffs | `planner-handoff-list/prepare/show/write/verify/clear` | `/phases/{ref}/handoff` family |
 | Lifecycle | `planner-task-start/complete/pause/reopen/switch/deviation` | `/tasks/{ref}/*`, `/deviations` (session) |
 | Recovery | `planner-session-recover` | `POST /sessions/recover` (session) |
-| Discovery | `planner-task-recommend` | `GET /recommend` |
 
 Session-dependent families need the adapter's service-issued session. MCP
 already derives a per-transport planner session id; the bridge registers it

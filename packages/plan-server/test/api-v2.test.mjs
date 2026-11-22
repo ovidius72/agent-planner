@@ -212,6 +212,9 @@ test("handoff family: prepare → confirmed write → show → verify → clear"
     const prepare = (await request(fx, `${base}/prepare`)).body;
     assert.equal(prepare.apiVersion, "2");
     assert.ok(prepare.data.draftTemplate, "prepare carries the draft template");
+    // The flow renders the prepare text; the envelope carries it verbatim.
+    assert.equal(typeof prepare.data.message, "string");
+    assert.match(prepare.data.message, /P001\(F001\)/);
     const token = prepare.data.expectedHandoffUpdatedAt ?? prepare.data.currentHandoffUpdatedAt ?? "";
     assert.equal(typeof token, "string");
 
@@ -246,12 +249,15 @@ test("handoff family: prepare → confirmed write → show → verify → clear"
     // The title heading was applied to the submitted body.
     const show = (await request(fx, base)).body;
     assert.equal(show.data.resumeReady, false);
+    assert.equal(typeof show.data.message, "string");
+    assert.match(show.data.message, /# Route clients through the authority/);
     assert.match(show.data.content, /# Route clients through the authority/);
     const contentHash = show.data.contentHash;
     assert.match(contentHash, /^[a-f0-9]{64}$/);
 
     const staleVerify = await expectError(fx, `${base}/verify`, json({ expectedContentHash: "0".repeat(64) }), { status: 409 });
     assert.match(staleVerify.message, /HANDOFF_READBACK_VERIFICATION_REQUIRED/);
+    assert.match(staleVerify.message, /"failureKind":"contract"/);
 
     const verified = (await request(fx, `${base}/verify`, json({ expectedContentHash: contentHash }))).body;
     assert.equal(verified.data.resumeReady, true);
@@ -272,6 +278,24 @@ test("handoff refusals map to typed v2 error codes", async () => {
   try {
     const missing = await expectError(fx, "/api/v2/phases/P404/handoff", del, { status: 404 });
     assert.match(missing.message, /PHASE_NOT_FOUND/);
+
+    // A refusal and a contract violation share the 4xx class but render
+    // differently, so the error details carry the kind.
+    assert.match(missing.message, /"failureKind":"refusal"/);
+
+    // An incomplete sync block is a refusal of this request (the retained
+    // body can be resent without content), not a service fault.
+    const prepare = (await request(fx, "/api/v2/phases/P001/handoff/prepare")).body;
+    const token = prepare.data.expectedHandoffUpdatedAt ?? prepare.data.currentHandoffUpdatedAt ?? "";
+    const incomplete = await expectError(fx, "/api/v2/phases/P001/handoff", json({
+      confirmed: true,
+      reason: "Session boundary: context was getting long.",
+      content: BODY,
+      expectedHandoffUpdatedAt: token,
+    }), { status: 422 });
+    assert.match(incomplete.message, /HANDOFF_WRITE_INVALID/);
+    assert.match(incomplete.message, /phaseNoUpdateReason is required/);
+    assert.match(incomplete.message, /"failureKind":"validation"/);
 
     const noBody = await expectError(fx, "/api/v2/phases/P001/handoff", {
       method: "POST",

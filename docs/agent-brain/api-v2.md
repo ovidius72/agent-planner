@@ -35,13 +35,18 @@ the receiving session.
 
 ### Handoffs
 - `GET /api/v2/handoffs?page=&pageSize=` — paged handoff archive.
-- `GET /api/v2/phases/{phaseRef}/handoff/prepare` — prepare payload.
+- `GET /api/v2/phases/{phaseRef}/handoff/prepare` — prepare payload. GET has
+  no body, so an already-known `supportingDocuments` manifest travels as a
+  JSON array in `?supportingDocuments=`; it is optional and usually
+  unnecessary (oversized content is externalized automatically).
 - `GET /api/v2/phases/{phaseRef}/handoff` — pending handoff.
 - `POST /api/v2/phases/{phaseRef}/handoff` — write/replace a handoff.
 - `POST /api/v2/phases/{phaseRef}/handoff/verify` — verify against disk.
 - `DELETE /api/v2/phases/{phaseRef}/handoff` — clear.
 - MCP: `planner-handoff-list`, `planner-handoff-prepare`, `planner-handoff-show`,
-  `planner-handoff-write`, `planner-handoff-verify`, `planner-handoff-clear`.
+  `planner-handoff-write`, `planner-handoff-verify`, `planner-handoff-clear`
+  (all bridged; the adapter rebuilds the typed handoff error from
+  `failureKind` + code + details, so both transports share one rendering).
 
 ### Requirements and accepted decisions
 - `GET|POST /api/v2/requirements`, `PUT|DELETE /api/v2/requirements/{requirementId}`.
@@ -70,6 +75,16 @@ the receiving session.
   reason.
 - The discuss routes accept an optional `contextReadyReason`: provenance is the
   calling surface's fact, and omitting it records the API's own wording.
+- Handoff prepare/show also return the flow's rendered `message`.
+- Handoff errors carry `details.failureKind`, because a flow refusal
+  (`refusal`) and a contract violation (`contract`) share the 4xx class but a
+  client renders them differently: a refusal is usually a plain sentence, a
+  contract violation is the pinned `❌ Handoff <action> denied [CODE]` block
+  with its typed details. A write whose sync block fails plain-Error
+  validation (missing `phaseNoUpdateReason`, a task outside the phase,
+  incomplete completion evidence) is `422 HANDOFF_WRITE_INVALID` with
+  `failureKind: "validation"` — a refusal of that request, not a service
+  fault, and the retained body can be resent without `content`.
 - Project settings: `PUT /api/v2/project/discuss`,
   `PUT /api/v2/project/guidelines` (optional `expectedUpdatedAt` guard,
   `409 PLAN_STALE_WRITE`), `PUT /api/v2/project/language`.

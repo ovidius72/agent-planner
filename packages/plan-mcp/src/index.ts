@@ -9,9 +9,9 @@ import { PlannerApiError, PlanStore, PlanStoreError, ExportService, findPhaseByR
 import type { PlannerServiceStartup } from "./service.js";
 import { ensurePlannerService, plannerApi, plannerServiceStatus, stopPlannerService } from "./service.js";
 import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, TaskFlowRefusal, updateTaskFlow, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, listTaskSummaries, readProjectGuidelinesFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { HandoffFlowRefusal, TaskFlowRefusal, updateTaskFlow, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, listTaskSummaries, readProjectGuidelinesFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Feature, Idea, Phase, Requirement, Task } from "@agent-plan/core/schema";
-import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput, PlanStoreErrorDetails } from "@agent-plan/core";
+import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput, PlanStoreErrorDetails, HandoffContractErrorCode, PhaseHandoffRefusalCode } from "@agent-plan/core";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
 const PHASE_STATUS_VALUES = ["draft", "discovery", ...STATUS_VALUES] as const;
@@ -36,6 +36,18 @@ const LONG_TEXT_LIMIT_NOTICE = longTextFieldLimitNotice();
 
 function text(textValue: string, structuredContent?: Record<string, unknown>): ToolResult {
   return structuredContent ? { content: [{ type: "text", text: textValue }], structuredContent } : { content: [{ type: "text", text: textValue }] };
+}
+
+/**
+ * Rebuild the typed handoff error a v2 refusal stands for. The API marks
+ * `failureKind` because a refusal and a contract violation share the 4xx
+ * class but render differently; every other detail is the error's own.
+ */
+function handoffApiFailure(error: PlannerApiError): HandoffFlowRefusal | HandoffContractError | null {
+  const { failureKind, ...details } = error.details;
+  if (failureKind === "contract") return new HandoffContractError(error.code as HandoffContractErrorCode, error.message, details);
+  if (failureKind === "refusal") return new HandoffFlowRefusal(error.code as PhaseHandoffRefusalCode, error.message, details);
+  return null;
 }
 
 function mcpHandoffContractFailure(error: HandoffContractError, action: "refresh" | "preparation" = "refresh"): ToolResult {
@@ -1992,8 +2004,14 @@ server.registerTool("planner-handoff-list", {
     pageSize: z.number().int().min(1).max(25).default(10).describe("Summaries per page; maximum 25."),
   },
 }, async ({ page, pageSize }) => {
-  const st = await requireStore();
-  const list = await listPhaseHandoffsFlow(st, page, pageSize);
+  const api = await plannerApi(planRoot());
+  const list = await api.request<{
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    items: Array<{ compositeRef: string; firstLine: string; updatedAt: string; contentLength: number; resumeReady: boolean }>;
+  }>("GET", `/handoffs?page=${page}&pageSize=${pageSize}`);
   if (list.total === 0) return text("No phase handoffs set.", { count: 0, total: 0, page: 1, pageSize, totalPages: 1, handoffs: [] });
   const lines = list.items.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt}; ${e.contentLength} chars; ${e.resumeReady ? "resume-ready" : "verification required"})`);
   return text(`Phase handoffs — page ${list.page}/${list.totalPages} (${list.total} total):\n${lines.join("\n")}`, { count: list.items.length, page: list.page, pageSize: list.pageSize, total: list.total, totalPages: list.totalPages, handoffs: list.items });
@@ -2003,12 +2021,18 @@ server.registerTool("planner-handoff-show", {
   description: "Read the active entity-scoped handoff of a phase, or its latest terminal archive, together with a bounded priority-ordered phase work map. Reread the canonical phase and relevant sibling tasks before proposing work so capability ownership is not duplicated. phaseRef is required; never infer a phase from in-progress status or stale context.",
   inputSchema: { phaseRef: z.string().min(1).describe("Exact phase ref: P00x | P00x(F00x) | UUID | title. Ask the user when ambiguous.") },
 }, async ({ phaseRef }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const reply = await showPhaseHandoffFlow(st, phaseRef);
-    return text(reply.text, reply.structured);
+    const { message, ...structured } = await api.request<Record<string, unknown> & { message: string }>(
+      "GET",
+      `/phases/${encodeURIComponent(phaseRef)}/handoff`,
+    );
+    return text(message, structured);
   } catch (error) {
-    if (error instanceof HandoffFlowRefusal) return text(`❌ ${error.message}`);
+    if (!(error instanceof PlannerApiError)) throw error;
+    const failure = handoffApiFailure(error);
+    if (failure instanceof HandoffFlowRefusal) return text(`❌ ${failure.message}`);
+    if (failure instanceof HandoffContractError) throw failure;
     throw error;
   }
 });
@@ -2025,24 +2049,24 @@ server.registerTool("planner-handoff-verify", {
     omissionsFound: z.array(z.string().min(1)).optional().describe("Optional read-back gaps; omit when the persisted capsule is complete."),
   },
 }, async ({ phaseRef, expectedContentHash, sourceReviews, omissionsFound }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await verifyPhaseHandoffFlow(st, phaseRef, {
-      expectedContentHash,
-      ...(sourceReviews ? { sourceReviews } : {}),
-      ...(omissionsFound ? { omissionsFound } : {}),
-    });
-    return text(`✅ Handoff on ${outcome.phaseRef} is resume-ready after persisted read-back and source reconciliation.`, {
-      phaseRef: outcome.phaseRef,
-      ...outcome.result,
-      resumeReady: true,
-      verificationRequired: false,
-    });
+    const data = await api.request<{ phaseRef: string } & Record<string, unknown>>(
+      "POST",
+      `/phases/${encodeURIComponent(phaseRef)}/handoff/verify`,
+      {
+        expectedContentHash,
+        ...(sourceReviews ? { sourceReviews } : {}),
+        ...(omissionsFound ? { omissionsFound } : {}),
+      },
+    );
+    return text(`✅ Handoff on ${data.phaseRef} is resume-ready after persisted read-back and source reconciliation.`, data);
   } catch (error) {
-    if (error instanceof HandoffFlowRefusal) return text(`❌ ${error.message}`, { resumeReady: false });
-    if (error instanceof HandoffContractError) return mcpHandoffContractFailure(error);
-    const message = error instanceof Error ? error.message : String(error);
-    return text(`❌ Handoff read-back verification denied: ${message}`, { resumeReady: false, error: message });
+    if (!(error instanceof PlannerApiError)) throw error;
+    const failure = handoffApiFailure(error);
+    if (failure instanceof HandoffFlowRefusal) return text(`❌ ${failure.message}`, { resumeReady: false });
+    if (failure instanceof HandoffContractError) return mcpHandoffContractFailure(failure);
+    return text(`❌ Handoff read-back verification denied: ${error.message}`, { resumeReady: false, error: error.message });
   }
 });
 
@@ -2405,7 +2429,7 @@ server.registerTool("planner-handoff-write", {
     featureNoUpdateReason: z.string().min(1).optional(),
   },
 }, async ({ phaseRef, title, reason, confirmed, content, expectedHandoffUpdatedAt, reconciledExistingHandoff, sectionDispositions, completenessAudit, coldStartInventory, supportingDocuments, taskUpdates, phaseUpdate, phaseNoUpdateReason, featureUpdate, featureNoUpdateReason }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   const request: PhaseHandoffWriteRequest = {
     confirmed: confirmed === true,
     title,
@@ -2427,27 +2451,36 @@ server.registerTool("planner-handoff-write", {
     featureNoUpdateReason,
   };
   try {
-    const outcome = await writePhaseHandoffFlow(st, phaseRef, request);
-    const result = outcome.result;
-    return text(`⚠️ Handoff candidate persisted on ${outcome.phaseRef}, but it is NOT resume-ready yet. Required next action: call planner-handoff-show ${outcome.phaseRef}, read the persisted compact capsule, then call planner-handoff-verify with the returned contentHash. Rewrite only if resume-critical context is missing.`, {
-      phaseRef: outcome.phaseRef,
-      phaseId: outcome.phaseId,
-      updatedTaskIds: result.updatedTaskIds,
-      handoffUpdatedAt: result.handoffUpdatedAt,
-      handoffAudit: result.handoffAudit,
+    const data = await api.request<{
+      phaseRef: string;
+      phaseId: string;
+      updatedTaskIds: string[];
+      handoffUpdatedAt: string;
+      handoffAudit: unknown;
+      persisted: boolean;
+      resumeReady: boolean;
+      verificationRequired: boolean;
+    }>("POST", `/phases/${encodeURIComponent(phaseRef)}/handoff`, request);
+    return text(`⚠️ Handoff candidate persisted on ${data.phaseRef}, but it is NOT resume-ready yet. Required next action: call planner-handoff-show ${data.phaseRef}, read the persisted compact capsule, then call planner-handoff-verify with the returned contentHash. Rewrite only if resume-critical context is missing.`, {
+      phaseRef: data.phaseRef,
+      phaseId: data.phaseId,
+      updatedTaskIds: data.updatedTaskIds,
+      handoffUpdatedAt: data.handoffUpdatedAt,
+      handoffAudit: data.handoffAudit,
       persisted: true,
       resumeReady: false,
       verificationRequired: true,
       nextActions: [
-        `Call planner-handoff-show ${outcome.phaseRef} and read the entire persisted body.`,
+        `Call planner-handoff-show ${data.phaseRef} and read the entire persisted body.`,
         "Call planner-handoff-verify with the shown contentHash; legacy sourceReviews and omissionsFound are optional because the planner derives omitted evidence from persisted state.",
       ],
     });
   } catch (error) {
-    if (error instanceof HandoffFlowRefusal) return handoffRefusalResult(error);
-    if (error instanceof HandoffContractError) return mcpHandoffContractFailure(error);
-    const message = error instanceof Error ? error.message : String(error);
-    return text(`❌ Handoff refresh denied: ${message} If you retry against the same phaseRef and expectedHandoffUpdatedAt, you may omit content to reuse the body just submitted.`, { error: message });
+    if (!(error instanceof PlannerApiError)) throw error;
+    const failure = handoffApiFailure(error);
+    if (failure instanceof HandoffFlowRefusal) return handoffRefusalResult(failure);
+    if (failure instanceof HandoffContractError) return mcpHandoffContractFailure(failure);
+    return text(`❌ Handoff refresh denied: ${error.message} If you retry against the same phaseRef and expectedHandoffUpdatedAt, you may omit content to reuse the body just submitted.`, { error: error.message });
   }
 });
 
@@ -2466,15 +2499,22 @@ server.registerTool("planner-handoff-prepare", {
     "Tell the user: 'I propose writing this handoff on P00x(F00x) — <phase title>. Confirm?' Wait for explicit confirmation.",
     "After confirmation, call planner-handoff-prepare again with that exact phaseRef, then reconcile its current handoff and missing task evidence through planner-handoff-write.",
   ].join("\n"));
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
+  // GET has no body, so an already-known manifest travels as a JSON query
+  // value; it is optional and usually unnecessary.
+  const manifest = supportingDocuments === undefined ? "" : `?supportingDocuments=${encodeURIComponent(JSON.stringify(supportingDocuments))}`;
   try {
-    const reply = await preparePhaseHandoffFlow(st, phaseRef, supportingDocuments);
-    return text(reply.text, reply.structured);
+    const { message, ...structured } = await api.request<Record<string, unknown> & { message: string }>(
+      "GET",
+      `/phases/${encodeURIComponent(phaseRef)}/handoff/prepare${manifest}`,
+    );
+    return text(message, structured);
   } catch (error) {
-    if (error instanceof HandoffFlowRefusal) return text(`❌ ${error.message}`);
-    if (error instanceof HandoffContractError) return mcpHandoffContractFailure(error, "preparation");
-    const message = error instanceof Error ? error.message : String(error);
-    return text(`❌ Handoff preparation failed: ${message}`, { error: message });
+    if (!(error instanceof PlannerApiError)) throw error;
+    const failure = handoffApiFailure(error);
+    if (failure instanceof HandoffFlowRefusal) return text(`❌ ${failure.message}`);
+    if (failure instanceof HandoffContractError) return mcpHandoffContractFailure(failure, "preparation");
+    return text(`❌ Handoff preparation failed: ${error.message}`, { error: error.message });
   }
 });
 
@@ -2482,13 +2522,18 @@ server.registerTool("planner-handoff-clear", {
   description: "Clear/archive the entity-scoped handoff of a phase. phaseRef is required; never infer a phase automatically.",
   inputSchema: { phaseRef: z.string().min(1).describe("Exact phase ref: P00x | P00x(F00x) | UUID | title.") },
 }, async ({ phaseRef }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const cleared = await clearPhaseHandoffFlow(st, phaseRef);
+    const cleared = await api.request<{ phaseRef: string; phaseId: string }>(
+      "DELETE",
+      `/phases/${encodeURIComponent(phaseRef)}/handoff`,
+    );
     return text(`✅ Cleared handoff on ${cleared.phaseRef} (handoffUpdatedAt preserved as audit; archived to .planner/.local/handoff-archive/).`, { phaseRef: cleared.phaseRef, phaseId: cleared.phaseId });
   } catch (error) {
-    if (error instanceof HandoffFlowRefusal) return text(`❌ ${error.message}`);
-    throw error;
+    if (!(error instanceof PlannerApiError)) throw error;
+    const failure = handoffApiFailure(error);
+    if (failure instanceof HandoffFlowRefusal) return text(`❌ ${failure.message}`);
+    throw failure ?? error;
   }
 });
 
