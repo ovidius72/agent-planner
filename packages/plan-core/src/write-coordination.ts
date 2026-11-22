@@ -78,10 +78,10 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-async function acquirePlanRootLock(planRoot: string): Promise<() => Promise<void>> {
+async function acquirePlanRootLock(planRoot: string, name = "writer"): Promise<() => Promise<void>> {
   const locksRoot = join(planRoot, ".local", "locks");
-  const lockPath = join(locksRoot, "writer.lock");
-  const recoveryPath = join(locksRoot, "writer-recovery.lock");
+  const lockPath = join(locksRoot, `${name}.lock`);
+  const recoveryPath = join(locksRoot, `${name}-recovery.lock`);
   const startedAt = Date.now();
   const timeoutMs = positiveEnvMs("AGENT_PLAN_WRITE_LOCK_TIMEOUT_MS", DEFAULT_TIMEOUT_MS);
   const staleMs = positiveEnvMs("AGENT_PLAN_WRITE_LOCK_STALE_MS", DEFAULT_STALE_MS);
@@ -233,6 +233,16 @@ export async function withPlanRootWriteLock<T>(root: string, fn: () => Promise<T
   next.add(planRoot);
   try {
     return await heldRoots.run(next, fn);
+  } finally {
+    await release();
+  }
+}
+
+/** Coordinate service discovery and startup separately from planner mutations. */
+export async function withPlanServiceLock<T>(root: string, operation: "startup" | "record", fn: () => Promise<T>): Promise<T> {
+  const release = await acquirePlanRootLock(resolve(root), `service-${operation}`);
+  try {
+    return await fn();
   } finally {
     await release();
   }

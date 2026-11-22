@@ -10,6 +10,7 @@
 
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { withPlanServiceLock } from "@agent-plan/core";
 
 /**
  * How the server was started. `standalone` is `agent-plan serve`: the whole
@@ -31,6 +32,8 @@ export interface ServerRecord {
   startedAt: string;
   version: string;
   apiVersion: string;
+  bootId?: string;
+  protocolVersion?: string;
 }
 
 /** How long a liveness check waits for /health before calling the record stale. */
@@ -77,13 +80,19 @@ async function answersHealth(record: ServerRecord): Promise<boolean> {
   }
 }
 
-/** The record of a server that is really running for this folder, or null. A stale record is deleted. */
+/** The record of a live server, or null after guarded stale-record cleanup. */
 export async function readLiveServerRecord(planRoot: string): Promise<ServerRecord | null> {
   const record = await readRecordFile(planRoot);
   if (!record) return null;
   if (processExists(record.pid) && (await answersHealth(record))) return record;
-  await rm(serverRecordPath(planRoot), { force: true }).catch(() => {});
-  return null;
+  return withPlanServiceLock(planRoot, "record", async () => {
+    const current = await readRecordFile(planRoot);
+    if (current?.pid === record.pid && current.localUrl === record.localUrl && current.bootId === record.bootId) {
+      await rm(serverRecordPath(planRoot), { force: true });
+      return null;
+    }
+    return current && processExists(current.pid) && (await answersHealth(current)) ? current : null;
+  });
 }
 
 /**
@@ -93,15 +102,18 @@ export async function readLiveServerRecord(planRoot: string): Promise<ServerReco
  */
 export async function writeServerRecord(planRoot: string, record: ServerRecord): Promise<boolean> {
   try {
-    const existing = await readLiveServerRecord(planRoot);
-    // Compare the address, not the pid: one process can run several servers.
-    if (existing && existing.localUrl !== record.localUrl) return false;
-    const path = serverRecordPath(planRoot);
-    await mkdir(dirname(path), { recursive: true });
-    const temporary = `${path}.${process.pid}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(record, null, 2)}\n`);
-    await rename(temporary, path);
-    return true;
+    return await withPlanServiceLock(planRoot, "record", async () => {
+      const existing = await readRecordFile(planRoot);
+      // Compare the address, not the pid: one process can run several servers.
+      if (existing && existing.localUrl !== record.localUrl
+        && processExists(existing.pid) && await answersHealth(existing)) return false;
+      const path = serverRecordPath(planRoot);
+      await mkdir(dirname(path), { recursive: true });
+      const temporary = `${path}.${process.pid}.tmp`;
+      await writeFile(temporary, `${JSON.stringify(record, null, 2)}\n`);
+      await rename(temporary, path);
+      return true;
+    });
   } catch {
     return false;
   }
@@ -110,8 +122,10 @@ export async function writeServerRecord(planRoot: string, record: ServerRecord):
 /** Remove the record, but only when it describes this very server (pid and address). Never throws. */
 export async function removeServerRecord(planRoot: string, owner: { pid: number; localUrl: string }): Promise<void> {
   try {
-    const record = await readRecordFile(planRoot);
-    if (record?.pid === owner.pid && record.localUrl === owner.localUrl) await rm(serverRecordPath(planRoot), { force: true });
+    await withPlanServiceLock(planRoot, "record", async () => {
+      const record = await readRecordFile(planRoot);
+      if (record?.pid === owner.pid && record.localUrl === owner.localUrl) await rm(serverRecordPath(planRoot), { force: true });
+    });
   } catch {
     // Nothing useful to do: the record is advisory.
   }

@@ -10,8 +10,8 @@
  * typed busy/corrupt/incompatible outcomes for T496/T490.
  */
 
-import { mkdir, stat } from "node:fs/promises";
-import { dirname } from "node:path";
+import { access, copyFile, link, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { PersistenceError, persistenceErrorFrom, type PersistenceDriver } from "./driver.js";
 import { openNodeSqliteDriver } from "./node-sqlite-driver.js";
 import { PersistenceSchemaIncompatible, bootstrapStoreSchema, type OpenedStore } from "./schema.js";
@@ -45,6 +45,17 @@ export interface OpenedStoreHandle {
  * silently (architecture.md §5: no automatic empty initialization).
  */
 export async function openStore(options: OpenStoreOptions & { create?: boolean }): Promise<OpenedStoreHandle> {
+  if (options.create !== true) {
+    try {
+      await access(options.path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw persistenceErrorFrom(error, options.path);
+      throw new PersistenceError(
+        { code: "PERSISTENCE_UNAVAILABLE", path: options.path },
+        `No Agent Plan store at ${options.path}; pass create=true to initialize explicitly.`,
+      );
+    }
+  }
   const driver = openNodeSqliteDriver(options);
   let closed = false;
   const closeOnce = () => {
@@ -77,13 +88,30 @@ export async function openStore(options: OpenStoreOptions & { create?: boolean }
   }
 }
 
-/** Copy a snapshot over an empty target and verify its schema version (T494/T495 restore primitive). */
+/** Validate a staged snapshot, then publish it only if the destination is absent. */
 export async function restoreFromSnapshot(
   snapshotPath: string,
   destinationPath: string,
 ): Promise<OpenedStoreHandle> {
-  const { copyFile } = await import("node:fs/promises");
-  await mkdir(dirname(destinationPath), { recursive: true });
-  await copyFile(snapshotPath, destinationPath);
-  return openStore({ path: destinationPath });
+  const parent = dirname(destinationPath);
+  await mkdir(parent, { recursive: true });
+  const stagingDirectory = await mkdtemp(join(parent, ".agent-plan-restore-"));
+  const stagedPath = join(stagingDirectory, "planner.sqlite");
+  try {
+    await copyFile(snapshotPath, stagedPath);
+    const staged = await openStore({ path: stagedPath });
+    try {
+      const integrity = staged.driver.prepare("PRAGMA quick_check").get();
+      if (integrity?.quick_check !== "ok") {
+        throw new PersistenceError({ code: "PERSISTENCE_CORRUPT", path: snapshotPath }, "The snapshot failed SQLite integrity validation.");
+      }
+    } finally {
+      staged.close();
+    }
+    // A hard link publishes the validated file atomically without clobbering an existing database.
+    await link(stagedPath, destinationPath);
+    return await openStore({ path: destinationPath });
+  } finally {
+    await rm(stagingDirectory, { recursive: true, force: true });
+  }
 }

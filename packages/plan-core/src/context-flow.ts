@@ -13,8 +13,17 @@
 
 import { formatFeatureRef, formatPhaseRef } from "./naming.js";
 import { renderAcceptedDecisionsSection } from "./task-context.js";
-import { markCanonicalFullReadForSessionId, markRequirementReadForSessionId } from "./read-tracking.js";
-import { showFeature, showPhase, showTask } from "./show-flow.js";
+import {
+  contextReadEligibilityForSession,
+  markCanonicalFullReadForSessionId,
+  markRequirementReadForSessionId,
+  projectGuidelinesReadStateForSession,
+  requirementReadEligibilityForSession,
+  type ContextReadEligibility,
+  type ProjectGuidelinesReadState,
+} from "./read-tracking.js";
+import { taskStartGateState } from "./task-start-outcome.js";
+import { showFeature, showPhase, showTask, type TaskShowOutcome } from "./show-flow.js";
 import type { Feature, Phase, PlanStore, Project, Requirement, Task } from "./index.js";
 import type { CompleteProjectContextDelivery } from "./project-context.js";
 
@@ -101,6 +110,14 @@ export async function readPhaseContextFlow(store: PlanStore, sessionId: string, 
   return { ok: true, ref: outcome.ref, phase: outcome.phase, linkedRequirements: outcome.linkedRequirements, text, attested: true };
 }
 
+/** The start gate as the read leaves it: what this delivery did not satisfy. */
+export interface TaskContextGate {
+  contextEligibility: ContextReadEligibility;
+  requirementEligibility: ContextReadEligibility;
+  projectGuidelinesReadState: ProjectGuidelinesReadState;
+  state: ReturnType<typeof taskStartGateState>;
+}
+
 export interface TaskContextOutcome {
   ref: string;
   phaseRef: string;
@@ -109,6 +126,11 @@ export interface TaskContextOutcome {
   phase: Phase;
   feature: Feature | null;
   linkedRequirements: Requirement[];
+  /** The same order/resume view planner-task-show renders. */
+  orderContext: TaskShowOutcome["orderContext"];
+  snapshot: TaskShowOutcome["snapshot"];
+  pendingDeviation: TaskShowOutcome["pendingDeviation"];
+  gate: TaskContextGate;
   /** Text for the task, its phase and its feature; all three receipts attest to these. */
   taskText: string;
   phaseText: string;
@@ -121,49 +143,70 @@ export interface TaskContextOutcome {
 
 /**
  * Deliver the complete context of one task — task, parent phase, parent
- * feature and linked requirements — and record both the in-session reads
- * and the durable attestation lifecycle gates check. This is the v2
+ * feature and linked requirements — and record revision-sensitive durable
+ * attestations for the lifecycle gates. This is the v2
  * equivalent of the MCP sequence task show → phase show → feature show →
  * requirement list, done in one call and verified the same way.
  */
 export async function readTaskContextFlow(store: PlanStore, sessionId: string, ref: string): Promise<({ ok: true } & TaskContextOutcome) | ContextFlowRefusal> {
-  const outcome = await showTask(store, ref, { sessionId });
-  if (!outcome.ok) return outcome;
-  const { task, phase, feature, linkedRequirements } = outcome;
+  return store.runBatch(async () => {
+    const outcome = await showTask(store, ref, { sessionId });
+    if (!outcome.ok) return outcome;
+    const { task, phase, feature, linkedRequirements } = outcome;
 
-  const taskText = taskContextText(task, outcome.ref, outcome.phaseRef, linkedRequirements);
-  const phaseText = phaseContextText(phase, outcome.phaseRef, linkedRequirements);
-  const featureText = feature ? featureContextText(feature, formatFeatureRef(feature.number)) : null;
+    const taskText = taskContextText(task, outcome.ref, outcome.phaseRef, linkedRequirements);
+    const phaseText = phaseContextText(phase, outcome.phaseRef, linkedRequirements);
+    const featureText = feature ? featureContextText(feature, formatFeatureRef(feature.number)) : null;
 
-  markCanonicalFullReadForSessionId(sessionId, "task", task, taskText);
-  markCanonicalFullReadForSessionId(sessionId, "phase", phase, phaseText);
-  if (feature && featureText) markCanonicalFullReadForSessionId(sessionId, "feature", feature, featureText);
-  const requirementIds = linkedRequirements.map((requirement) => requirement.id);
-  requirementIds.forEach((requirementId) => markRequirementReadForSessionId(sessionId, requirementId));
+    const requirementIds = linkedRequirements.map((requirement) => requirement.id);
+    const receipt = await store.recordContextRead({
+      sessionId,
+      taskId: task.id,
+      phaseId: phase.id,
+      ...(phase.featureId ? { featureId: phase.featureId } : {}),
+      requirementIds,
+    });
 
-  await store.recordContextRead({
-    sessionId,
-    taskId: task.id,
-    phaseId: phase.id,
-    ...(phase.featureId ? { featureId: phase.featureId } : {}),
-    requirementIds,
+    const project = await store.loadProject();
+    // The durable receipt is revision-sensitive. A plain in-memory read mark
+    // would let a later mutation defeat that freshness check.
+    const contextEligibility = contextReadEligibilityForSession({
+      sessionId,
+      taskId: task.id,
+      phaseId: phase.id,
+      ...(receipt.feature ? { featureId: receipt.feature.id, feature: receipt.feature } : {}),
+      task: receipt.phase.tasks.find((entry) => entry.id === task.id)!,
+      phase: receipt.phase,
+      requirements: receipt.requirements,
+      requirementIds,
+    });
+    const requirementEligibility = requirementReadEligibilityForSession(sessionId, requirementIds, receipt.requirements);
+    const projectGuidelinesReadState = projectGuidelinesReadStateForSession(project, sessionId);
+    return {
+      ok: true,
+      ref: outcome.ref,
+      phaseRef: outcome.phaseRef,
+      featureRef: outcome.featureRef || null,
+      task,
+      phase,
+      feature: feature ?? null,
+      linkedRequirements,
+      orderContext: outcome.orderContext,
+      snapshot: outcome.snapshot,
+      pendingDeviation: outcome.pendingDeviation,
+      gate: {
+        contextEligibility,
+        requirementEligibility,
+        projectGuidelinesReadState,
+        state: taskStartGateState(contextEligibility, requirementEligibility, projectGuidelinesReadState),
+      },
+      taskText,
+      phaseText,
+      featureText,
+      attestedRequirementIds: requirementIds,
+      persisted: true,
+    };
   });
-
-  return {
-    ok: true,
-    ref: outcome.ref,
-    phaseRef: outcome.phaseRef,
-    featureRef: outcome.featureRef || null,
-    task,
-    phase,
-    feature: feature ?? null,
-    linkedRequirements,
-    taskText,
-    phaseText,
-    featureText,
-    attestedRequirementIds: requirementIds,
-    persisted: true,
-  };
 }
 
 export interface PhaseRequirementsOutcome {

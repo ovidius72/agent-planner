@@ -320,3 +320,46 @@ test("task rows are independent: two tasks in one phase mutate independently", a
   assert.equal(t2.status, "planned", "sibling task untouched");
   handle.close();
 });
+
+test("restoring a snapshot preserves an occupied database and refuses an invalid source", async () => {
+  const sourcePath = await tempStore("restore-source");
+  const source = await openStore({ path: sourcePath, create: true });
+  seedProject(source.driver);
+  source.close();
+
+  const targetPath = await tempStore("restore-occupied");
+  const target = await openStore({ path: targetPath, create: true });
+  seedProject(target.driver, "existing-project");
+  target.close();
+  await assert.rejects(() => restoreFromSnapshot(sourcePath, targetPath), { code: "EEXIST" });
+  const kept = await openStore({ path: targetPath });
+  try {
+    assert.equal(kept.driver.prepare("SELECT id FROM projects").get().id, "existing-project");
+  } finally {
+    kept.close();
+  }
+
+  const invalidPath = await tempStore("restore-invalid");
+  await writeFile(invalidPath, "This is not a SQLite snapshot");
+  const missingPath = await tempStore("restore-missing");
+  await assert.rejects(() => restoreFromSnapshot(invalidPath, missingPath), { code: "PERSISTENCE_CORRUPT" });
+  await assert.rejects(() => openStore({ path: missingPath }), { code: "PERSISTENCE_UNAVAILABLE" });
+  await assert.rejects(() => stat(missingPath), { code: "ENOENT" });
+});
+
+test("concurrent snapshot restores publish exactly one database", async () => {
+  const sourcePath = await tempStore("restore-race-source");
+  const source = await openStore({ path: sourcePath, create: true });
+  source.close();
+
+  const targetPath = await tempStore("restore-race-target");
+  const attempts = await Promise.allSettled([
+    restoreFromSnapshot(sourcePath, targetPath),
+    restoreFromSnapshot(sourcePath, targetPath),
+  ]);
+  for (const attempt of attempts) {
+    if (attempt.status === "fulfilled") attempt.value.close();
+  }
+  assert.equal(attempts.filter((attempt) => attempt.status === "fulfilled").length, 1);
+  assert.equal(attempts.find((attempt) => attempt.status === "rejected").reason.code, "EEXIST");
+});

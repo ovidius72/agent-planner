@@ -32,6 +32,7 @@ export interface RequestIdentity {
   origin: string | undefined;
   serviceOrigin: string | undefined;
   allowedOrigins: readonly string[];
+  webUiOrigins?: readonly string[];
 }
 
 export interface AuthStrategy {
@@ -57,11 +58,11 @@ export function hostHeaderIsLoopback(hostHeader: string | undefined): boolean {
   return isLoopbackHostname(hostname);
 }
 
-function originParts(origin: string): { hostname: string; port: string } | null {
+function originParts(origin: string): { hostname: string; port: string; protocol: string } | null {
   try {
     const url = new URL(origin);
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-    return { hostname: url.hostname, port: url.port };
+    return { hostname: url.hostname, port: url.port, protocol: url.protocol };
   } catch {
     return null;
   }
@@ -69,16 +70,15 @@ function originParts(origin: string): { hostname: string; port: string } | null 
 
 /**
  * The Agent Plan UI may address the service as 127.0.0.1 or localhost; both
- * name the same service when they resolve to it (same host, or same port
- * across the two loopback names).
+ * name the same service only when the scheme and port also match.
  */
 function isServiceOriginVariant(origin: string, serviceOrigin: string | undefined): boolean {
   const candidate = originParts(origin);
   if (!candidate || !isLoopbackHostname(candidate.hostname)) return false;
-  if (!serviceOrigin) return true; // port not yet known: the loopback name is the evidence
+  if (!serviceOrigin) return false;
   const service = originParts(serviceOrigin);
   if (!service) return false;
-  return candidate.hostname === service.hostname || (candidate.port !== "" && candidate.port === service.port);
+  return candidate.protocol === service.protocol && candidate.port === service.port;
 }
 
 /** Whether an Origin header is acceptable. Absent Origin = non-browser client (agents, curl). */
@@ -101,7 +101,8 @@ export function loopbackAuthStrategy(): AuthStrategy {
   return {
     resolvePrincipal(identity) {
       let kind: PrincipalKind = "agent";
-      if (identity.origin && isServiceOriginVariant(identity.origin, identity.serviceOrigin)) kind = "web-ui";
+      if (identity.origin && (isServiceOriginVariant(identity.origin, identity.serviceOrigin)
+        || identity.webUiOrigins?.includes(identity.origin))) kind = "web-ui";
       else if (identity.origin && identity.allowedOrigins.includes(identity.origin)) kind = "heca";
       return { principalId: `loopback:${kind}`, kind, origin: identity.origin };
     },

@@ -205,8 +205,12 @@ export async function startTaskFlow(store: PlanStore, sessionId: string, ref: st
         { requirementEligibility },
       );
     }
-    if (!hasValidSessionAttestation(contextInput)) {
+    const timestamp = nowISO();
+    if (found.task.status !== "in-progress" || !hasValidSessionAttestation(contextInput)) {
+      // First start changes lifecycle metadata under this same lock. Use
+      // the same timestamp so retrying the start does not stale its receipt.
       await store.recordContextRead({
+        createdAt: timestamp,
         sessionId,
         phaseId: found.phase.id,
         taskId: found.task.id,
@@ -242,7 +246,7 @@ export async function startTaskFlow(store: PlanStore, sessionId: string, ref: st
     if (!eligibility.eligible) {
       return refusal("START_NOT_ALLOWED", eligibility.reason, baseContext, { taskId: found.task.id }, { startEligibility: eligibility });
     }
-    const selection = (recommendNextTask as any)(features, phases, await store.listAllWorkDeviations(), focus?.currentPhaseId, sessionId);
+    const selection = recommendNextTask(features, phases, await store.listAllWorkDeviations(), focus?.currentPhaseId, sessionId);
     if (selection.kind === "conflict") {
       return refusal("ACTIVE_TASK_CONFLICT", selection.reason, baseContext, { taskId: found.task.id }, { selection });
     }
@@ -300,8 +304,6 @@ export async function startTaskFlow(store: PlanStore, sessionId: string, ref: st
     const priorityAdvisoryRef = differsFromSelection && selection.kind !== "resume" && selection.candidate
       ? recommendedTaskRef
       : undefined;
-    const timestamp = nowISO();
-
     let updatedTask: Task | undefined;
     try {
       updatedTask = (await store.claimTask(found.phase.id, found.task.id, sessionId, timestamp)).task;

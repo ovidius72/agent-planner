@@ -175,6 +175,7 @@ export interface ServiceSecurity {
   originRef: { current: string | undefined };
   /** Extra accepted origins beyond the service's own loopback origin (e.g. Heca). */
   allowedOrigins: readonly string[];
+  webUiOrigins: readonly string[];
   /** Pluggable principal resolution; defaults to the loopback strategy. */
   auth?: AuthStrategy;
 }
@@ -219,7 +220,8 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     // (e.g. Heca). A request without Origin is a non-browser client (agents,
     // curl) — the loopback binding plus the Host guard already scoped it.
     const origin = c.req.header("Origin");
-    if (MUTATION_METHODS.includes(c.req.method) && !originIsAllowed(origin, security?.originRef.current, security?.allowedOrigins ?? [])) {
+    const allowedOrigins = [...(security?.allowedOrigins ?? []), ...(security?.webUiOrigins ?? [])];
+    if (MUTATION_METHODS.includes(c.req.method) && !originIsAllowed(origin, security?.originRef.current, allowedOrigins)) {
       return c.json({ error: "UNTRUSTED_ORIGIN", message: "Writes are accepted only from the Agent Plan UI and configured extra origins." }, 403);
     }
     // Authentication: the pluggable strategy resolves the principal for every
@@ -232,6 +234,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       origin,
       serviceOrigin: security?.originRef.current,
       allowedOrigins: security?.allowedOrigins ?? [],
+      webUiOrigins: security?.webUiOrigins ?? [],
     });
     if (!principal) return c.json({ error: "UNAUTHENTICATED", message: "No principal resolved for this request." }, 401);
     c.set("principal", principal);
@@ -1677,6 +1680,8 @@ export interface ServeOptions {
   runtimeHome?: string | undefined;
   /** Extra accepted write/WS origins beyond the service's own loopback origin (e.g. Heca). Default: none. */
   allowedOrigins?: string[] | undefined;
+  /** Trusted origins serving the planner UI through a local development proxy. */
+  webUiOrigins?: string[] | undefined;
   /** Pluggable principal resolution. Default: the loopback strategy. */
   auth?: AuthStrategy | undefined;
 }
@@ -1688,6 +1693,8 @@ export interface ServeHandle {
   mode: "local" | "lan";
   bindHost: string;
   hub: WsHub;
+  /** Whether this handle owns the advertised root endpoint. */
+  advertised?: boolean;
   close: () => Promise<void>;
 }
 
@@ -1704,6 +1711,7 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
     bootId,
     originRef: { current: undefined },
     allowedOrigins: options.allowedOrigins ?? [],
+    webUiOrigins: options.webUiOrigins ?? [],
     ...(options.auth ? { auth: options.auth } : {}),
   };
 
@@ -1729,7 +1737,7 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
   // WebSocket upgrades come only from the Agent Plan UI and configured extra
   // origins; a browser always sends Origin on an upgrade, a foreign one is refused.
   const upgradeOriginAllowed = (origin: string | undefined): boolean =>
-    originIsAllowed(origin, security.originRef.current, security.allowedOrigins);
+    originIsAllowed(origin, security.originRef.current, [...security.allowedOrigins, ...security.webUiOrigins]);
 
   return new Promise((resolve, reject) => {
     // Create the Node HTTP server without listening yet
@@ -1808,8 +1816,16 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
         startedAt: new Date().toISOString(),
         version: SERVER_PACKAGE.version,
         apiVersion: API_V1_VERSION,
+        bootId,
+        protocolVersion: SERVICE_PROTOCOL_VERSION,
       })
-        .then(() => writeServiceEndpointRecord({ protocolVersion: SERVICE_PROTOCOL_VERSION, bootId, host: "127.0.0.1", port: actualPort }, options.runtimeHome))
+        .then(async (advertised) => {
+          handle.advertised = advertised;
+          if (advertised) await writeServiceEndpointRecord({ protocolVersion: SERVICE_PROTOCOL_VERSION, bootId, host: "127.0.0.1", port: actualPort }, options.runtimeHome);
+        })
+        .catch((error: unknown) => {
+          if (!options.quiet) console.error("[plan-server] endpoint publication failed:", error);
+        })
         .finally(() => resolve(handle));
     });
   });

@@ -144,3 +144,29 @@ function wsOutcome(url, { origin }) {
     socket.on("unexpected-response", () => settle("rejected"));
   });
 }
+
+test("the explicitly configured local development UI can write and receive live updates", async () => {
+  const preferred = "http://localhost:5175";
+  const fallback = "http://localhost:62814";
+  for (const origin of [preferred, fallback]) {
+    const other = origin === preferred ? fallback : preferred;
+    const fx = await startServerFixture({
+      name: "svc-dev-origin",
+      serveOptions: await withHome({ webUiOrigins: [origin] }, "dev-origin"),
+    });
+    try {
+      const write = (origin) => fetch(`${fx.handle.url}/features`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: JSON.stringify({ name: "Development feature", description: "Created using the dev proxy origin." }),
+      });
+      assert.equal((await write(origin)).ok, true);
+      assert.equal((await write(other)).status, 403);
+      const wsUrl = fx.handle.url.replace(/^http/, "ws");
+      assert.equal(await wsOutcome(`${wsUrl}/ws`, { origin }), "connected");
+      assert.equal(await wsOutcome(`${wsUrl}/ws`, { origin: other }), "rejected");
+    } finally {
+      await closeServerFixture(fx);
+    }
+  }
+});

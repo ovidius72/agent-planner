@@ -69,6 +69,7 @@ async function randomFreePort() {
 
 /** The preferred port when free, otherwise a random free port. */
 async function pickPort(preferred) {
+  if (preferred === 0) return randomFreePort();
   if (await isPortFree(preferred)) return preferred;
   const fallback = await randomFreePort();
   console.log(`[dev-web] port ${preferred} is busy — falling back to random port ${fallback}`);
@@ -77,10 +78,17 @@ async function pickPort(preferred) {
 
 const PORT = await pickPort(PLAN_PORT);
 const WEB = await pickPort(WEB_PORT);
+const webUiOrigins = [`http://localhost:${WEB}`, `http://127.0.0.1:${WEB}`];
 const PROXY_TARGET = `http://127.0.0.1:${PORT}`;
 
 const server = spawn("node", [resolve(root, "packages/plan-server/dist/cli.js")], {
-  env: { ...process.env, PLAN_PORT: String(PORT), PLAN_ROOT, PLAN_HOST: "127.0.0.1" },
+  env: {
+    ...process.env,
+    PLAN_PORT: String(PORT),
+    PLAN_ROOT,
+    PLAN_HOST: "127.0.0.1",
+    PLAN_WEB_UI_ORIGINS: webUiOrigins.join(","),
+  },
   stdio: "inherit",
 });
 
@@ -138,7 +146,7 @@ const viteBin =
     ? resolve(root, "packages/plan-web-ui/node_modules/.bin/vite.cmd")
     : resolve(root, "packages/plan-web-ui/node_modules/.bin/vite");
 
-web = spawn(viteBin, ["--port", String(WEB)], {
+web = spawn(viteBin, ["--port", String(WEB), "--strictPort"], {
   cwd: resolve(root, "packages/plan-web-ui"),
   env: { ...process.env, VITE_PROXY_TARGET: PROXY_TARGET },
   stdio: "inherit",

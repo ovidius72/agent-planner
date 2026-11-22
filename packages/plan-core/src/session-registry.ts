@@ -74,27 +74,29 @@ export async function registerPlannerSession(store: PlanStore, input: SessionReg
   if (!clientKind) {
     throw new SessionFlowRefusal("SESSION_CLIENT_KIND_REQUIRED", "clientKind is required to register a planner session.");
   }
-  const manifest = await store.loadManifest();
-  const timestamp = nowISO();
-  const agentId = input.agentId?.trim() || clientKind;
-  const session: PlannerSessionRecord = {
-    sessionId: randomUUID(),
-    projectId: manifest.projectId,
-    clientKind,
-    clientVersion: input.clientVersion?.trim() ?? "",
-    agentId,
-    displayName: input.displayName?.trim() || agentId,
-    harnessId: input.harnessId?.trim() ?? "",
-    capabilities: normalizedCapabilities(input.capabilities),
-    contextEpoch: 1,
-    registeredAt: timestamp,
-    lastSeenAt: timestamp,
-    endedAt: "",
-    endReason: "",
-  };
-  const records = await store.loadPlannerSessions();
-  await store.savePlannerSessions(pruned([...records, session]));
-  return { session };
+  return store.runBatch(async () => {
+    const manifest = await store.loadManifest();
+    const timestamp = nowISO();
+    const agentId = input.agentId?.trim() || clientKind;
+    const session: PlannerSessionRecord = {
+      sessionId: randomUUID(),
+      projectId: manifest.projectId,
+      clientKind,
+      clientVersion: input.clientVersion?.trim() ?? "",
+      agentId,
+      displayName: input.displayName?.trim() || agentId,
+      harnessId: input.harnessId?.trim() ?? "",
+      capabilities: normalizedCapabilities(input.capabilities),
+      contextEpoch: 1,
+      registeredAt: timestamp,
+      lastSeenAt: timestamp,
+      endedAt: "",
+      endReason: "",
+    };
+    const records = await store.loadPlannerSessions();
+    await store.savePlannerSessions(pruned([...records, session]));
+    return { session };
+  });
 }
 
 /** Resolve one live session; unknown or ended ids are refused. */
@@ -116,29 +118,33 @@ export async function resolvePlannerSession(store: PlanStore, sessionId: string)
 
 /** Record liveness; the adapter heartbeat calls this on its own timer. */
 export async function heartbeatPlannerSession(store: PlanStore, sessionId: string): Promise<SessionRegistrationOutcome> {
-  const session = await resolvePlannerSession(store, sessionId);
-  const records = await store.loadPlannerSessions();
-  const updated: PlannerSessionRecord = { ...session, lastSeenAt: nowISO() };
-  await store.savePlannerSessions(pruned(records.map((record) => record.sessionId === updated.sessionId ? updated : record)));
-  return { session: updated };
+  return store.runBatch(async () => {
+    const session = await resolvePlannerSession(store, sessionId);
+    const records = await store.loadPlannerSessions();
+    const updated: PlannerSessionRecord = { ...session, lastSeenAt: nowISO() };
+    await store.savePlannerSessions(pruned(records.map((record) => record.sessionId === updated.sessionId ? updated : record)));
+    return { session: updated };
+  });
 }
 
 /** End one session. Ending an already-ended session is idempotent. */
 export async function endPlannerSession(store: PlanStore, sessionId: string, reason?: string | undefined): Promise<SessionRegistrationOutcome> {
-  const normalized = sessionId.trim();
-  const records = await store.loadPlannerSessions();
-  const existing = records.find((record) => record.sessionId === normalized);
-  if (!existing) {
-    throw new SessionFlowRefusal("SESSION_NOT_FOUND", `Planner session not found: ${normalized}`, { sessionId: normalized });
-  }
-  if (existing.endedAt) return { session: existing };
-  const timestamp = nowISO();
-  const ended: PlannerSessionRecord = {
-    ...existing,
-    endedAt: timestamp,
-    endReason: reason?.trim() ?? "",
-    lastSeenAt: timestamp,
-  };
-  await store.savePlannerSessions(pruned(records.map((record) => record.sessionId === ended.sessionId ? ended : record)));
-  return { session: ended };
+  return store.runBatch(async () => {
+    const normalized = sessionId.trim();
+    const records = await store.loadPlannerSessions();
+    const existing = records.find((record) => record.sessionId === normalized);
+    if (!existing) {
+      throw new SessionFlowRefusal("SESSION_NOT_FOUND", `Planner session not found: ${normalized}`, { sessionId: normalized });
+    }
+    if (existing.endedAt) return { session: existing };
+    const timestamp = nowISO();
+    const ended: PlannerSessionRecord = {
+      ...existing,
+      endedAt: timestamp,
+      endReason: reason?.trim() ?? "",
+      lastSeenAt: timestamp,
+    };
+    await store.savePlannerSessions(pruned(records.map((record) => record.sessionId === ended.sessionId ? ended : record)));
+    return { session: ended };
+  });
 }
