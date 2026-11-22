@@ -512,11 +512,18 @@ test("tasks family: create under a feature/phase pair, then checklist add → to
     assert.notEqual(taskRef, "P001(F001)/T001", "the seed task already holds T001");
     assert.equal(created.data.task.checklist.length, 2);
     assert.equal(created.data.task.status, "planned");
+    // The flow renders the creation sentence; the envelope carries it so a
+    // client prints instead of rebuilding it.
+    assert.equal(
+      created.data.message,
+      `✅ Task created: ${taskRef} — Wire clients to the shared service (planned; priority ${created.data.task.priority})${created.data.task.shortId ? ` · ${created.data.task.shortId}` : ""}`,
+    );
 
     const added = (await request(fx, `/api/v2/tasks/${encodeURIComponent(taskRef)}/checklist`, json({ title: "Verify parity" }))).body;
     assert.equal(added.data.added, true);
     assert.equal(added.data.item.number, 3);
     assert.equal(added.data.checklistSize, 3);
+    assert.equal(added.data.message, '✅ Added C3 "Verify parity" (3 items)');
 
     const toggled = (await request(fx, `/api/v2/tasks/${encodeURIComponent(taskRef)}/checklist/toggle`, json({ item: "C1", checked: true }))).body;
     assert.equal(toggled.data.toggled, true);
@@ -527,6 +534,7 @@ test("tasks family: create under a feature/phase pair, then checklist add → to
     assert.equal(removed.data.removed, true);
     assert.equal(removed.data.checklistSize, 2);
     assert.equal(removed.data.item.title, "Inventory call sites");
+    assert.equal(removed.data.message, '✅ Removed C1 "Inventory call sites" (2 items left)');
 
     // Renumbering: the former C2 "Swap to v2 client" is now C1.
     const retoggled = (await request(fx, `/api/v2/tasks/${encodeURIComponent(taskRef)}/checklist/toggle`, json({ item: "Swap to v2 client", checked: true }))).body;
@@ -919,6 +927,10 @@ test("task mutation family: metadata update, dependencies and move over the shar
     assert.equal(added.updated, true);
     assert.equal(added.dependencyRef, second.taskRef);
     assert.equal(added.dependsOn.length, 1);
+    // The reply carries the persisted task so the client renders its identity
+    // without a second read.
+    assert.equal(added.task.id, updated.task.id);
+    assert.equal(added.task.title, "Implement login over the service");
 
     const selfDependency = await expectError(fx, `/api/v2/tasks/${t001}/dependencies`, json({ dependsOn: "P001(F001)/T001" }), { status: 422 });
     assert.match(selfDependency.message, /DEPENDENCY_SELF/);
@@ -929,6 +941,7 @@ test("task mutation family: metadata update, dependencies and move over the shar
     const removed = (await request(fx, `/api/v2/tasks/${t001}/dependencies?dependsOn=${encodeURIComponent(second.taskRef)}&confirmed=true`, del)).body.data;
     assert.equal(removed.updated, true);
     assert.deepEqual(removed.dependsOn, []);
+    assert.equal(removed.task.id, updated.task.id);
 
     // Move: the composite ref follows the new phase, id and checklist survive.
     const movedPhase = (await request(fx, "/api/v2/phases", json(phaseBody("F001", "Move destination")))).body.data;
@@ -940,6 +953,11 @@ test("task mutation family: metadata update, dependencies and move over the shar
     assert.equal(movedEntry.oldRef, "P001(F001)/T001");
     assert.equal(movedEntry.newRef, `${movedPhase.ref}/T001`);
     assert.equal(movedEntry.id, updated.task.id);
+    assert.equal(moved.message.split("\n")[0], `✅ Moved 1 task(s) to ${movedPhase.ref}:`);
+    assert.equal(
+      moved.message.split("\n")[1],
+      `P001(F001)/T001 → ${movedPhase.ref}/T001 — Implement login over the service [planned] · ${updated.task.shortId}`,
+    );
 
     const afterMove = await readPlanSnapshot(fx.planRoot);
     const homePhase = afterMove.phases.find((entry) => entry.id === movedPhase.phase.id);

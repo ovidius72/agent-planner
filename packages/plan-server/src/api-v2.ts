@@ -722,6 +722,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         created: true,
         task: outcome.task,
         taskRef: outcome.compositeRef,
+        message: outcome.message,
       }, 201);
     } catch (err) {
       return taskFailure(c, err, "TASK_CREATE_FAILED");
@@ -741,7 +742,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     }
     try {
       const outcome = await addTaskChecklistItemFlow(store, taskRef, body.title);
-      return envelope(c, { added: true, item: outcome.item, checklistSize: outcome.checklistSize }, 201);
+      return envelope(c, { added: true, item: outcome.item, checklistSize: outcome.checklistSize, message: outcome.message }, 201);
     } catch (err) {
       return taskFailure(c, err, "CHECKLIST_ADD_FAILED");
     }
@@ -774,7 +775,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     }
     try {
       const outcome = await removeTaskChecklistItemFlow(store, taskRef, item);
-      return envelope(c, { removed: true, item: outcome.item, checklistSize: outcome.checklistSize });
+      return envelope(c, { removed: true, item: outcome.item, checklistSize: outcome.checklistSize, message: outcome.message });
     } catch (err) {
       return taskFailure(c, err, "CHECKLIST_REMOVE_FAILED");
     }
@@ -1827,7 +1828,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     const taskRef = collectionTail(c, "tasks").replace(/\/dependencies$/, "");
     try {
       const outcome = await addTaskDependencyFlow(store, taskRef, dependsOn);
-      return envelope(c, { updated: true, ref: outcome.ref, dependsOn: outcome.dependsOn, dependencyRef: outcome.dependencyRef });
+      return envelope(c, { updated: true, ref: outcome.ref, task: outcome.task, dependsOn: outcome.dependsOn, dependencyRef: outcome.dependencyRef });
     } catch (err) {
       return taskMutationFailure(c, err, "DEPENDENCY_UPDATE_FAILED");
     }
@@ -1840,7 +1841,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     const confirmed = c.req.query("confirmed") === "true";
     try {
       const outcome = await removeTaskDependencyFlow(store, taskRef, dependsOn, confirmed);
-      return envelope(c, { updated: true, ref: outcome.ref, dependsOn: outcome.dependsOn, dependencyRef: outcome.dependencyRef });
+      return envelope(c, { updated: true, ref: outcome.ref, task: outcome.task, dependsOn: outcome.dependsOn, dependencyRef: outcome.dependencyRef });
     } catch (err) {
       return taskMutationFailure(c, err, "DEPENDENCY_DELETE_FAILED");
     }
@@ -1891,7 +1892,8 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       return error(c, status, outcome.errorCode, outcome.error);
     }
     const reply = buildTaskMoveReply(outcome.result, `planner-task-show ${outcome.result.targetPhaseRef} full=true`);
-    return envelope(c, reply.structured);
+    // The flow renders the move summary; clients print it verbatim.
+    return envelope(c, { ...reply.structured, message: reply.text });
   });
 
   // ── Ideas family ──────────────────────────────────────────────────

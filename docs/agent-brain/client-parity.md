@@ -80,6 +80,25 @@ Two details keep persisted data and texts identical:
   return the flow's `message`, so the adapter prints it instead of rebuilding
   the sentence.
 
+Tasks (except the session-dependent read/update/recommend):
+
+- `planner-task-list` → `GET /api/v2/tasks?featureRef=&phaseRef=&status=`
+- `planner-task-add` → `POST /api/v2/phases/{phaseRef}/tasks` (renders the
+  flow's creation message)
+- `planner-task-discuss` → `PUT /api/v2/tasks/{taskRef}/discuss`
+- `planner-task-dependency-add` → `POST /api/v2/tasks/{taskRef}/dependencies`
+- `planner-task-dependency-delete` → `DELETE /api/v2/tasks/{taskRef}/dependencies?dependsOn=&confirmed=true`
+- `planner-task-move` → `POST /api/v2/tasks/move` (prints the flow's move
+  summary, which the envelope carries alongside the structured moves)
+- `planner-task-checklist-add` → `POST /api/v2/tasks/{taskRef}/checklist`
+- `planner-task-checklist-toggle` → `POST /api/v2/tasks/{taskRef}/checklist/toggle`
+- `planner-task-checklist-remove` → `DELETE /api/v2/tasks/{taskRef}/checklist?item=`
+- `planner-task-delete` → `DELETE /api/v2/tasks/{taskRef}?confirmed=true`
+
+The checklist mutations and task creation return the flow's `message`, and the
+dependency replies return the persisted `task`, so the adapter prints and
+renders without a second read.
+
 `planner-feature-show` and `planner-phase-show` stay `flow-backed`: with
 `full=true` they record a canonical full-read attestation for the calling
 session, which moves with the session slice.
@@ -101,7 +120,7 @@ own texts and structured payloads. MCP suite unchanged at 115/115.
 | Family | Tools | v2 route |
 | --- | --- | --- |
 | Feature/phase full reads | `planner-feature-show`, `planner-phase-show` | `GET /features/{ref}`, `GET /phases/{ref}` (attestation) |
-| Tasks | `planner-task-list/show/add/update/discuss/move/delete`, `planner-task-checklist-add/toggle/remove`, `planner-task-dependency-add/delete` | `/tasks` family |
+| Task read/update/recommend | `planner-task-show`, `planner-task-update`, `planner-task-recommend` | `GET/PUT /tasks/{ref}`, `GET /recommend` (session) |
 | Requirements (scoped read) | `planner-requirement-list` with `phaseRef` | `GET /context/requirements?phaseRef=` (session) |
 | Context reads | `planner-project-guidelines-show` | `GET /context/guidelines` (session) |
 | Handoffs | `planner-handoff-list/prepare/show/write/verify/clear` | `/phases/{ref}/handoff` family |

@@ -62,8 +62,12 @@ the receiving session.
   `POST /api/v2/tasks/{taskRef}/checklist`,
   `POST /api/v2/tasks/{taskRef}/checklist/toggle`,
   `DELETE /api/v2/tasks/{taskRef}/checklist?item=`.
-- Creation replies carry the flow's `message` (`POST /features`,
-  `POST /phases`), so a client prints the same sentence the in-process tool did.
+- Flow-rendered text travels in the envelope: creation replies
+  (`POST /features`, `POST /phases`, `POST /phases/{ref}/tasks`), checklist
+  add/toggle/remove and `POST /tasks/move` return the flow's `message`, so a
+  client prints the same sentence the in-process tool did instead of
+  rebuilding it. Dependency replies return the persisted `task` for the same
+  reason.
 - The discuss routes accept an optional `contextReadyReason`: provenance is the
   calling surface's fact, and omitting it records the API's own wording.
 - Project settings: `PUT /api/v2/project/discuss`,

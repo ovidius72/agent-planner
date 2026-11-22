@@ -5,11 +5,11 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlannerApiError, PlanStore, PlanStoreError, ExportService, findPhaseByRef, findTaskByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlannerApiError, PlanStore, PlanStoreError, ExportService, findPhaseByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, } from "@agent-plan/core";
 import type { PlannerServiceStartup } from "./service.js";
 import { ensurePlannerService, plannerApi, plannerServiceStatus, stopPlannerService } from "./service.js";
 import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, TaskFlowRefusal, DiscussFlowRefusal, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, discussTaskFlow, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, deleteTaskFlow, listTaskSummaries, readProjectGuidelinesFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { HandoffFlowRefusal, TaskFlowRefusal, updateTaskFlow, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, listTaskSummaries, readProjectGuidelinesFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Feature, Idea, Phase, Requirement, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput, PlanStoreErrorDetails } from "@agent-plan/core";
 
@@ -1206,14 +1206,21 @@ server.registerTool("planner-task-add", {
     checklist: z.array(z.string()).optional(),
   },
 }, async ({ feature: featureRef, phase: ref, title, description, checklist }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await createTaskFlow(st, { featureRef: featureRef ?? "", phaseRef: ref, title, description, checklist });
-    return text(outcome.message);
+    const data = await api.request<{ message: string }>(
+      "POST",
+      `/phases/${encodeURIComponent(ref)}/tasks`,
+      {
+        feature: featureRef ?? "",
+        title,
+        description,
+        ...(checklist !== undefined ? { checklist } : {}),
+      },
+    );
+    return text(data.message);
   } catch (error) {
-    if (error instanceof TaskFlowRefusal) {
-      return text(error.message, { created: false, errorCode: error.code });
-    }
+    if (error instanceof PlannerApiError) return text(error.message, { created: false, errorCode: error.code });
     throw error;
   }
 });
@@ -1316,46 +1323,53 @@ server.registerTool("planner-task-discuss", {
     descriptionRef: z.string().optional().describe("Optional markdown reference under .planner/docs/ for the full task description."),
     checklist: z.array(z.string()).optional().describe("Replace the task checklist (implementation steps, plain strings). Ticks carry over by exact title match, and by position when the new list is the same length (so renaming an item keeps its tick). Use planner-task-checklist-toggle/add/remove for granular edits."),
   },
-}, async ({ task: ref, description, descriptionRef: rawDescriptionRef, checklist }) => {
-  const st = await requireStore();
+}, async ({ task: ref, description, descriptionRef, checklist }) => {
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await discussTaskFlow(st, ref, { description, descriptionRef: rawDescriptionRef, checklist });
-    const t = outcome.task;
-    const lostTicksNotice = outcome.checklistLostTicks.length > 0
-      ? ` ⚠️ Lost tick on ${outcome.checklistLostTicks.length} checklist item(s) that could not be matched to a new title: ${outcome.checklistLostTicks.join(", ")}.`
+    const data = await api.request<{ ref: string; task: Task; updatedFields: string[]; checklistLostTicks: string[] }>(
+      "PUT",
+      `/tasks/${encodeURIComponent(ref)}/discuss`,
+      {
+        ...(description !== undefined ? { description } : {}),
+        ...(descriptionRef !== undefined ? { descriptionRef } : {}),
+        ...(checklist !== undefined ? { checklist } : {}),
+      },
+    );
+    const t = data.task;
+    const lostTicks = data.checklistLostTicks ?? [];
+    const lostTicksNotice = lostTicks.length > 0
+      ? ` ⚠️ Lost tick on ${lostTicks.length} checklist item(s) that could not be matched to a new title: ${lostTicks.join(", ")}.`
       : "";
     const taskDiscussReply = buildMutationReply({
-      identity: { entity: "task", ref: outcome.ref, id: t.id, shortId: t.shortId, title: t.title, status: t.status },
+      identity: { entity: "task", ref: data.ref, id: t.id, shortId: t.shortId, title: t.title, status: t.status },
       operation: "discuss",
-      updatedFields: outcome.updatedFields,
+      updatedFields: data.updatedFields,
       changedValues: t as unknown as Record<string, unknown>,
-      extras: outcome.checklistLostTicks.length > 0 ? { checklistLostTicks: outcome.checklistLostTicks } : {},
+      extras: lostTicks.length > 0 ? { checklistLostTicks: lostTicks } : {},
       notices: [lostTicksNotice],
-      readBackCommand: `planner-task-show ${outcome.ref} full=true`,
+      readBackCommand: `planner-task-show ${data.ref} full=true`,
     });
     return text(taskDiscussReply.text, taskDiscussReply.structured);
   } catch (error) {
-    if (error instanceof DiscussFlowRefusal) {
-      if (error.code === "TASK_NOT_FOUND") return text(error.message);
-      if (error.code === "TASK_NO_MUTABLE_FIELDS") {
-        return mcpMutationNoFieldsFailure({
-          entity: "task",
-          ref: error.details.ref as string,
-          operation: "discuss",
-          mutableFields: error.details.mutableFields as string[],
-          retryCommand: `planner-task-discuss ${error.details.ref as string}`,
-          readBackCommand: `planner-task-show ${error.details.ref as string} with full=true`,
-          descriptionFallback: {
-            entityId: error.details.taskId as string,
-            inputField: "description",
-            storedField: "task description",
-            descriptionRefField: "descriptionRef",
-          },
-        });
-      }
-      return text(error.message, { updated: false, errorCode: error.code });
+    if (!(error instanceof PlannerApiError)) throw error;
+    if (error.code === "TASK_NOT_FOUND") return text(error.message);
+    if (error.code === "TASK_NO_MUTABLE_FIELDS") {
+      return mcpMutationNoFieldsFailure({
+        entity: "task",
+        ref: error.details.ref as string,
+        operation: "discuss",
+        mutableFields: error.details.mutableFields as string[],
+        retryCommand: `planner-task-discuss ${error.details.ref as string}`,
+        readBackCommand: `planner-task-show ${error.details.ref as string} with full=true`,
+        descriptionFallback: {
+          entityId: error.details.taskId as string,
+          inputField: "description",
+          storedField: "task description",
+          descriptionRefField: "descriptionRef",
+        },
+      });
     }
-    throw error;
+    return text(error.message, { updated: false, errorCode: error.code });
   }
 });
 
@@ -1363,17 +1377,21 @@ server.registerTool("planner-task-dependency-add", {
   description: "Add a validated task dependency atomically. A task may depend on any task in any phase; the dependency is rejected only when the target does not exist, is the task itself, or would create a cycle.",
   inputSchema: { task: z.string().min(1), dependsOn: z.string().min(1) },
 }, async ({ task: ref, dependsOn }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await addTaskDependencyFlow(st, ref, dependsOn);
+    const data = await api.request<{ ref: string; task: Task; dependsOn: string[]; dependencyRef: string }>(
+      "POST",
+      `/tasks/${encodeURIComponent(ref)}/dependencies`,
+      { dependsOn },
+    );
     const reply = buildMutationReply({
-      identity: { entity: "task", ref: outcome.ref, id: outcome.task.id, shortId: outcome.task.shortId, title: outcome.task.title, status: outcome.task.status },
+      identity: { entity: "task", ref: data.ref, id: data.task.id, shortId: data.task.shortId, title: data.task.title, status: data.task.status },
       operation: "update",
       updatedFields: ["dependsOn"],
-      changedValues: { dependsOn: outcome.dependsOn },
-      readBackCommand: `planner-task-show ${outcome.ref} full=true`,
+      changedValues: { dependsOn: data.dependsOn },
+      readBackCommand: `planner-task-show ${data.ref} full=true`,
     });
-    return text(`${reply.text} Depends on ${outcome.dependencyRef}.`, reply.structured);
+    return text(`${reply.text} Depends on ${data.dependencyRef}.`, reply.structured);
   } catch (error) {
     return taskDependencyFailure(error, "DEPENDENCY_UPDATE_FAILED", "Dependency update failed.");
   }
@@ -1383,15 +1401,18 @@ server.registerTool("planner-task-dependency-delete", {
   description: "Remove a task dependency atomically after explicit confirmation.",
   inputSchema: { task: z.string().min(1), dependsOn: z.string().min(1), confirmed: z.boolean() },
 }, async ({ task: ref, dependsOn, confirmed }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await removeTaskDependencyFlow(st, ref, dependsOn, confirmed);
+    const data = await api.request<{ ref: string; task: Task; dependsOn: string[]; dependencyRef: string }>(
+      "DELETE",
+      `/tasks/${encodeURIComponent(ref)}/dependencies?dependsOn=${encodeURIComponent(dependsOn)}&confirmed=${confirmed ? "true" : "false"}`,
+    );
     const reply = buildMutationReply({
-      identity: { entity: "task", ref: outcome.ref, id: outcome.task.id, shortId: outcome.task.shortId, title: outcome.task.title, status: outcome.task.status },
+      identity: { entity: "task", ref: data.ref, id: data.task.id, shortId: data.task.shortId, title: data.task.title, status: data.task.status },
       operation: "update",
       updatedFields: ["dependsOn"],
-      changedValues: { dependsOn: outcome.dependsOn },
-      readBackCommand: `planner-task-show ${outcome.ref} full=true`,
+      changedValues: { dependsOn: data.dependsOn },
+      readBackCommand: `planner-task-show ${data.ref} full=true`,
     });
     return text(reply.text, reply.structured);
   } catch (error) {
@@ -1489,22 +1510,21 @@ server.registerTool("planner-task-move", {
     tasks: z.array(z.string().min(1)).min(1).describe("Task refs to move. Accepts F00x/P00x/T00x composite, bare T00x (global), 5-char shortId, UUID, or title."),
     targetPhase: z.string().min(1).describe("Destination phase ref. Accepts F00x/P00x, bare P00x, 5-char shortId, UUID, or title."),
   },
-}, async ({ tasks: refs, targetPhase: targetRef }) => {
-  const st = await requireStore();
-  const phases = await st.loadAllPhases();
-  const features = (await st.loadFeatures()).features;
-  const target = findPhaseByRef(phases, features, targetRef);
-  if (!target) return { ...text(`Target phase not found: ${targetRef}`, { moved: false, errorCode: "TARGET_PHASE_NOT_FOUND" }), isError: true };
-  const foundTasks: { phase: Phase; task: Task }[] = [];
-  for (const ref of refs) {
-    const found = findTaskByRef(phases, features, ref);
-    if (!found) return { ...text(`Task not found: ${ref}`, { moved: false, errorCode: "TASK_NOT_FOUND" }), isError: true };
-    foundTasks.push(found);
+}, async ({ tasks: refs, targetPhase }) => {
+  const api = await plannerApi(planRoot());
+  try {
+    const { message, ...structured } = await api.request<Record<string, unknown> & { message: string }>("POST", "/tasks/move", {
+      tasks: refs,
+      targetPhase,
+    });
+    return text(message, structured);
+  } catch (error) {
+    if (!(error instanceof PlannerApiError)) throw error;
+    if (error.code === "TARGET_PHASE_NOT_FOUND" || error.code === "TASK_NOT_FOUND") {
+      return { ...text(error.message, { moved: false, errorCode: error.code }), isError: true };
+    }
+    return { ...text(`❌ ${error.message}`, { moved: false, errorCode: error.code }), isError: true };
   }
-  const outcome = await moveTasks(st, foundTasks.map((entry) => entry.task.id), target.id);
-  if (!outcome.ok) return { ...text(`❌ ${outcome.error}`, { moved: false, errorCode: outcome.errorCode }), isError: true };
-  const reply = buildTaskMoveReply(outcome.result, `planner-task-show ${outcome.result.targetPhaseRef} full=true`);
-  return writeAndSummarize(st, reply.text, reply.structured);
 });
 
 server.registerTool("planner-task-checklist-toggle", {
@@ -1515,12 +1535,16 @@ server.registerTool("planner-task-checklist-toggle", {
     checked: z.boolean().optional().describe("Set explicitly: true=done, false=open. Omit to toggle."),
   },
 }, async ({ task: ref, item, checked }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await toggleTaskChecklistItemFlow(st, ref, item, checked);
-    return writeAndSummarize(st, outcome.message);
+    const data = await api.request<{ message: string }>(
+      "POST",
+      `/tasks/${encodeURIComponent(ref)}/checklist/toggle`,
+      { item, ...(checked !== undefined ? { checked } : {}) },
+    );
+    return text(data.message);
   } catch (error) {
-    if (error instanceof TaskFlowRefusal) return text(error.message);
+    if (error instanceof PlannerApiError) return text(error.message);
     throw error;
   }
 });
@@ -1532,12 +1556,12 @@ server.registerTool("planner-task-checklist-add", {
     title: z.string().min(1).describe("Checklist item text (a single step)"),
   },
 }, async ({ task: ref, title }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await addTaskChecklistItemFlow(st, ref, title);
-    return writeAndSummarize(st, outcome.message);
+    const data = await api.request<{ message: string }>("POST", `/tasks/${encodeURIComponent(ref)}/checklist`, { title });
+    return text(data.message);
   } catch (error) {
-    if (error instanceof TaskFlowRefusal) return text(error.message);
+    if (error instanceof PlannerApiError) return text(error.message);
     throw error;
   }
 });
@@ -1549,12 +1573,15 @@ server.registerTool("planner-task-checklist-remove", {
     item: z.string().min(1).describe("Checklist item selector: C{n} (e.g. C2), item id, or title (case-insensitive)"),
   },
 }, async ({ task: ref, item }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await removeTaskChecklistItemFlow(st, ref, item);
-    return writeAndSummarize(st, outcome.message);
+    const data = await api.request<{ message: string }>(
+      "DELETE",
+      `/tasks/${encodeURIComponent(ref)}/checklist?item=${encodeURIComponent(item)}`,
+    );
+    return text(data.message);
   } catch (error) {
-    if (error instanceof TaskFlowRefusal) return text(error.message);
+    if (error instanceof PlannerApiError) return text(error.message);
     throw error;
   }
 });
@@ -1563,20 +1590,22 @@ server.registerTool("planner-task-delete", {
   description: "Delete a task.",
   inputSchema: { task: z.string().min(1) },
 }, async ({ task: ref }) => {
-  const st = await requireStore();
-  // Same delete orchestration as the versioned API (plan-core
-  // deleteTaskFlow): taskIds stays consistent and the derived phase status
-  // is refreshed.
-  let outcome;
+  const api = await plannerApi(planRoot());
   try {
-    outcome = await deleteTaskFlow(st, ref);
+    // The host obtains the approval conversationally; the API's mechanical
+    // flag states that it happened. There is no tool input to pass through.
+    const data = await api.request<{ taskId: string; ref: string; shortId: string }>(
+      "DELETE",
+      `/tasks/${encodeURIComponent(ref)}?confirmed=true`,
+    );
+    return text(
+      `Task deleted: ${data.ref}${data.shortId ? ` · ${data.shortId}` : ""}`,
+      { deleted: data.taskId },
+    );
   } catch (error) {
-    return text(error instanceof Error ? error.message : String(error));
+    if (error instanceof PlannerApiError) return text(error.message);
+    throw error;
   }
-  return text(
-    `Task deleted: ${outcome.ref}${outcome.shortId ? ` · ${outcome.shortId}` : ""}`,
-    { deleted: outcome.taskId },
-  );
 });
 
 server.registerTool("planner-task-recommend", {
