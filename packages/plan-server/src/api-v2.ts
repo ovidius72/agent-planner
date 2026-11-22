@@ -844,7 +844,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         description: typeof body.description === "string" ? body.description : "",
         ...(body.status !== undefined ? { status: String(body.status) } : {}),
       });
-      return envelope(c, { created: true, feature: outcome.feature, ref: outcome.ref }, 201);
+      return envelope(c, { created: true, feature: outcome.feature, ref: outcome.ref, message: outcome.message }, 201);
     } catch (err) {
       return featureFailure(c, err, "FEATURE_CREATE_FAILED");
     }
@@ -860,7 +860,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         ...(typeof body.summary === "string" ? { summary: body.summary } : {}),
         description: typeof body.description === "string" ? body.description : "",
       });
-      return envelope(c, { created: true, phase: outcome.phase, ref: outcome.ref }, 201);
+      return envelope(c, { created: true, phase: outcome.phase, ref: outcome.ref, message: outcome.message }, 201);
     } catch (err) {
       return phaseFailure(c, err, "PHASE_CREATE_FAILED");
     }
@@ -1562,6 +1562,9 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     const workDone = optionalString(body, "workDone");
     const workRemaining = optionalString(body, "workRemaining");
     const dependencies = optionalStringArray(body, "dependencies");
+    // Attribution is the calling surface's fact, so a client may state it;
+    // omitting it records the API's own wording.
+    const contextReadyReason = optionalString(body, "contextReadyReason");
     try {
       const outcome = await discussFeatureFlow(store, featureRef, {
         ...(description !== undefined ? { description } : {}),
@@ -1569,7 +1572,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         ...(workDone !== undefined ? { workDone } : {}),
         ...(workRemaining !== undefined ? { workRemaining } : {}),
         ...(dependencies !== undefined ? { dependencies } : {}),
-        contextReadyReason: "Updated through the Agent Plan API v2 discuss operation.",
+        contextReadyReason: contextReadyReason ?? "Updated through the Agent Plan API v2 discuss operation.",
       });
       return envelope(c, { discussed: true, ref: outcome.ref, feature: outcome.feature, updatedFields: outcome.updatedFields });
     } catch (err) {
@@ -1591,6 +1594,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     const risks = optionalStringArray(body, "risks");
     const openQuestions = optionalStringArray(body, "openQuestions");
     const completionCriteria = optionalStringArray(body, "completionCriteria");
+    const contextReadyReason = optionalString(body, "contextReadyReason");
     try {
       const outcome = await discussPhaseFlow(store, phaseRef, {
         ...(goal !== undefined ? { goal } : {}),
@@ -1603,7 +1607,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         ...(risks !== undefined ? { risks } : {}),
         ...(openQuestions !== undefined ? { openQuestions } : {}),
         ...(completionCriteria !== undefined ? { completionCriteria } : {}),
-        contextReadyReason: "Updated through the Agent Plan API v2 discuss operation.",
+        contextReadyReason: contextReadyReason ?? "Updated through the Agent Plan API v2 discuss operation.",
       });
       return envelope(c, { discussed: true, ref: outcome.ref, phase: outcome.phase, updatedFields: outcome.updatedFields });
     } catch (err) {

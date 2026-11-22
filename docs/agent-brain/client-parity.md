@@ -54,6 +54,36 @@ Accepted decisions:
   (the no-mutable-fields check stays a pure input guard before the request)
 - `planner-accepted-decision-delete` → `DELETE /api/v2/accepted-decisions/{decisionId}?targetType=&targetRef=&confirmed=true`
 
+Features and phases (except the session-attested full reads):
+
+- `planner-feature-list` → `GET /api/v2/features?featureRef=`
+- `planner-feature-add` → `POST /api/v2/features` (renders the flow's own
+  creation message, which the envelope carries)
+- `planner-feature-update` → `PUT /api/v2/features/{featureRef}`
+- `planner-feature-discuss` → `PUT /api/v2/features/{featureRef}/discuss`
+- `planner-feature-delete` → `DELETE /api/v2/features/{featureRef}?cascade=true`
+- `planner-phase-list` → `GET /api/v2/phases?featureRef=&status=`
+- `planner-phase-add` → `POST /api/v2/phases`
+- `planner-phase-update` → `PUT /api/v2/phases/{phaseRef}`
+- `planner-phase-discuss` → `PUT /api/v2/phases/{phaseRef}/discuss`
+- `planner-phase-delete` → `DELETE /api/v2/phases/{phaseRef}`
+
+Two details keep persisted data and texts identical:
+
+- **Provenance stays the caller's fact.** The discuss flows record a
+  `contextReadyReason`. v2 accepts an optional `contextReadyReason` and the
+  bridge sends the same string the in-process tool wrote
+  (`Updated through planner-<entity>-discuss MCP tool.`), so a stored feature or
+  phase is byte-identical whichever surface wrote it. Without one, v2 records
+  its own wording.
+- **Creation messages come from the flow.** `POST /features` and `POST /phases`
+  return the flow's `message`, so the adapter prints it instead of rebuilding
+  the sentence.
+
+`planner-feature-show` and `planner-phase-show` stay `flow-backed`: with
+`full=true` they record a canonical full-read attestation for the calling
+session, which moves with the session slice.
+
 The target is resolved by the service, not the adapter: a 404
 `ACCEPTED_DECISION_TARGET_NOT_FOUND` carries the resolver's message, and the
 409 `ACCEPTED_DECISION_DELETE_NOT_CONFIRMED` carries `targetType`, the resolved
@@ -70,8 +100,7 @@ own texts and structured payloads. MCP suite unchanged at 115/115.
 
 | Family | Tools | v2 route |
 | --- | --- | --- |
-| Features | `planner-feature-list/show/add/update/discuss/delete` | `/features` family |
-| Phases | `planner-phase-list/show/add/update/discuss/delete` | `/phases` family |
+| Feature/phase full reads | `planner-feature-show`, `planner-phase-show` | `GET /features/{ref}`, `GET /phases/{ref}` (attestation) |
 | Tasks | `planner-task-list/show/add/update/discuss/move/delete`, `planner-task-checklist-add/toggle/remove`, `planner-task-dependency-add/delete` | `/tasks` family |
 | Requirements (scoped read) | `planner-requirement-list` with `phaseRef` | `GET /context/requirements?phaseRef=` (session) |
 | Context reads | `planner-project-guidelines-show` | `GET /context/guidelines` (session) |
@@ -111,6 +140,24 @@ already-obtained approval into the API flag, but must never invent one.
 | `planner-session-recover` | `confirmed` | body `confirmed` | pass through |
 | `planner-task-switch` | resume context (snake_case) | same fields (camelCase accepted too) | map names; never synthesize resume text |
 | `planner-task-start` | task only | session + context receipts | register the session; relay `nextActions` on denial |
+
+## Service failures versus refusals
+
+The shared client separates the two by status, so no adapter re-derives the
+distinction:
+
+- **4xx → `PlannerApiError`** — a domain refusal the adapter maps to its own
+  text and `errorCode`.
+- **5xx → `PlannerServiceFailure`** — the service could not complete the call
+  (failed persistence/verification, or a transient `PLAN_WRITER_BUSY` writer
+  lock). It is not a `PlannerApiError`, so every existing adapter catch that
+  rethrows unknown errors keeps propagating it as a tool error, exactly as a
+  thrown store error did before the call moved to HTTP.
+
+A related consequence of routing application writes through the service: any
+application call starts (or reuses) the service for the plan root, so
+`planner-web status` can report it running before `planner-web start` was
+called. That is the intended single-authority behaviour, not a leak.
 
 ## Refusal parity
 

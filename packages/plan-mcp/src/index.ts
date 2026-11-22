@@ -5,12 +5,12 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlannerApiError, PlanStore, PlanStoreError, ExportService, findPhaseByRef, findTaskByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, resolveFeatureRefStrict, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlannerApiError, PlanStore, PlanStoreError, ExportService, findPhaseByRef, findTaskByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import type { PlannerServiceStartup } from "./service.js";
 import { ensurePlannerService, plannerApi, plannerServiceStatus, stopPlannerService } from "./service.js";
 import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, deleteTaskFlow, readProjectGuidelinesFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
-import type { Idea, Phase, Requirement, Task } from "@agent-plan/core/schema";
+import { HandoffFlowRefusal, TaskFlowRefusal, DiscussFlowRefusal, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, discussTaskFlow, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, deleteTaskFlow, listTaskSummaries, readProjectGuidelinesFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import type { Feature, Idea, Phase, Requirement, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput, PlanStoreErrorDetails } from "@agent-plan/core";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -612,12 +612,21 @@ server.registerTool("planner-project-context-migrate", {
   );
 });
 
-  server.registerTool("planner-feature-list", {
+    server.registerTool("planner-feature-list", {
     description: "List features (compact: F00x · shortId — name (status; priority N; N phases, M tasks)). Pass featureRef to filter. Use this to discover refs cheaply — do NOT read .planner/ files or planner-plan-get full=true to find entities.",
     inputSchema: { featureRef: z.string().optional().describe("Optional: filter to one feature (F00x/shortId/UUID/name).") },
   }, async ({ featureRef }) => {
-    const st = await requireStore();
-    const { items } = await listFeatureSummaries(st, { featureRef });
+    const api = await plannerApi(planRoot());
+    const query = featureRef ? `?featureRef=${encodeURIComponent(featureRef)}` : "";
+    let items: Array<{ ref: string; shortId: string; name: string; status: string; priority: number; phaseCount: number; taskCount: number }>;
+    try {
+      const data = await api.request<{ features: typeof items }>("GET", `/features${query}`);
+      items = data.features;
+    } catch (error) {
+      // An unresolved filter is an empty selection here, like the in-process flow.
+      if (error instanceof PlannerApiError && error.code === "FEATURE_NOT_FOUND") items = [];
+      else throw error;
+    }
     const lines = items.map((feature) => `- ${feature.ref}${feature.shortId ? ` · ${feature.shortId}` : ""} — ${feature.name} (${feature.status}${feature.priority > 0 ? `; priority ${feature.priority}` : ""}; ${feature.phaseCount} phases, ${feature.taskCount} tasks)`);
     return text(lines.join("\n") || "No features", { features: items });
   });
@@ -626,12 +635,22 @@ server.registerTool("planner-project-context-migrate", {
     description: "List phases (compact: F00x/P00x · shortId — title (status; priority N; N tasks) [F00x]). Filters: featureRef, status. Cheap discovery — do NOT read .planner/ files or planner-plan-get full=true.",
     inputSchema: { featureRef: z.string().optional().describe("Optional: filter to one feature (F00x/shortId/UUID/name)."), status: z.string().optional().describe("Optional: filter by status name.") },
   }, async ({ featureRef, status }) => {
-    const st = await requireStore();
-    const outcome = await listPhaseSummaries(st, { featureRef, status });
-    if (!outcome.ok) return text(outcome.message);
-    const items = outcome.items;
+    const api = await plannerApi(planRoot());
+    const params = [
+      ...(featureRef ? [`featureRef=${encodeURIComponent(featureRef)}`] : []),
+      ...(status ? [`status=${encodeURIComponent(status)}`] : []),
+    ];
+    let items: Array<{ ref: string; shortId: string; title: string; status: string; priority: number; taskCount: number; featureNumber: number | null }>;
+    try {
+      const data = await api.request<{ phases: typeof items }>("GET", `/phases${params.length ? `?${params.join("&")}` : ""}`);
+      items = data.phases;
+    } catch (error) {
+      // A filter that names no feature is a plain message here, like the flow.
+      if (error instanceof PlannerApiError && error.code === "FEATURE_NOT_FOUND") return text(error.message);
+      throw error;
+    }
     const lines = items.map((phase) => {
-      const fTag = phase.featureNumber !== undefined ? ` [F${String(phase.featureNumber).padStart(3, "0")}]` : "";
+      const fTag = phase.featureNumber !== undefined && phase.featureNumber !== null ? ` [F${String(phase.featureNumber).padStart(3, "0")}]` : "";
       return `- ${phase.ref}${phase.shortId ? ` · ${phase.shortId}` : ""} — ${phase.title} (${phase.status}${phase.priority > 0 ? `; priority ${phase.priority}` : ""}; ${phase.taskCount} tasks)${fTag}`;
     });
     return text(lines.join("\n") || "No phases", { phases: items });
@@ -787,14 +806,16 @@ server.registerTool("planner-feature-add", {
     status: z.enum(STATUS_VALUES).optional(),
   },
 }, async ({ name, description, status }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await createFeatureFlow(st, { name, description, status });
-    return text(outcome.message);
+    const data = await api.request<{ message: string }>("POST", "/features", {
+      name,
+      description,
+      ...(status !== undefined ? { status } : {}),
+    });
+    return text(data.message);
   } catch (error) {
-    if (error instanceof FeatureFlowRefusal) {
-      return text(error.message, { created: false, errorCode: error.code });
-    }
+    if (error instanceof PlannerApiError) return text(error.message, { created: false, errorCode: error.code });
     throw error;
   }
 });
@@ -834,48 +855,51 @@ server.registerTool("planner-feature-discuss", {
     workRemaining: z.string().optional().describe("What still needs to be done."),
     dependencies: z.array(z.string()).optional().describe("Cross-feature or external dependencies."),
   },
-}, async ({ feature: ref, description, descriptionRef: rawDescriptionRef, workDone, workRemaining, dependencies }) => {
-  const st = await requireStore();
+}, async ({ feature: ref, description, descriptionRef, workDone, workRemaining, dependencies }) => {
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await discussFeatureFlow(st, ref, {
-      description,
-      descriptionRef: rawDescriptionRef,
-      workDone,
-      workRemaining,
-      dependencies,
-      contextReadyReason: "Updated through planner-feature-discuss MCP tool.",
-    });
-    const result = outcome.feature;
+    const data = await api.request<{ ref: string; feature: Feature; updatedFields: string[] }>(
+      "PUT",
+      `/features/${encodeURIComponent(ref)}/discuss`,
+      {
+        ...(description !== undefined ? { description } : {}),
+        ...(descriptionRef !== undefined ? { descriptionRef } : {}),
+        ...(workDone !== undefined ? { workDone } : {}),
+        ...(workRemaining !== undefined ? { workRemaining } : {}),
+        ...(dependencies !== undefined ? { dependencies } : {}),
+        // Record the same provenance string the in-process flow wrote.
+        contextReadyReason: "Updated through planner-feature-discuss MCP tool.",
+      },
+    );
+    const result = data.feature;
     const featureDiscussReply = buildMutationReply({
-      identity: { entity: "feature", ref: outcome.ref, id: result.id, shortId: result.shortId, title: result.name, status: result.status },
+      identity: { entity: "feature", ref: data.ref, id: result.id, shortId: result.shortId, title: result.name, status: result.status },
       operation: "discuss",
-      updatedFields: outcome.updatedFields,
+      updatedFields: data.updatedFields,
       changedValues: result as unknown as Record<string, unknown>,
-      readBackCommand: `planner-feature-show ${outcome.ref} full=true`,
+      readBackCommand: `planner-feature-show ${data.ref} full=true`,
     });
     return text(featureDiscussReply.text, featureDiscussReply.structured);
   } catch (error) {
-    if (error instanceof DiscussFlowRefusal) {
-      if (error.code === "FEATURE_NOT_FOUND") return text(error.message);
-      if (error.code === "FEATURE_NO_MUTABLE_FIELDS") {
-        return mcpMutationNoFieldsFailure({
-          entity: "feature",
-          ref: error.details.ref as string,
-          operation: "discuss",
-          mutableFields: error.details.mutableFields as string[],
-          retryCommand: `planner-feature-discuss ${error.details.ref as string}`,
-          readBackCommand: `planner-feature-show ${error.details.ref as string} with full=true`,
-          descriptionFallback: {
-            entityId: error.details.featureId as string,
-            inputField: "description",
-            storedField: "feature description",
-            descriptionRefField: "descriptionRef",
-          },
-        });
-      }
-      return text(error.message, { updated: false, errorCode: error.code });
+    if (!(error instanceof PlannerApiError)) throw error;
+    if (error.code === "FEATURE_NOT_FOUND") return text(error.message);
+    if (error.code === "FEATURE_NO_MUTABLE_FIELDS") {
+      return mcpMutationNoFieldsFailure({
+        entity: "feature",
+        ref: error.details.ref as string,
+        operation: "discuss",
+        mutableFields: error.details.mutableFields as string[],
+        retryCommand: `planner-feature-discuss ${error.details.ref as string}`,
+        readBackCommand: `planner-feature-show ${error.details.ref as string} with full=true`,
+        descriptionFallback: {
+          entityId: error.details.featureId as string,
+          inputField: "description",
+          storedField: "feature description",
+          descriptionRefField: "descriptionRef",
+        },
+      });
     }
-    throw error;
+    return text(error.message, { updated: false, errorCode: error.code });
   }
 });
 
@@ -894,43 +918,44 @@ server.registerTool("planner-feature-update", {
     priority: z.number().int().nonnegative().optional().describe("Display order within the project (lower = higher). Tiebreak by number then createdAt."),
   },
 }, async ({ feature: ref, ...updates }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await updateFeatureFlow(st, ref, updates);
-    const result = outcome.feature;
-    const featureRef = outcome.ref;
+    const data = await api.request<{ ref: string; feature: Feature; updatedFields: string[] }>(
+      "PUT",
+      `/features/${encodeURIComponent(ref)}`,
+      updates,
+    );
+    const result = data.feature;
     const featureUpdateReply = buildMutationReply({
-      identity: { entity: "feature", ref: featureRef, id: result.id, shortId: result.shortId, title: result.name, status: result.status },
+      identity: { entity: "feature", ref: data.ref, id: result.id, shortId: result.shortId, title: result.name, status: result.status },
       operation: "update",
-      updatedFields: outcome.updatedFields,
+      updatedFields: data.updatedFields,
       changedValues: result as unknown as Record<string, unknown>,
-      readBackCommand: `planner-feature-show ${featureRef} full=true`,
+      readBackCommand: `planner-feature-show ${data.ref} full=true`,
     });
     return text(featureUpdateReply.text, featureUpdateReply.structured);
   } catch (error) {
-    if (error instanceof FeatureFlowRefusal) {
-      if (error.code === "FEATURE_STATUS_READ_ONLY") {
-        return mcpDerivedStatusReadOnlyResult("feature", error.details.ref as string, error.details.attemptedStatus as string, error.details.effectiveStatus as string);
-      }
-      if (error.code === "FEATURE_NO_MUTABLE_FIELDS") {
-        return mcpMutationNoFieldsFailure({
-          entity: "feature",
-          ref: error.details.ref as string,
-          operation: "update",
-          mutableFields: error.details.mutableFields as string[],
-          retryCommand: `planner-feature-update ${error.details.ref as string}`,
-          readBackCommand: `planner-feature-show ${error.details.ref as string} with full=true`,
-          descriptionFallback: {
-            entityId: error.details.featureId as string,
-            inputField: "description",
-            storedField: "feature description",
-            descriptionRefField: "descriptionRef",
-          },
-        });
-      }
-      return text(error.message, { updated: false, errorCode: error.code });
+    if (!(error instanceof PlannerApiError)) throw error;
+    if (error.code === "FEATURE_STATUS_READ_ONLY") {
+      return mcpDerivedStatusReadOnlyResult("feature", error.details.ref as string, error.details.attemptedStatus as string, error.details.effectiveStatus as string);
     }
-    throw error;
+    if (error.code === "FEATURE_NO_MUTABLE_FIELDS") {
+      return mcpMutationNoFieldsFailure({
+        entity: "feature",
+        ref: error.details.ref as string,
+        operation: "update",
+        mutableFields: error.details.mutableFields as string[],
+        retryCommand: `planner-feature-update ${error.details.ref as string}`,
+        readBackCommand: `planner-feature-show ${error.details.ref as string} with full=true`,
+        descriptionFallback: {
+          entityId: error.details.featureId as string,
+          inputField: "description",
+          storedField: "feature description",
+          descriptionRefField: "descriptionRef",
+        },
+      });
+    }
+    return text(error.message, { updated: false, errorCode: error.code });
   }
 });
 
@@ -941,17 +966,21 @@ server.registerTool("planner-feature-delete", {
     cascade: z.boolean().optional().describe("Also delete phases belonging to this feature"),
   },
 }, async ({ feature: ref, cascade }) => {
-  const st = await requireStore();
-  const features = (await st.loadFeatures()).features;
-  const resolvedFeature = resolveFeatureRefStrict(features, ref);
-  if (!resolvedFeature.ok) return text(resolvedFeature.error);
-  const outcome = await deleteFeatureCascade(st, resolvedFeature.feature.id, { cascade: Boolean(cascade) });
-  if (!outcome.ok) return text(`❌ ${outcome.error}`, { deleted: false, errorCode: outcome.errorCode });
-  const { result } = outcome;
-  return text(
-    `✅ Feature deleted: ${result.ref}${result.cascade ? `; deleted ${result.phaseCount} phases` : `; unlinked ${result.phaseCount} phases`}`,
-    { deleted: true, ref: result.ref, id: result.id, affectedPhases: result.phaseCount, cascade: result.cascade },
-  );
+  const api = await plannerApi(planRoot());
+  try {
+    const data = await api.request<{ ref: string; id: string; phaseCount: number; cascade: boolean }>(
+      "DELETE",
+      `/features/${encodeURIComponent(ref)}${cascade ? "?cascade=true" : ""}`,
+    );
+    return text(
+      `✅ Feature deleted: ${data.ref}${data.cascade ? `; deleted ${data.phaseCount} phases` : `; unlinked ${data.phaseCount} phases`}`,
+      { deleted: true, ref: data.ref, id: data.id, affectedPhases: data.phaseCount, cascade: data.cascade },
+    );
+  } catch (error) {
+    if (!(error instanceof PlannerApiError)) throw error;
+    if (error.status === 404) return text(error.message);
+    return text(`❌ ${error.message}`, { deleted: false, errorCode: error.code });
+  }
 });
 
 server.registerTool("planner-phase-add", {
@@ -963,14 +992,17 @@ server.registerTool("planner-phase-add", {
     description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Prefix with 'design-only' for pre-implementation design tasks.").describe(`Required code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Not a one-liner. ${LONG_TEXT_LIMIT_NOTICE}`),
   },
 }, async ({ title, feature: featureRef, summary, description }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await createPhaseFlow(st, { title, featureRef: featureRef ?? "", summary, description });
-    return text(outcome.message);
+    const data = await api.request<{ message: string }>("POST", "/phases", {
+      title,
+      feature: featureRef ?? "",
+      ...(summary !== undefined ? { summary } : {}),
+      description,
+    });
+    return text(data.message);
   } catch (error) {
-    if (error instanceof PhaseFlowRefusal) {
-      return text(error.message, { created: false, errorCode: error.code });
-    }
+    if (error instanceof PlannerApiError) return text(error.message, { created: false, errorCode: error.code });
     throw error;
   }
 });
@@ -1036,43 +1068,46 @@ server.registerTool("planner-phase-discuss", {
     completionCriteria: z.array(z.string()).optional(),
   },
 }, async ({ phase: ref, ...updates }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await discussPhaseFlow(st, ref, {
-      ...updates,
-      contextReadyReason: "Updated through planner-phase-discuss MCP tool.",
-    });
+    const data = await api.request<{ ref: string; phase: Phase; updatedFields: string[] }>(
+      "PUT",
+      `/phases/${encodeURIComponent(ref)}/discuss`,
+      {
+        ...updates,
+        // Record the same provenance string the in-process flow wrote.
+        contextReadyReason: "Updated through planner-phase-discuss MCP tool.",
+      },
+    );
     const phaseDiscussReply = buildMutationReply({
-      identity: { entity: "phase", ref: outcome.ref, id: outcome.phase.id, shortId: outcome.phase.shortId, title: outcome.phase.title, status: outcome.phase.status },
+      identity: { entity: "phase", ref: data.ref, id: data.phase.id, shortId: data.phase.shortId, title: data.phase.title, status: data.phase.status },
       operation: "discuss",
-      updatedFields: outcome.updatedFields,
-      changedValues: outcome.phase as unknown as Record<string, unknown>,
+      updatedFields: data.updatedFields,
+      changedValues: data.phase as unknown as Record<string, unknown>,
       extras: { contextReady: true },
-      readBackCommand: `planner-phase-show ${outcome.ref} full=true`,
+      readBackCommand: `planner-phase-show ${data.ref} full=true`,
     });
     return text(phaseDiscussReply.text, phaseDiscussReply.structured);
   } catch (error) {
-    if (error instanceof DiscussFlowRefusal) {
-      if (error.code === "PHASE_NOT_FOUND") return text(error.message);
-      if (error.code === "PHASE_NO_MUTABLE_FIELDS") {
-        return mcpMutationNoFieldsFailure({
-          entity: "phase",
-          ref: error.details.ref as string,
-          operation: "discuss",
-          mutableFields: error.details.mutableFields as string[],
-          retryCommand: `planner-phase-discuss ${error.details.ref as string}`,
-          readBackCommand: `planner-phase-show ${error.details.ref as string} with full=true`,
-          descriptionFallback: {
-            entityId: error.details.phaseId as string,
-            inputField: "scope",
-            storedField: "phase description",
-            descriptionRefField: "descriptionRef",
-          },
-        });
-      }
-      return text(error.message, { updated: false, errorCode: error.code });
+    if (!(error instanceof PlannerApiError)) throw error;
+    if (error.code === "PHASE_NOT_FOUND") return text(error.message);
+    if (error.code === "PHASE_NO_MUTABLE_FIELDS") {
+      return mcpMutationNoFieldsFailure({
+        entity: "phase",
+        ref: error.details.ref as string,
+        operation: "discuss",
+        mutableFields: error.details.mutableFields as string[],
+        retryCommand: `planner-phase-discuss ${error.details.ref as string}`,
+        readBackCommand: `planner-phase-show ${error.details.ref as string} with full=true`,
+        descriptionFallback: {
+          entityId: error.details.phaseId as string,
+          inputField: "scope",
+          storedField: "phase description",
+          descriptionRefField: "descriptionRef",
+        },
+      });
     }
-    throw error;
+    return text(error.message, { updated: false, errorCode: error.code });
   }
 });
 
@@ -1096,51 +1131,54 @@ server.registerTool("planner-phase-update", {
     completionCriteria: z.array(z.string()).optional(),
   },
 }, async ({ phase: ref, ...updates }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await updatePhaseFlow(st, ref, updates);
-    const persisted = outcome.phase;
-    const phaseUpdateRef = outcome.ref;
+    const data = await api.request<{
+      ref: string;
+      phase: Phase;
+      updatedFields: string[];
+      descriptionFreshness?: unknown;
+      staleParentRefs?: unknown;
+    }>("PUT", `/phases/${encodeURIComponent(ref)}`, updates);
+    const persisted = data.phase;
     const phaseUpdateReply = buildMutationReply({
-      identity: { entity: "phase", ref: phaseUpdateRef, id: persisted.id, shortId: persisted.shortId, title: persisted.title, status: persisted.status },
+      identity: { entity: "phase", ref: data.ref, id: persisted.id, shortId: persisted.shortId, title: persisted.title, status: persisted.status },
       operation: "update",
-      updatedFields: outcome.updatedFields,
+      updatedFields: data.updatedFields,
       changedValues: persisted as unknown as Record<string, unknown>,
-      extras: outcome.descriptionFreshness
-        ? { descriptionFreshness: outcome.descriptionFreshness, staleParentRefs: outcome.staleParentRefs }
+      extras: data.descriptionFreshness
+        ? { descriptionFreshness: data.descriptionFreshness, staleParentRefs: data.staleParentRefs }
         : {},
-      readBackCommand: `planner-phase-show ${phaseUpdateRef} full=true`,
+      readBackCommand: `planner-phase-show ${data.ref} full=true`,
     });
     return text(phaseUpdateReply.text, phaseUpdateReply.structured);
   } catch (error) {
-    if (error instanceof PhaseFlowRefusal) {
-      switch (error.code) {
-        case "PHASE_NOT_FOUND":
-          return text(error.message);
-        case "PHASE_STATUS_READ_ONLY":
-          return mcpDerivedStatusReadOnlyResult("phase", error.details.ref as string, error.details.attemptedStatus as string, error.details.effectiveStatus as string);
-        case "PHASE_LEGACY_DECISIONS_READ_ONLY":
-          return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "phase", targetRef: error.details.ref as string } };
-        case "PHASE_NO_MUTABLE_FIELDS":
-          return mcpMutationNoFieldsFailure({
-            entity: "phase",
-            ref: error.details.ref as string,
-            operation: "update",
-            mutableFields: error.details.mutableFields as string[],
-            retryCommand: `planner-phase-update ${error.details.ref as string}`,
-            readBackCommand: `planner-phase-show ${error.details.ref as string} with full=true`,
-            descriptionFallback: {
-              entityId: error.details.phaseId as string,
-              inputField: "description",
-              storedField: "phase description",
-              descriptionRefField: "descriptionRef",
-            },
-          });
-        default:
-          return text(error.message, { updated: false, errorCode: error.code });
-      }
+    if (!(error instanceof PlannerApiError)) throw error;
+    switch (error.code) {
+      case "PHASE_NOT_FOUND":
+        return text(error.message);
+      case "PHASE_STATUS_READ_ONLY":
+        return mcpDerivedStatusReadOnlyResult("phase", error.details.ref as string, error.details.attemptedStatus as string, error.details.effectiveStatus as string);
+      case "PHASE_LEGACY_DECISIONS_READ_ONLY":
+        return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "phase", targetRef: error.details.ref as string } };
+      case "PHASE_NO_MUTABLE_FIELDS":
+        return mcpMutationNoFieldsFailure({
+          entity: "phase",
+          ref: error.details.ref as string,
+          operation: "update",
+          mutableFields: error.details.mutableFields as string[],
+          retryCommand: `planner-phase-update ${error.details.ref as string}`,
+          readBackCommand: `planner-phase-show ${error.details.ref as string} with full=true`,
+          descriptionFallback: {
+            entityId: error.details.phaseId as string,
+            inputField: "description",
+            storedField: "phase description",
+            descriptionRefField: "descriptionRef",
+          },
+        });
+      default:
+        return text(error.message, { updated: false, errorCode: error.code });
     }
-    throw error;
   }
 });
 
@@ -1148,14 +1186,12 @@ server.registerTool("planner-phase-delete", {
   description: "Delete a phase and unlink it from features.",
   inputSchema: { phase: z.string().min(1) },
 }, async ({ phase: ref }) => {
-  const st = await requireStore();
+  const api = await plannerApi(planRoot());
   try {
-    const outcome = await deletePhaseFlow(st, ref);
-    return writeAndSummarize(st, `Phase deleted: ${outcome.ref}${outcome.shortId ? ` · ${outcome.shortId}` : ""}`, { deleted: outcome.phaseId });
+    const data = await api.request<{ ref: string; shortId: string; phaseId: string }>("DELETE", `/phases/${encodeURIComponent(ref)}`);
+    return text(`Phase deleted: ${data.ref}${data.shortId ? ` · ${data.shortId}` : ""}`, { deleted: data.phaseId });
   } catch (error) {
-    if (error instanceof PhaseFlowRefusal) {
-      return text(error.message, { deleted: false, errorCode: error.code });
-    }
+    if (error instanceof PlannerApiError) return text(error.message, { deleted: false, errorCode: error.code });
     throw error;
   }
 });

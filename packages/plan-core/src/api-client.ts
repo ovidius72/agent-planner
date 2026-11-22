@@ -50,6 +50,28 @@ export class PlannerApiError extends Error {
   }
 }
 
+/**
+ * The service failed to complete a call — a persistence/verification failure or
+ * a transient writer lock. Deliberately NOT a `PlannerApiError`: adapters treat
+ * a `PlannerApiError` as a domain refusal to render, while a service failure is
+ * an unexpected fault that must propagate (the same thing a thrown store error
+ * did before the call went over HTTP). The 5xx status is the boundary: the API
+ * reserves 4xx for refusals.
+ */
+export class PlannerServiceFailure extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly details: Record<string, unknown>;
+
+  constructor(status: number, code: string, message: string, details: Record<string, unknown> = {}) {
+    super(message);
+    this.name = "PlannerServiceFailure";
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
 const ERROR_ENVELOPE_RESERVED_KEYS = new Set(["code", "message"]);
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -129,7 +151,13 @@ export class PlannerApiClient {
       );
     }
     if (!response.ok || envelope.error !== undefined) {
-      throw plannerApiErrorFrom(response.status, envelope.error);
+      const refusal = plannerApiErrorFrom(response.status, envelope.error);
+      // 4xx is a refusal the adapter renders; 5xx is a fault the service could
+      // not complete, so it keeps propagating as an unexpected failure.
+      if (response.status >= 500) {
+        throw new PlannerServiceFailure(refusal.status, refusal.code, refusal.message, refusal.details);
+      }
+      throw refusal;
     }
     return envelope.data as T;
   }

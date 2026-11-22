@@ -15,6 +15,9 @@ model API stays at `/api/v1` and is not replaced.
   persistence/verification step.
 - `error.code` is the stable contract. Adapters map codes to their own action
   labels and texts; they never re-derive domain messages.
+- The status class is part of the contract too: 4xx is a refusal a client
+  renders, 5xx is a service fault it propagates. `PlannerApiClient` throws
+  `PlannerApiError` for the former and `PlannerServiceFailure` for the latter.
 - Discovery: `GET /api/v2` returns the protocol version, boot id, service
   origin, the session header name and the full `families` map. The map is
   pinned by `packages/plan-server/test/api-v2.test.mjs` ("discovery inventory is
@@ -59,6 +62,10 @@ the receiving session.
   `POST /api/v2/tasks/{taskRef}/checklist`,
   `POST /api/v2/tasks/{taskRef}/checklist/toggle`,
   `DELETE /api/v2/tasks/{taskRef}/checklist?item=`.
+- Creation replies carry the flow's `message` (`POST /features`,
+  `POST /phases`), so a client prints the same sentence the in-process tool did.
+- The discuss routes accept an optional `contextReadyReason`: provenance is the
+  calling surface's fact, and omitting it records the API's own wording.
 - Project settings: `PUT /api/v2/project/discuss`,
   `PUT /api/v2/project/guidelines` (optional `expectedUpdatedAt` guard,
   `409 PLAN_STALE_WRITE`), `PUT /api/v2/project/language`.

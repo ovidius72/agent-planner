@@ -579,6 +579,7 @@ test("features and phases create family: planner-assigned identity under a valid
     }))).body;
     assert.equal(feature.data.created, true);
     assert.match(feature.data.ref, /^F\d{3}$/);
+    assert.equal(feature.data.message, `✅ Feature created: ${feature.data.ref} — Agent Brain service${feature.data.feature.shortId ? ` · ${feature.data.feature.shortId}` : ""}`);
     assert.equal(feature.data.feature.status, "planned");
     assert.match(feature.data.feature.id, /^[0-9a-f-]{36}$/);
 
@@ -603,6 +604,7 @@ test("features and phases create family: planner-assigned identity under a valid
     }))).body;
     assert.equal(phase.data.created, true);
     assert.match(phase.data.ref, /^P\d{3}\(F\d{3}\)$/);
+    assert.equal(phase.data.message, `✅ Phase created: ${phase.data.ref} — Route every client through the service${phase.data.phase.shortId ? ` · ${phase.data.phase.shortId}` : ""}`);
     assert.equal(phase.data.phase.status, "draft");
     assert.equal(phase.data.phase.featureId, feature.data.feature.id);
 
@@ -770,6 +772,14 @@ test("discuss family: project, feature, phase and task over the shared flows", a
     assert.equal(feature.feature.contextReady, true);
     assert.match(feature.feature.contextReadyReason, /API v2/);
     assert.deepEqual(feature.feature.dependsOn, ["service runtime record"]);
+
+    // Attribution is the caller's fact: a bridging adapter states its own
+    // provenance string and the stored reason is exactly that.
+    const featureAgain = (await request(fx, "/api/v2/features/F001/discuss", put({
+      workDone: "Service runtime record shipped.",
+      contextReadyReason: "Updated through planner-feature-discuss MCP tool.",
+    }))).body.data;
+    assert.equal(featureAgain.feature.contextReadyReason, "Updated through planner-feature-discuss MCP tool.");
 
     const phase = (await request(fx, "/api/v2/phases/P001/discuss", put({
       goals: ["Route every client through the service"],
