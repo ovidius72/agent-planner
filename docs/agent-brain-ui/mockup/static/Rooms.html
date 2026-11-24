@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en"><head><style>.sc-placeholder{background:color-mix(in srgb,currentColor 8%,transparent);border:1px solid color-mix(in srgb,currentColor 50%,transparent);border-radius:2px;box-sizing:border-box;overflow:hidden}@keyframes sc-shine{0%{background-position:100% 50%}100%{background-position:0% 50%}}html.sc-dc-streaming .sc-placeholder,html.sc-dc-streaming .sc-interp.sc-missing{position:relative;background:color-mix(in srgb,currentColor 5%,transparent);border-color:transparent}html.sc-dc-streaming .sc-placeholder::before,html.sc-dc-streaming .sc-interp.sc-missing::before{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(217,119,87,0) 25%,rgba(247,225,211,.95) 37%,rgba(217,119,87,0) 63%);background-size:400% 100%;animation:sc-shine 1.4s ease infinite}html.sc-dc-streaming .sc-placeholder:nth-child(n+9 of .sc-placeholder)::before,html.sc-dc-streaming .sc-interp.sc-missing:nth-child(n+9 of .sc-interp.sc-missing)::before{animation:none;background:color-mix(in srgb,currentColor 8%,transparent)}.sc-placeholder-error{padding:4px 8px;font:11px/1.4 ui-monospace,monospace;color:color-mix(in srgb,currentColor 70%,transparent);word-break:break-word}.sc-interp.sc-missing{display:inline-block;width:2em;height:1em;overflow:hidden;vertical-align:text-bottom;background:rgba(255,255,255,.3);border:1px solid rgba(0,0,0,.5);border-radius:2px;box-sizing:border-box;color:transparent;user-select:none}.sc-interp.sc-unresolved{font-family:ui-monospace,monospace;font-size:.85em;color:color-mix(in srgb,currentColor 50%,transparent);background:color-mix(in srgb,currentColor 10%,transparent);border-radius:3px;padding:0 3px}.sc-host.sc-has-error{position:relative}.sc-logic-error{position:absolute;top:8px;left:8px;z-index:2147483647;max-width:60ch;padding:6px 10px;background:#b00020;color:#fff;font:12px/1.4 ui-monospace,monospace;border-radius:4px;white-space:pre-wrap;pointer-events:none}@media print{@page{margin: 0.5cm;}figure,table{break-inside: avoid;}#dc-root,#dc-root > .sc-host{height: auto;}*,*::before,*::after{print-color-adjust: exact;-webkit-print-color-adjust: exact;backdrop-filter: none !important;-webkit-backdrop-filter: none !important;animation-delay: -99s !important;animation-duration: .001s !important;animation-iteration-count: 1 !important;animation-fill-mode: both !important;animation-play-state: running !important;transition-duration: 0s !important;}}</style>
+<meta charset="utf-8">
+<title>Agent Plan — Rooms</title>
+<style>x-dc{display:none!important}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com" data-dc-tpl="1"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" data-dc-tpl="2"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" data-dc-tpl="3"><style data-dc-tpl="4">
+  :root{
+    --bg-base:#f8fafc; --surface-elevated:#ffffff; --sidebar:#f1f5f9;
+    --border:rgba(148,163,184,0.22); --border-strong:rgba(148,163,184,0.34);
+    --text:#0f172a; --text-muted:#475569; --text-subtle:#64748b;
+    --accent:#6366f1; --accent-hover:#4f46e5; --accent-soft:rgba(99,102,241,0.12); --on-accent:#ffffff;
+    --feature:#8b5cf6; --phase:#06b6d4; --task:#10b981;
+    --f-ink:#6d28d9; --p-ink:#0e7490; --t-ink:#047857;
+    --active:#f59e0b; --paused:#ea580c; --done:#22c55e; --planned:#0ea5e9; --blocked:#ef4444;
+    --pos-ink:#15803d; --warn-ink:#b45309; --bad-ink:#b91c1c; --sub-ink:#475569;
+    --pos-bg:rgba(34,197,94,0.14); --warn-bg:rgba(234,88,12,0.14); --bad-bg:rgba(239,68,68,0.12); --mut-bg:rgba(148,163,184,0.16);
+    --shadow-card:0 12px 30px -18px rgba(15,23,42,0.18);
+  }
+  .t-dark{
+    --bg-base:#0a1220; --surface-elevated:#111827; --sidebar:#0d1526;
+    --border:rgba(148,163,184,0.14); --border-strong:rgba(148,163,184,0.26);
+    --text:#f1f5f9; --text-muted:#94a3b8; --text-subtle:#7c8aa0;
+    --accent:#818cf8; --accent-hover:#6366f1; --accent-soft:rgba(129,140,248,0.16); --on-accent:#0a1220;
+    --feature:#a78bfa; --phase:#22d3ee; --task:#34d399;
+    --f-ink:#c4b5fd; --p-ink:#67e8f9; --t-ink:#6ee7b7;
+    --active:#fbbf24; --paused:#fb923c; --done:#4ade80; --planned:#38bdf8; --blocked:#f87171;
+    --pos-ink:#4ade80; --warn-ink:#fbbf24; --bad-ink:#f87171; --sub-ink:#94a3b8;
+    --pos-bg:rgba(34,197,94,0.16); --warn-bg:rgba(234,88,12,0.18); --bad-bg:rgba(239,68,68,0.18); --mut-bg:rgba(148,163,184,0.12);
+    --shadow-card:0 12px 30px -18px rgba(0,0,0,0.5);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg-base);-webkit-font-smoothing:antialiased}
+  .app{height:100vh;overflow:hidden;color:var(--text);background:var(--bg-base);display:flex;flex-direction:column}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  .eyebrow{font-size:10px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--text-subtle);margin:0}
+  a{color:inherit;text-decoration:none}
+  .badge{display:inline-flex;align-items:center;gap:6px;border-radius:7px;padding:3px 9px;font-size:11px;font-weight:600;line-height:1;white-space:nowrap}
+  .dot{width:7px;height:7px;border-radius:9999px;display:inline-block;flex-shrink:0}
+  .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);border-radius:11px;padding:8px 13px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+  .btn:hover{border-color:var(--text-subtle)}
+  .btn-sm{padding:6px 11px;font-size:12px;border-radius:10px}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+  .btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+  .vbadge{width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ico{display:inline-block;vertical-align:middle;flex-shrink:0}
+  .navgroup{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle);padding:0 12px;margin:14px 0 6px}
+  .navitem{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:11px;padding:9px 12px;cursor:pointer;color:var(--text-muted);font-size:14px;font-weight:600}
+  .navitem:hover{background:var(--surface-elevated);color:var(--text)}
+  .navitem.on{background:var(--surface-elevated);border-color:var(--border);color:var(--text)}
+  .navitem.on .ico{color:var(--accent)}
+  .subitem{padding-left:34px;font-size:13px}
+  .navcount{margin-left:auto;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:9999px;padding:1px 7px}
+  .card{background:var(--surface-elevated);border:1px solid var(--border);border-radius:16px}
+  .sidebar{transition:width .18s ease, transform .2s ease;overflow-y:auto}
+  .shell>main{overflow:auto;min-height:0}
+  .navtoggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);cursor:pointer;flex-shrink:0}
+  .scrim{display:none}
+  .seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--border);border-radius:9px;background:var(--surface-elevated)}
+  .seg button{border:0;background:transparent;color:var(--text-muted);font:inherit;font-size:11px;font-weight:600;padding:4px 9px;border-radius:7px;cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--text)}
+  .tabs{display:inline-flex;gap:4px}
+  .tab{border:1px solid transparent;background:transparent;color:var(--text-muted);font:inherit;font-size:13px;font-weight:600;padding:7px 12px;border-radius:10px;cursor:pointer}
+  .tab[aria-pressed="true"]{background:var(--surface-elevated);border-color:var(--border);color:var(--text)}
+  .tchip{display:inline-flex;align-items:center;gap:6px;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:600;color:var(--t-ink);background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:7px;padding:3px 8px;white-space:nowrap}
+  .tchip:hover{border-color:var(--task)}
+  .stack{display:flex}
+  .stack .vbadge{border:2px solid var(--surface-elevated);margin-left:-6px;width:26px;height:26px}
+  .stack .vbadge:first-child{margin-left:0}
+  .stale{opacity:.62}
+  *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+  .app.nav-collapsed .sidebar{width:64px !important}
+  .app.nav-collapsed .navitem{justify-content:center;gap:0;font-size:0;padding-left:0;padding-right:0}
+  .app.nav-collapsed .navgroup,.app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:none}
+  .sideclose{display:none}
+  @media (max-width:1180px){
+    .sidebar{position:fixed;top:0;bottom:0;left:0;z-index:60;width:248px !important;flex-direction:column !important;transform:translateX(-100%);box-shadow:0 20px 50px rgba(0,0,0,0.35);overflow-y:auto}
+    .app:not(.nav-collapsed) .sidebar{transform:translateX(0)}
+    .app.nav-collapsed .sidebar{width:248px !important}
+    .app.nav-collapsed .navitem{font-size:14px;gap:11px;justify-content:flex-start;padding:9px 12px}
+    .app.nav-collapsed .navgroup{display:block}
+    .app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:flex}
+    .app:not(.nav-collapsed) .scrim{display:block;position:fixed;inset:0;background:rgba(2,6,23,0.5);z-index:55}
+    .room-grid{grid-template-columns:minmax(0,1fr) !important}
+    .pad{padding:20px 16px !important}
+    .sideclose{display:inline-flex !important}
+  }
+
+  /* project switcher + mobile shell (rooms proposal, 2026-11-02) */
+  .projsw{position:relative;min-width:0}
+  .projsw>summary{list-style:none;cursor:pointer;display:flex;align-items:center;border-radius:10px;padding:4px 8px;margin:-4px -8px;min-width:0;color:var(--text)}
+  .projsw>summary::-webkit-details-marker{display:none}
+  .projsw>summary:hover{background:var(--accent-soft)}
+  .projsw>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .projsw[open] .projsw-caret{transform:rotate(180deg)}
+  .projsw[open]>summary{position:relative;z-index:72}
+  .projsw[open]>summary::before{content:"";position:fixed;inset:0;z-index:-1;cursor:default}
+  .projsw-menu{z-index:73 !important;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+  header:has(.projsw[open]){z-index:90 !important}
+  .projsw-path{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-subtle);margin-top:1px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .projsw-menu{position:absolute;top:calc(100% + 10px);left:-8px;z-index:70;width:min(330px,calc(100vw - 32px));background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:14px;box-shadow:0 20px 50px -20px rgba(2,6,23,0.55);padding:8px;display:flex;flex-direction:column;gap:2px}
+  .projsw-head{margin:4px 8px 6px;font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)}
+  .projsw-item{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 10px;border-radius:10px;color:var(--text);text-decoration:none}
+  .projsw-item:hover,.projsw-item.on{background:var(--accent-soft)}
+  .projsw-txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto;font-size:13.5px}
+  .projsw-txt .mono{font-size:10.5px;color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .projsw-meta{font-size:11px;color:var(--text-subtle);white-space:nowrap}
+  .projsw-foot{margin:6px 8px 4px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;line-height:1.5;color:var(--text-subtle)}
+  @supports (height:100dvh){ .app,.approot{height:100dvh} }
+  @media (max-width:760px){
+    .app,.approot{height:auto !important;min-height:100dvh;overflow:visible !important}
+    .app main,.approot main,.shell>main{overflow:visible !important}
+    .app>div:nth-child(2),.approot>div:nth-child(2){padding:6px 16px !important;font-size:10px !important;gap:6px !important}
+    .app>div:nth-child(2)>span:first-child,.approot>div:nth-child(2)>span:first-child{display:none}
+    .app>header,.approot>header{padding:8px 12px !important;gap:8px !important}
+    .hdr-hide-sm{display:none !important}
+    .stickyhdr,[style*="position:sticky"]{position:static !important}
+    .filterbar-wrap{top:0 !important}
+    .msglist{height:min(560px,62dvh) !important}
+    input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{font-size:16px !important}
+  }
+  .wifi-status{display:inline-flex;align-items:center;gap:4px;color:var(--done,#22c55e)}
+  .live-dot{width:7px;height:7px;border-radius:9999px;background:var(--done,#22c55e);display:inline-block;animation:livepulse 1.6s ease-in-out infinite}
+  @keyframes livepulse{0%,100%{opacity:1}50%{opacity:.35}}
+</style><meta name="generator" content="scripts/export-mockup-static.mjs">
+</head>
+<body>
+<div id="dc-root"><div class="sc-host" data-sc-name="Rooms"><div data-dc-tpl="5" class="app t-dark ">
+  <div data-dc-tpl="6" class="scrim"></div>
+  <div data-dc-tpl="7" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 24px; background: var(--sidebar); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text-subtle);">
+    <span data-dc-tpl="8" class="mono">F025 · Rooms &amp; chat proposal</span>
+    <span data-dc-tpl="9" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">Demo scenario · illustrative data
+      <span data-dc-tpl="10" class="seg" role="group" aria-label="Heca connection scenario">
+        <button data-dc-tpl="11" type="button" aria-pressed="true">Heca connected</button>
+        <button data-dc-tpl="12" type="button" aria-pressed="false">Heca unreachable</button>
+      </span>
+    </span>
+  </div>
+
+  <header data-dc-tpl="13" class="pad" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 11px 20px; border-bottom: 1px solid var(--border);">
+    <div data-dc-tpl="14" style="display: flex; align-items: center; gap: 11px; min-width: 0px; flex: 1 1 auto;">
+      <button data-dc-tpl="15" type="button" class="navtoggle" aria-label="Toggle navigation" style="width: 32px; height: 32px; border-color: var(--border);"><svg data-dc-tpl="16" class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="17" d="M3 6h18M3 12h18M3 18h18"></path></svg></button>
+      <details data-dc-tpl="18" class="projsw">
+        <summary data-dc-tpl="19" aria-label="Current project: Agent Plan. Switch project">
+          <span data-dc-tpl="20" style="display: flex; flex-direction: column; min-width: 0px;">
+            <span data-dc-tpl="21" style="display: flex; align-items: center; gap: 7px;"><span data-dc-tpl="22" style="font-size: 16px; font-weight: 700; line-height: 1.15; white-space: nowrap;">Agent Plan</span><svg data-dc-tpl="23" class="projsw-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="24" d="m6 9 6 6 6-6"></path></svg></span>
+            <span data-dc-tpl="25" class="mono projsw-path"><svg data-dc-tpl="26" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="27" d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>~/code/agent-plan</span>
+          </span>
+        </summary>
+        <div data-dc-tpl="28" class="projsw-menu">
+          <p data-dc-tpl="29" class="projsw-head">Projects on this machine</p>
+          <a data-dc-tpl="30" class="projsw-item on" href="#" aria-current="true"><span data-dc-tpl="31" class="projsw-txt"><b data-dc-tpl="32">Agent Plan</b><span data-dc-tpl="33" class="mono">~/code/agent-plan</span></span><span data-dc-tpl="34" class="projsw-meta">3 rooms</span><svg data-dc-tpl="35" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent); flex-shrink: 0;"><path data-dc-tpl="36" d="M20 6 9 17l-5-5"></path></svg></a>
+          <a data-dc-tpl="37" class="projsw-item" href="#"><span data-dc-tpl="38" class="projsw-txt"><b data-dc-tpl="39">Heca-Pro</b><span data-dc-tpl="40" class="mono">~/code/heca-pro</span></span><span data-dc-tpl="41" class="projsw-meta">1 room</span></a>
+          <a data-dc-tpl="42" class="projsw-item" href="#"><span data-dc-tpl="43" class="projsw-txt"><b data-dc-tpl="44">Heca</b><span data-dc-tpl="45" class="mono">~/code/heca</span></span><span data-dc-tpl="46" class="projsw-meta">No rooms</span></a>
+          <p data-dc-tpl="47" class="projsw-foot">A project appears here once an agent loads the planner in its folder. Switching keeps the current section.</p>
+        </div>
+      </details>
+    </div>
+    <div data-dc-tpl="48" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+      <span data-dc-tpl="49" class="wifi-status" title="Web UI server connected — the dashboard is live and updates in real time as agents work" aria-label="Web UI live"><svg data-dc-tpl="50" class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="51" d="M5 12.55a11 11 0 0 1 14 0M2 8.82a16 16 0 0 1 20 0M8.5 16.43a6 6 0 0 1 7 0"></path></svg><span data-dc-tpl="52" class="live-dot"></span></span>
+      
+      <button data-dc-tpl="53" type="button" class="btn" aria-label="Toggle theme" style="padding: 9px; width: 32px; height: 32px; justify-content: center;">
+        <svg data-dc-tpl="55" class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle data-dc-tpl="56" cx="12" cy="12" r="4"></circle><path data-dc-tpl="57" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"></path></svg>
+        
+      </button>
+    </div>
+  </header>
+
+  <div data-dc-tpl="61" class="shell" style="display: flex; flex-grow: 1; min-height: 0px;">
+    <aside data-dc-tpl="62" class="sidebar" style="width: 230px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; background: var(--sidebar);">
+      <button data-dc-tpl="63" type="button" class="sideclose" aria-label="Close menu" style="align-self: flex-end; align-items: center; justify-content: center; gap: 6px; width: auto; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; margin-bottom: 6px;"><svg data-dc-tpl="64" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="65" d="M18 6 6 18M6 6l12 12"></path></svg>Close</button>
+      <div data-dc-tpl="66" class="navgroup">Work</div>
+      <a data-dc-tpl="67" class="navitem" href="Resume.html"><svg data-dc-tpl="68" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="69" d="M9 14 4 9l5-5"></path><path data-dc-tpl="70" d="M4 9h11a5 5 0 0 1 5 5v6"></path></svg>Resume</a>
+      <a data-dc-tpl="71" class="navitem" href="Main.html"><svg data-dc-tpl="72" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="73" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>Planner</a>
+      <a data-dc-tpl="74" class="navitem subitem" href="#"><svg data-dc-tpl="75" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="76" d="m3 17 2 2 4-4"></path><path data-dc-tpl="77" d="m3 7 2 2 4-4"></path><path data-dc-tpl="78" d="M13 6h8M13 12h8M13 18h8"></path></svg>Requirements</a>
+      <a data-dc-tpl="79" class="navitem subitem" href="#"><svg data-dc-tpl="80" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="81" d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"></path></svg>Ideas</a>
+      <a data-dc-tpl="82" class="navitem subitem" href="#"><svg data-dc-tpl="83" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="84" d="M8 3 4 7l4 4"></path><path data-dc-tpl="85" d="M4 7h16"></path><path data-dc-tpl="86" d="m16 21 4-4-4-4"></path><path data-dc-tpl="87" d="M20 17H4"></path></svg>Handoff</a>
+      <a data-dc-tpl="88" class="navitem subitem on" href="Rooms.html" aria-current="page"><svg data-dc-tpl="89" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="90" d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Rooms<span data-dc-tpl="91" class="navcount"><span class="sc-interp">3</span></span></a>
+      <a data-dc-tpl="92" class="navitem" href="Agents.html"><svg data-dc-tpl="93" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle data-dc-tpl="94" cx="6" cy="6" r="2.5"></circle><circle data-dc-tpl="95" cx="6" cy="18" r="2.5"></circle><circle data-dc-tpl="96" cx="18" cy="12" r="2.5"></circle><path data-dc-tpl="97" d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"></path></svg>Agents &amp; targets</a>
+      <div data-dc-tpl="98" class="navgroup">Context</div>
+      <a data-dc-tpl="99" class="navitem" href="Map.html"><svg data-dc-tpl="100" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="101" x="9" y="3" width="6" height="5" rx="1"></rect><rect data-dc-tpl="102" x="3" y="16" width="6" height="5" rx="1"></rect><rect data-dc-tpl="103" x="15" y="16" width="6" height="5" rx="1"></rect><path data-dc-tpl="104" d="M12 8v4M6 16v-2h12v2"></path></svg>Map</a>
+      <a data-dc-tpl="105" class="navitem" href="Code.html"><svg data-dc-tpl="106" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="107" d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg>Code</a>
+      <a data-dc-tpl="108" class="navitem" href="Checks.html"><svg data-dc-tpl="109" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="110" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path data-dc-tpl="111" d="m9 12 2 2 4-4"></path></svg>Checks</a>
+      <a data-dc-tpl="112" class="navitem" href="Analytics.html"><svg data-dc-tpl="113" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="114" d="M3 3v18h18"></path><rect data-dc-tpl="115" x="7" y="12" width="3" height="6"></rect><rect data-dc-tpl="116" x="12" y="8" width="3" height="10"></rect><rect data-dc-tpl="117" x="17" y="5" width="3" height="13"></rect></svg>Analytics</a>
+      <div data-dc-tpl="118" class="navgroup">Proposals</div>
+      <a data-dc-tpl="119" class="navitem" href="Evaluate.html"><svg data-dc-tpl="120" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="121" d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.2 1 2h6c0-.8.3-1.3 1-2a7 7 0 0 0-4-12z"></path></svg>To evaluate</a>
+      <div data-dc-tpl="122" style="flex-grow: 1; min-height: 10px;"></div>
+      <a data-dc-tpl="123" class="navitem" href="Settings.html"><svg data-dc-tpl="124" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle data-dc-tpl="125" cx="12" cy="12" r="3"></circle><path data-dc-tpl="126" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>Settings</a>
+      <div data-dc-tpl="127" class="side-foot" style="border-top: 1px solid var(--border); margin-top: 10px; padding: 12px 12px 4px; font-size: 11px; color: var(--text-subtle); line-height: 1.6;">Rooms live in Heca-Pro<br data-dc-tpl="128">Agent Plan reads and writes through Heca</div>
+    </aside>
+
+    <main data-dc-tpl="129" class="pad" style="flex-grow: 1; min-width: 0px; padding: 26px 30px; display: flex; flex-direction: column; gap: 18px;">
+      <nav data-dc-tpl="130" aria-label="Breadcrumb" style="font-size: 12px; color: var(--text-subtle); display: flex; gap: 6px; align-items: center;"><a data-dc-tpl="131" href="Main.html" style="color: var(--text-muted);">Planner</a><span data-dc-tpl="132" aria-hidden="true">/</span><span data-dc-tpl="133">Rooms</span></nav>
+      <div data-dc-tpl="134" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+        <div data-dc-tpl="135" style="min-width: 0px;">
+          <div data-dc-tpl="136" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;"><h1 data-dc-tpl="137" style="margin: 0px; font-size: 26px; font-weight: 700; letter-spacing: -0.01em;">Rooms</h1><span data-dc-tpl="138" class="badge" style="background: var(--pos-bg); color: var(--pos-ink);"><span data-dc-tpl="139" class="dot" style="background: var(--done);"></span><span class="sc-interp">Heca connected</span></span></div>
+          <p data-dc-tpl="140" style="margin: 6px 0px 0px; font-size: 14px; color: var(--text-muted); max-width: 64ch;">Heca rooms linked to this project. The chat is the same one Heca-Pro shows: messages are visible to the whole room and delivered only to the addressees.</p>
+        </div>
+        <div data-dc-tpl="141" class="tabs" role="group" aria-label="Filter rooms">
+          <button data-dc-tpl="143" type="button" class="tab" aria-pressed="true"><span class="sc-interp">All</span> <span data-dc-tpl="144" style="color: var(--text-subtle); font-weight: 500;"><span class="sc-interp">3</span></span></button><button data-dc-tpl="143" type="button" class="tab" aria-pressed="false"><span class="sc-interp">Active</span> <span data-dc-tpl="144" style="color: var(--text-subtle); font-weight: 500;"><span class="sc-interp">2</span></span></button><button data-dc-tpl="143" type="button" class="tab" aria-pressed="false"><span class="sc-interp">Closed</span> <span data-dc-tpl="144" style="color: var(--text-subtle); font-weight: 500;"><span class="sc-interp">1</span></span></button>
+        </div>
+      </div>
+
+      
+
+      <div data-dc-tpl="153" class="room-grid" style="display: grid; grid-template-columns: repeat(2, minmax(0px, 1fr)); gap: 18px; align-items: start;">
+        
+          <article data-dc-tpl="155" class="card " style="padding: 18px; display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow-card);">
+            <div data-dc-tpl="156" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;">
+              <div data-dc-tpl="157" style="min-width: 0px;">
+                <h2 data-dc-tpl="158" style="margin: 0px; font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;"><span class="sc-interp">agent-brain</span><span data-dc-tpl="160" class="badge" style="background: var(--accent-soft); color: var(--text);"><span class="sc-interp">3</span> new</span></h2>
+                <div data-dc-tpl="161" class="mono" style="font-size: 11px; color: var(--text-subtle); margin-top: 4px;"><span class="sc-interp">agent-plan</span> · <span class="sc-interp">feat/agent-brain</span></div>
+              </div>
+              <span data-dc-tpl="162" class="badge" style="background: var(--warn-bg); color: var(--warn-ink);"><span data-dc-tpl="163" class="dot" style="background: var(--active);"></span><span class="sc-interp">Active</span></span>
+            </div>
+
+            <div data-dc-tpl="164" style="display: grid; grid-template-columns: repeat(2, minmax(0px, 1fr)); gap: 12px;">
+              <div data-dc-tpl="165" style="display: flex; flex-direction: column; gap: 6px; min-width: 0px;">
+                <p data-dc-tpl="166" class="eyebrow">Orchestrator</p>
+                
+                  <span data-dc-tpl="168" style="display: flex; align-items: center; gap: 4px 8px; min-width: 0px; flex-wrap: wrap;">
+                    <span data-dc-tpl="169" class="vbadge" style="background: rgba(217, 119, 87, 0.16);"><svg data-dc-tpl="170" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="171" d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"></path></svg></span>
+                    <span data-dc-tpl="172" style="font-size: 13px; font-weight: 600;"><span class="sc-interp">orchestrator</span></span><span data-dc-tpl="173" style="font-size: 12px; color: var(--text-subtle);"><span class="sc-interp">Opus 5.5</span></span>
+                  </span>
+                
+                
+              </div>
+              <div data-dc-tpl="176" style="display: flex; flex-direction: column; gap: 6px;">
+                <p data-dc-tpl="177" class="eyebrow">Members · <span class="sc-interp">4</span></p>
+                <span data-dc-tpl="178" class="stack">
+                  
+                    <span data-dc-tpl="180" class="vbadge" title="orchestrator" style="background: rgba(217, 119, 87, 0.16);">
+                      <svg data-dc-tpl="182" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="183" d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"></path></svg>
+                      
+                      
+                    </span>
+                  
+                    <span data-dc-tpl="180" class="vbadge" title="worker-1" style="background: rgba(217, 119, 87, 0.16);">
+                      <svg data-dc-tpl="182" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="183" d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"></path></svg>
+                      
+                      
+                    </span>
+                  
+                    <span data-dc-tpl="180" class="vbadge" title="worker-2" style="background: rgba(16, 163, 127, 0.16);">
+                      
+                      <svg data-dc-tpl="185" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="186" d="M12 2.5l8.2 4.75v9.5L12 21.5 3.8 16.75v-9.5z"></path><circle data-dc-tpl="187" cx="12" cy="12" r="2.6"></circle></svg>
+                      
+                    </span>
+                  
+                    <span data-dc-tpl="180" class="vbadge" title="worker-3" style="background: rgba(66, 133, 244, 0.16);">
+                      
+                      
+                      <svg data-dc-tpl="189" width="13" height="13" viewBox="0 0 24 24" fill="#4285f4" stroke="none" aria-hidden="true"><path data-dc-tpl="190" d="M12 2c.3 5.2 4.6 9.5 9.8 9.8C16.6 12.1 12.3 16.4 12 21.6 11.7 16.4 7.4 12.1 2.2 11.8 7.4 11.5 11.7 7.2 12 2z"></path></svg>
+                    </span>
+                  
+                </span>
+              </div>
+            </div>
+
+            <div data-dc-tpl="191" style="display: flex; flex-direction: column; gap: 6px;">
+              <p data-dc-tpl="192" class="eyebrow">Tasks in this room</p>
+              <div data-dc-tpl="193" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <a data-dc-tpl="195" class="tchip" href="TaskDetail.html" title="Choose the SQLite driver by benchmark"><span data-dc-tpl="196" class="dot" style="background: var(--active);"></span><span class="sc-interp">T502</span> · <span class="sc-interp">in progress</span></a><a data-dc-tpl="195" class="tchip" href="TaskDetail.html" title="[Task title]"><span data-dc-tpl="196" class="dot" style="background: var(--paused);"></span><span class="sc-interp">T498</span> · <span class="sc-interp">parked</span></a><a data-dc-tpl="195" class="tchip" href="TaskDetail.html" title="[Task title]"><span data-dc-tpl="196" class="dot" style="background: var(--text-subtle);"></span><span class="sc-interp">T491</span> · <span class="sc-interp">idle</span></a>
+                
+              </div>
+            </div>
+
+            <div data-dc-tpl="199" style="border-top: 1px solid var(--border); padding-top: 12px; font-size: 13px; line-height: 1.5; color: var(--text-muted);">
+              <b data-dc-tpl="200" style="color: var(--text);"><span class="sc-interp">worker-1</span></b> <span class="sc-interp">Started T502. First benchmark run is in.</span> <span data-dc-tpl="201" class="mono" style="font-size: 11px; color: var(--text-subtle);">· <span class="sc-interp">2m ago</span></span>
+            </div>
+
+            <div data-dc-tpl="202" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              <a data-dc-tpl="203" class="btn btn-sm btn-primary" href="RoomChat.html"><span class="sc-interp">Open chat</span></a>
+              <button data-dc-tpl="204" type="button" class="btn btn-sm">Open in Heca</button>
+              <span data-dc-tpl="205" style="margin-left: auto; font-size: 11px; color: var(--text-subtle);"><span class="sc-interp">Workflow agent-brain.yaml</span></span>
+            </div>
+          </article>
+        
+          <article data-dc-tpl="155" class="card " style="padding: 18px; display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow-card);">
+            <div data-dc-tpl="156" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;">
+              <div data-dc-tpl="157" style="min-width: 0px;">
+                <h2 data-dc-tpl="158" style="margin: 0px; font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;"><span class="sc-interp">heca-integration</span></h2>
+                <div data-dc-tpl="161" class="mono" style="font-size: 11px; color: var(--text-subtle); margin-top: 4px;"><span class="sc-interp">heca-pro</span> · <span class="sc-interp">develop</span></div>
+              </div>
+              <span data-dc-tpl="162" class="badge" style="background: var(--warn-bg); color: var(--warn-ink);"><span data-dc-tpl="163" class="dot" style="background: var(--active);"></span><span class="sc-interp">Active</span></span>
+            </div>
+
+            <div data-dc-tpl="164" style="display: grid; grid-template-columns: repeat(2, minmax(0px, 1fr)); gap: 12px;">
+              <div data-dc-tpl="165" style="display: flex; flex-direction: column; gap: 6px; min-width: 0px;">
+                <p data-dc-tpl="166" class="eyebrow">Orchestrator</p>
+                
+                
+                  <span data-dc-tpl="175" class="badge" style="background: var(--warn-bg); color: var(--warn-ink); white-space: normal; line-height: 1.35;">None · address with @member or @all</span>
+                
+              </div>
+              <div data-dc-tpl="176" style="display: flex; flex-direction: column; gap: 6px;">
+                <p data-dc-tpl="177" class="eyebrow">Members · <span class="sc-interp">2</span></p>
+                <span data-dc-tpl="178" class="stack">
+                  
+                    <span data-dc-tpl="180" class="vbadge" title="worker-1" style="background: rgba(217, 119, 87, 0.16);">
+                      <svg data-dc-tpl="182" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="183" d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"></path></svg>
+                      
+                      
+                    </span>
+                  
+                    <span data-dc-tpl="180" class="vbadge" title="worker-2" style="background: rgba(16, 163, 127, 0.16);">
+                      
+                      <svg data-dc-tpl="185" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="186" d="M12 2.5l8.2 4.75v9.5L12 21.5 3.8 16.75v-9.5z"></path><circle data-dc-tpl="187" cx="12" cy="12" r="2.6"></circle></svg>
+                      
+                    </span>
+                  
+                </span>
+              </div>
+            </div>
+
+            <div data-dc-tpl="191" style="display: flex; flex-direction: column; gap: 6px;">
+              <p data-dc-tpl="192" class="eyebrow">Tasks in this room</p>
+              <div data-dc-tpl="193" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <a data-dc-tpl="195" class="tchip" href="TaskDetail.html" title="[Task title]"><span data-dc-tpl="196" class="dot" style="background: var(--active);"></span><span class="sc-interp">T012</span> · <span class="sc-interp">in progress</span></a>
+                
+              </div>
+            </div>
+
+            <div data-dc-tpl="199" style="border-top: 1px solid var(--border); padding-top: 12px; font-size: 13px; line-height: 1.5; color: var(--text-muted);">
+              <b data-dc-tpl="200" style="color: var(--text);"><span class="sc-interp">You</span></b> <span class="sc-interp">Check the helper publish path first.</span> <span data-dc-tpl="201" class="mono" style="font-size: 11px; color: var(--text-subtle);">· <span class="sc-interp">1h ago</span></span>
+            </div>
+
+            <div data-dc-tpl="202" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              <a data-dc-tpl="203" class="btn btn-sm btn-primary" href="RoomChat.html"><span class="sc-interp">Open chat</span></a>
+              <button data-dc-tpl="204" type="button" class="btn btn-sm">Open in Heca</button>
+              <span data-dc-tpl="205" style="margin-left: auto; font-size: 11px; color: var(--text-subtle);"><span class="sc-interp">Workflow heca-integration.yaml</span></span>
+            </div>
+          </article>
+        
+          <article data-dc-tpl="155" class="card " style="padding: 18px; display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow-card);">
+            <div data-dc-tpl="156" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;">
+              <div data-dc-tpl="157" style="min-width: 0px;">
+                <h2 data-dc-tpl="158" style="margin: 0px; font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;"><span class="sc-interp">ui-refresh</span></h2>
+                <div data-dc-tpl="161" class="mono" style="font-size: 11px; color: var(--text-subtle); margin-top: 4px;"><span class="sc-interp">agent-plan</span> · <span class="sc-interp">feat/ui</span></div>
+              </div>
+              <span data-dc-tpl="162" class="badge" style="background: var(--mut-bg); color: var(--sub-ink);"><span data-dc-tpl="163" class="dot" style="background: var(--text-subtle);"></span><span class="sc-interp">Closed</span></span>
+            </div>
+
+            <div data-dc-tpl="164" style="display: grid; grid-template-columns: repeat(2, minmax(0px, 1fr)); gap: 12px;">
+              <div data-dc-tpl="165" style="display: flex; flex-direction: column; gap: 6px; min-width: 0px;">
+                <p data-dc-tpl="166" class="eyebrow">Orchestrator</p>
+                
+                  <span data-dc-tpl="168" style="display: flex; align-items: center; gap: 4px 8px; min-width: 0px; flex-wrap: wrap;">
+                    <span data-dc-tpl="169" class="vbadge" style="background: rgba(217, 119, 87, 0.16);"><svg data-dc-tpl="170" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="171" d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"></path></svg></span>
+                    <span data-dc-tpl="172" style="font-size: 13px; font-weight: 600;"><span class="sc-interp">orchestrator</span></span><span data-dc-tpl="173" style="font-size: 12px; color: var(--text-subtle);"><span class="sc-interp">Sonnet 5.5</span></span>
+                  </span>
+                
+                
+              </div>
+              <div data-dc-tpl="176" style="display: flex; flex-direction: column; gap: 6px;">
+                <p data-dc-tpl="177" class="eyebrow">Members · <span class="sc-interp">3</span></p>
+                <span data-dc-tpl="178" class="stack">
+                  
+                    <span data-dc-tpl="180" class="vbadge" title="orchestrator" style="background: rgba(217, 119, 87, 0.16);">
+                      <svg data-dc-tpl="182" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="183" d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"></path></svg>
+                      
+                      
+                    </span>
+                  
+                    <span data-dc-tpl="180" class="vbadge" title="worker-1" style="background: rgba(217, 119, 87, 0.16);">
+                      <svg data-dc-tpl="182" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="183" d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"></path></svg>
+                      
+                      
+                    </span>
+                  
+                    <span data-dc-tpl="180" class="vbadge" title="worker-2" style="background: rgba(16, 163, 127, 0.16);">
+                      
+                      <svg data-dc-tpl="185" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="186" d="M12 2.5l8.2 4.75v9.5L12 21.5 3.8 16.75v-9.5z"></path><circle data-dc-tpl="187" cx="12" cy="12" r="2.6"></circle></svg>
+                      
+                    </span>
+                  
+                </span>
+              </div>
+            </div>
+
+            <div data-dc-tpl="191" style="display: flex; flex-direction: column; gap: 6px;">
+              <p data-dc-tpl="192" class="eyebrow">Tasks in this room</p>
+              <div data-dc-tpl="193" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                
+                <span data-dc-tpl="198" style="font-size: 12px; color: var(--text-subtle);">No task in progress</span>
+              </div>
+            </div>
+
+            <div data-dc-tpl="199" style="border-top: 1px solid var(--border); padding-top: 12px; font-size: 13px; line-height: 1.5; color: var(--text-muted);">
+              <b data-dc-tpl="200" style="color: var(--text);"><span class="sc-interp">orchestrator</span></b> <span class="sc-interp">All phase tasks verified. Closing the room.</span> <span data-dc-tpl="201" class="mono" style="font-size: 11px; color: var(--text-subtle);">· <span class="sc-interp">2d ago</span></span>
+            </div>
+
+            <div data-dc-tpl="202" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              <a data-dc-tpl="203" class="btn btn-sm btn-primary" href="RoomChat.html"><span class="sc-interp">Read chat</span></a>
+              <button data-dc-tpl="204" type="button" class="btn btn-sm">Open in Heca</button>
+              <span data-dc-tpl="205" style="margin-left: auto; font-size: 11px; color: var(--text-subtle);"><span class="sc-interp">Archive kept in Heca</span></span>
+            </div>
+          </article>
+        
+      </div>
+      <p data-dc-tpl="206" style="margin: 0px; font-size: 12px; color: var(--text-subtle);">Rooms are created and staffed in Heca-Pro from a workflow file. Agent Plan lists them, opens their chat and links their tasks.</p>
+    </main>
+  </div></div></div></div></body></html>

@@ -43,3 +43,5 @@ pnpm-debug.log*
 
 # Pi agent local state
 .pi
+# Agent Brain mockup: local copy of the design-canvas runtime
+docs/agent-brain-ui/mockup/support.js

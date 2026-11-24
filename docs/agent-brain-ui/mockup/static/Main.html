@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en" style="--focus-h: 178px; --filt-top: 551px;"><head><style>.sc-placeholder{background:color-mix(in srgb,currentColor 8%,transparent);border:1px solid color-mix(in srgb,currentColor 50%,transparent);border-radius:2px;box-sizing:border-box;overflow:hidden}@keyframes sc-shine{0%{background-position:100% 50%}100%{background-position:0% 50%}}html.sc-dc-streaming .sc-placeholder,html.sc-dc-streaming .sc-interp.sc-missing{position:relative;background:color-mix(in srgb,currentColor 5%,transparent);border-color:transparent}html.sc-dc-streaming .sc-placeholder::before,html.sc-dc-streaming .sc-interp.sc-missing::before{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(217,119,87,0) 25%,rgba(247,225,211,.95) 37%,rgba(217,119,87,0) 63%);background-size:400% 100%;animation:sc-shine 1.4s ease infinite}html.sc-dc-streaming .sc-placeholder:nth-child(n+9 of .sc-placeholder)::before,html.sc-dc-streaming .sc-interp.sc-missing:nth-child(n+9 of .sc-interp.sc-missing)::before{animation:none;background:color-mix(in srgb,currentColor 8%,transparent)}.sc-placeholder-error{padding:4px 8px;font:11px/1.4 ui-monospace,monospace;color:color-mix(in srgb,currentColor 70%,transparent);word-break:break-word}.sc-interp.sc-missing{display:inline-block;width:2em;height:1em;overflow:hidden;vertical-align:text-bottom;background:rgba(255,255,255,.3);border:1px solid rgba(0,0,0,.5);border-radius:2px;box-sizing:border-box;color:transparent;user-select:none}.sc-interp.sc-unresolved{font-family:ui-monospace,monospace;font-size:.85em;color:color-mix(in srgb,currentColor 50%,transparent);background:color-mix(in srgb,currentColor 10%,transparent);border-radius:3px;padding:0 3px}.sc-host.sc-has-error{position:relative}.sc-logic-error{position:absolute;top:8px;left:8px;z-index:2147483647;max-width:60ch;padding:6px 10px;background:#b00020;color:#fff;font:12px/1.4 ui-monospace,monospace;border-radius:4px;white-space:pre-wrap;pointer-events:none}@media print{@page{margin: 0.5cm;}figure,table{break-inside: avoid;}#dc-root,#dc-root > .sc-host{height: auto;}*,*::before,*::after{print-color-adjust: exact;-webkit-print-color-adjust: exact;backdrop-filter: none !important;-webkit-backdrop-filter: none !important;animation-delay: -99s !important;animation-duration: .001s !important;animation-iteration-count: 1 !important;animation-fill-mode: both !important;animation-play-state: running !important;transition-duration: 0s !important;}}</style>
+<meta charset="utf-8">
+<title>Agent Plan — Dashboard</title>
+<style>x-dc{display:none!important}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com" data-dc-tpl="1"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" data-dc-tpl="2"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" data-dc-tpl="3"><style data-dc-tpl="4">
+  :root{
+    --bg-base:#f8fafc; --grad-a:rgba(59,130,246,0.18); --grad-b:rgba(139,92,246,0.16);
+    --surface:rgba(255,255,255,0.76); --surface-strong:rgba(255,255,255,0.9); --surface-elevated:rgba(255,255,255,0.98);
+    --border:rgba(148,163,184,0.22); --border-strong:rgba(148,163,184,0.34);
+    --text:#0f172a; --text-muted:#475569; --text-subtle:#64748b;
+    --accent:#6366f1; --accent-hover:#4f46e5; --accent-soft:rgba(99,102,241,0.14);
+    --feature:#8b5cf6; --phase:#06b6d4; --task:#10b981;
+    --done:#22c55e; --in-progress:#f59e0b; --paused:#ea580c; --planned:#0ea5e9; --blocked:#ef4444; --draft:#94a3b8;
+    --pos:#15803d; --neg:#b45309; --bad:#b91c1c; --phase-ink:#0e7490; --task-ink:#047857;
+    --done-ink:#15803d; --inprog-ink:#b45309; --planned-ink:#0369a1; --paused-ink:#c2410c; --blocked-ink:#b91c1c; --draft-ink:#475569;
+    --shadow-card:0 12px 30px -18px rgba(15,23,42,0.18); --shadow-panel:0 20px 60px -24px rgba(15,23,42,0.22);
+  }
+  .t-dark{
+    --bg-base:#08111f; --grad-a:rgba(59,130,246,0.12); --grad-b:rgba(139,92,246,0.14);
+    --surface:rgba(15,23,42,0.74); --surface-strong:rgba(15,23,42,0.88); --surface-elevated:rgba(15,23,42,0.96);
+    --border:rgba(148,163,184,0.16); --border-strong:rgba(148,163,184,0.3);
+    --text:#f8fafc; --text-muted:#94a3b8; --text-subtle:#7c8aa0;
+    --accent:#818cf8; --accent-hover:#a5b4fc; --accent-soft:rgba(129,140,248,0.18);
+    --feature:#a78bfa; --phase:#22d3ee; --task:#34d399;
+    --done:#4ade80; --in-progress:#fbbf24; --paused:#fb923c; --planned:#38bdf8; --blocked:#f87171; --draft:#94a3b8;
+    --pos:#4ade80; --neg:#fbbf24; --bad:#f87171; --phase-ink:#22d3ee; --task-ink:#34d399;
+    --done-ink:#4ade80; --inprog-ink:#fbbf24; --planned-ink:#38bdf8; --paused-ink:#fb923c; --blocked-ink:#f87171; --draft-ink:#94a3b8;
+    --shadow-card:0 12px 30px -18px rgba(0,0,0,0.5); --shadow-panel:0 20px 60px -24px rgba(0,0,0,0.65);
+  }
+  .approot{height:100vh;overflow:hidden;display:flex;flex-direction:column;color:var(--text);background:radial-gradient(1200px 700px at 8% -5%,var(--grad-a),transparent 60%),radial-gradient(1100px 700px at 100% 108%,var(--grad-b),transparent 58%),var(--bg-base)}
+  .appshell>main{overflow:auto;min-height:0}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Inter",ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg-base);-webkit-font-smoothing:antialiased;}
+  a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent-hover)}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  .eyebrow{font-size:10px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin:0}
+  .card{background:var(--surface-strong);border:1px solid var(--border);border-radius:20px;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);box-shadow:var(--shadow-card)}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:24px;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);box-shadow:var(--shadow-panel)}
+  .badge{display:inline-flex;align-items:center;gap:6px;border-radius:9999px;padding:3px 10px;font-size:11px;font-weight:600;line-height:1;white-space:nowrap}
+  .dot{width:7px;height:7px;border-radius:9999px;display:inline-block;flex-shrink:0}
+  .ent{display:inline-flex;align-items:center;gap:6px;border-radius:9999px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.04em;white-space:nowrap;flex-shrink:0}
+  .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);border-radius:14px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer}
+  .btn-sm{padding:6px 11px;font-size:12px;border-radius:11px}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .navlink{font-size:13px;font-weight:600;color:var(--text-muted);padding:7px 12px;border-radius:12px}
+  .navlink.active{color:var(--accent);background:var(--accent-soft)}
+  .meter{height:8px;border-radius:9999px;background:rgba(148,163,184,0.22);overflow:hidden;flex-shrink:0}
+  .ico{width:15px;height:15px;display:inline-block;vertical-align:middle;flex-shrink:0}
+  .ttl2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .seg{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:600;color:var(--text-muted);background:transparent;border:0;padding:1px 3px;border-radius:5px;cursor:pointer;line-height:1.4}
+  .seg:hover{color:var(--accent);background:var(--accent-soft);text-decoration:underline}
+  .idsep{color:var(--text-subtle);font-size:10px;font-family:"JetBrains Mono",monospace}
+  .copyid{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:6px;border:1px solid var(--border);background:var(--surface-elevated);color:var(--text-subtle);cursor:pointer;flex-shrink:0}
+  .copyid:hover{color:var(--accent);border-color:var(--accent)}
+  .shortid{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--text-subtle);border:1px dashed var(--border-strong);border-radius:6px;padding:1px 5px;cursor:pointer;line-height:1.4}
+  .shortid:hover{color:var(--accent);border-color:var(--accent)}
+  .navitem{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:12px;padding:8px 10px;cursor:pointer;color:var(--text)}
+  .navitem:hover{background:var(--surface-elevated)}
+  .navitem.on{background:var(--surface-elevated);border-color:var(--border-strong)}
+  .fchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:9999px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--text-muted);cursor:pointer;white-space:nowrap}
+  .selmini{font-size:11px;border:1px solid var(--border-strong);background-color:var(--surface-elevated);color:var(--text-muted);border-radius:9px;padding:4px 26px 4px 9px;font-family:inherit;font-weight:600;cursor:pointer;max-width:100%;appearance:none;-webkit-appearance:none;-moz-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;background-size:12px;transition:border-color .12s ease,box-shadow .12s ease}
+  .selmini:hover{border-color:var(--accent);color:var(--text)}
+  .selmini:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+  .selmini option{font-weight:500;color:var(--text);background:var(--surface-elevated)}
+  .trow{display:flex;gap:10px;border-radius:12px;border:1px solid var(--border);background:var(--surface-elevated)}
+  .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;border:1px solid var(--border);background:var(--surface-elevated);cursor:pointer;color:var(--text-subtle);flex-shrink:0}
+  .iconbtn:hover{color:var(--accent);border-color:var(--accent)}
+  .tokchip{display:inline-flex;align-items:center;gap:5px;max-width:100%;min-width:0;background:var(--accent-soft);color:var(--accent);border-radius:8px;padding:3px 5px 3px 9px;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:600;white-space:nowrap}
+  .tokx{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;border:0;background:rgba(99,102,241,0.18);color:var(--accent);cursor:pointer}
+  .sugrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:transparent;border-radius:10px;padding:7px 9px;cursor:pointer;color:var(--text)}
+  .sugrow:hover{background:var(--accent-soft)}
+  .grid-auto{display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:16px}
+  .cardhead{display:flex;align-items:center;justify-content:space-between;gap:6px 12px;flex-wrap:wrap}
+  .chartframe{border:1px solid var(--border);border-radius:16px;background:var(--surface-elevated);padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+  .kpi{border:1px solid var(--border);background:var(--surface-elevated);border-radius:14px;padding:9px 12px;flex:1 1 120px;min-width:112px}
+  .kpi dt{font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle)}
+  .kpi dd{margin:4px 0 0;font-size:20px;font-weight:700;line-height:1}
+  .stickyhdr{position:sticky;top:0;z-index:20}
+  .toktxt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* filter bar: elastic input + actions always on one row; never wider than the layout */
+  .exp-body{overflow-x:clip}
+  .exp-toolbar{display:flex;flex:1 1 auto;min-width:0;flex-wrap:nowrap;align-items:center;gap:8px}
+  .filterbar-wrap{position:sticky;top:var(--focus-h,0px);z-index:25;flex:1 1 100%;min-width:0;max-width:100%;display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);background:var(--surface-elevated);max-height:480px;transition:transform .26s ease,opacity .2s ease,max-height .26s ease,padding .26s ease,border-color .26s ease}
+  /* hidden: the bar slides off-screen to the right and gives its height back */
+  .filterbar-wrap.collapsed{transform:translateX(calc(100% + 32px));opacity:0;max-height:0;padding-top:0;padding-bottom:0;border-bottom-color:transparent;overflow:hidden;pointer-events:none}
+  .fbtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--border-strong);background:transparent;color:var(--text-muted);border-radius:10px;padding:5px 10px;min-height:30px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0}
+  .fbtn:hover{border-color:var(--accent);color:var(--text)}
+  .fbtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  /* sticky reopen tab: only while the bar is hidden */
+  .exp-toggle{display:none;top:var(--filt-top,100px)}
+  .exp-toggle.collapsed{display:flex}
+  .exp-toggle .tdot{position:absolute;top:6px;left:5px;width:6px;height:6px;border-radius:9999px;background:var(--accent)}
+  .hdr-nav{display:flex;flex-wrap:wrap;gap:4px}
+  .hdr-id{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .hdr-burger{display:none}
+  .idtag{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:600;color:var(--text-muted);background:var(--surface-elevated);border:1px solid var(--border);border-radius:7px;padding:2px 7px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .indent-f{margin-left:26px}
+  .indent-p{margin-left:22px}
+  .titlelink{background:transparent;border:0;padding:0;margin:0;text-align:left;font:inherit;color:var(--text);cursor:pointer}
+  .titlelink:hover{color:var(--accent);text-decoration:underline}
+  .tl-strong{font-weight:600}
+  .tl-done{color:var(--text-muted);text-decoration:line-through;text-decoration-color:rgba(148,163,184,0.5)}
+  input,select{font-family:inherit}
+  /* ===== shell: sidebar + drawer ===== */
+  .appshell{display:flex;flex-grow:1;min-height:0}
+  .sidebar{width:230px;flex-shrink:0;border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:2px;background:var(--surface-strong);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);transition:width .18s ease, transform .2s ease;overflow-y:auto}
+  .snavgroup{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle);padding:0 12px;margin:14px 0 6px}
+  .snav{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:11px;padding:9px 12px;cursor:pointer;color:var(--text-muted);font-size:14px;font-weight:600;text-decoration:none}
+  .snav:hover{background:var(--surface-elevated);color:var(--text)}
+  .snav.on{background:var(--surface-elevated);border-color:var(--border-strong);color:var(--text)}
+  .snav.on svg{color:var(--accent)}
+  .snav svg{flex-shrink:0;color:currentColor;width:17px;height:17px}
+  .ssub{padding-left:34px;font-size:13px}
+  .ssub svg{width:15px;height:15px}
+  .navtoggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);cursor:pointer;flex-shrink:0}
+  .scrim{display:none}
+  .side-foot{border-top:1px solid var(--border);margin-top:4px;padding:12px 12px 4px;font-size:11px;color:var(--text-subtle);line-height:1.6}
+  .approot.side-collapsed .sidebar{width:64px !important}
+  .approot.side-collapsed .snav{justify-content:center;gap:0;font-size:0;padding-left:0;padding-right:0}
+  .approot.side-collapsed .snavgroup,.approot.side-collapsed .ssub,.approot.side-collapsed .side-foot{display:none}
+  *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:9999px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--text-subtle);background-clip:content-box;border:3px solid transparent}
+  @media (max-width:1180px){
+    .sidebar{position:fixed;top:0;bottom:0;left:0;z-index:60;width:248px !important;transform:translateX(-100%);box-shadow:0 20px 50px rgba(0,0,0,0.4);max-height:none}
+    .approot:not(.side-collapsed) .sidebar{transform:translateX(0)}
+    .approot.side-collapsed .snav{font-size:14px;gap:11px;justify-content:flex-start;padding:9px 12px}
+    .approot.side-collapsed .snavgroup{display:block}
+    .approot.side-collapsed .ssub,.approot.side-collapsed .side-foot{display:block}
+    .approot:not(.side-collapsed) .scrim{display:block;position:fixed;inset:0;background:rgba(2,6,23,0.5);z-index:55}
+  }
+  .sideclose{display:none}
+  @media (max-width:1180px){ .sideclose{display:inline-flex !important} }
+  .wifi-status{display:inline-flex;align-items:center;gap:4px;color:var(--done)}
+  .live-dot{width:7px;height:7px;border-radius:9999px;background:var(--done);display:inline-block;animation:livepulse 1.6s ease-in-out infinite}
+  @keyframes livepulse{0%,100%{opacity:1}50%{opacity:.35}}
+  @media (max-width:640px){
+    .seg-text{display:none}
+    .wifi-status svg{display:none}
+    .statseg,.statdiv{display:none !important}
+    .statchip{border-radius:10px}
+    .dashcol{gap:12px !important}
+    .statstrip{padding:10px 12px !important;gap:8px !important}
+    .statcell{flex:1 1 calc(50% - 4px) !important;min-width:0 !important}
+    .statdivv{display:none !important}
+    .anacard{padding:14px 14px !important}
+    .kpi{flex:1 1 calc(33.333% - 6px) !important;min-width:0 !important;padding:6px 8px}
+    .kpi dt{font-size:9px;letter-spacing:.06em}
+    .kpi dd{font-size:15px;margin-top:3px}
+    .btxt{display:none}
+    .goal-actions .btn{padding:7px 9px !important}
+    .exp-title{flex:1 1 100% !important}
+    .exp-search{min-width:0 !important;flex:1 1 auto !important}
+    .exp-input{min-width:70px !important}
+    .filterbar-wrap{order:1}
+    .exp-toolbar{gap:6px !important}
+    .exp-toolbar .selmini{padding:5px 20px 5px 8px !important;min-width:0}
+    .exp-toolgrp{flex-shrink:0}
+    .exp-toolgrp button{padding:5px 8px !important}
+    .exp-tree{order:2}
+    .sumbar{gap:5px 10px !important;padding:9px 12px !important}
+  }
+  @media (max-width:720px){
+    .shell-pad{padding:22px 14px 56px !important}
+    .goal-pad{padding:18px 16px !important}
+    .explorer-pad{padding:16px 14px !important}
+    .indent-f{margin-left:10px}
+    .indent-p{margin-left:8px}
+    .shortid{display:none}
+    .goal-actions{justify-content:flex-start !important;gap:6px}
+    .goal-actions .btn{padding:6px 10px;font-size:12px;border-radius:11px;gap:6px}
+    .hdr-burger{display:inline-flex}
+    .hdr-nav{display:none;order:9;flex-basis:100%;flex-direction:column;align-items:stretch;gap:2px;border-top:1px solid var(--border);padding-top:8px;margin-top:4px}
+    .hdr-nav.open{display:flex}
+    .hdr-id{display:none}
+  }
+
+  /* project switcher + mobile shell (rooms proposal, 2026-11-02) */
+  .projsw{position:relative;min-width:0}
+  .projsw>summary{list-style:none;cursor:pointer;display:flex;align-items:center;border-radius:10px;padding:4px 8px;margin:-4px -8px;min-width:0;color:var(--text)}
+  .projsw>summary::-webkit-details-marker{display:none}
+  .projsw>summary:hover{background:var(--accent-soft)}
+  .projsw>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .projsw[open] .projsw-caret{transform:rotate(180deg)}
+  .projsw[open]>summary{position:relative;z-index:72}
+  .projsw[open]>summary::before{content:"";position:fixed;inset:0;z-index:-1;cursor:default}
+  .projsw-menu{z-index:73 !important;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+  header:has(.projsw[open]){z-index:90 !important}
+  .projsw-path{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-subtle);margin-top:1px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .projsw-menu{position:absolute;top:calc(100% + 10px);left:-8px;z-index:70;width:min(330px,calc(100vw - 32px));background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:14px;box-shadow:0 20px 50px -20px rgba(2,6,23,0.55);padding:8px;display:flex;flex-direction:column;gap:2px}
+  .projsw-head{margin:4px 8px 6px;font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)}
+  .projsw-item{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 10px;border-radius:10px;color:var(--text);text-decoration:none}
+  .projsw-item:hover,.projsw-item.on{background:var(--accent-soft)}
+  .projsw-txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto;font-size:13.5px}
+  .projsw-txt .mono{font-size:10.5px;color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .projsw-meta{font-size:11px;color:var(--text-subtle);white-space:nowrap}
+  .projsw-foot{margin:6px 8px 4px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;line-height:1.5;color:var(--text-subtle)}
+  @supports (height:100dvh){ .app,.approot{height:100dvh} }
+  @media (max-width:760px){
+    .app,.approot{height:auto !important;min-height:100dvh;overflow:visible !important}
+    .app main,.approot main,.shell>main{overflow:visible !important}
+    .app>div:nth-child(2),.approot>div:nth-child(2){padding:6px 16px !important;font-size:10px !important;gap:6px !important}
+    .app>div:nth-child(2)>span:first-child,.approot>div:nth-child(2)>span:first-child{display:none}
+    .app>header,.approot>header{padding:8px 12px !important;gap:8px !important}
+    .hdr-hide-sm{display:none !important}
+    .stickyhdr,[style*="position:sticky"]{position:static !important}
+    .filterbar-wrap{top:0 !important}
+    .msglist{height:min(560px,62dvh) !important}
+    .exp-input{min-width:64px !important;flex:1 1 64px !important;width:64px}
+    input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{font-size:16px !important}
+  }
+</style><meta name="generator" content="scripts/export-mockup-static.mjs">
+</head>
+<body>
+<div id="dc-root"><div class="sc-host" data-sc-name="Main"><div data-dc-tpl="5" class="approot  ">
+  <div data-dc-tpl="6" class="scrim"></div>
+  <div data-dc-tpl="7" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 24px; background: var(--surface-strong); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text-subtle); position: relative; z-index: 12;">
+    <span data-dc-tpl="8" class="mono">F025 · Web UI reorganization proposal</span><span data-dc-tpl="9">Demo scenario · illustrative data</span>
+  </div>
+  <header data-dc-tpl="10" class="apphdr" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 11px 20px; border-bottom: 1px solid var(--border); position: relative; z-index: 12;">
+    <div data-dc-tpl="11" class="hb-left" style="display: flex; align-items: center; gap: 11px; min-width: 0px; flex: 1 1 auto;">
+      <button data-dc-tpl="12" type="button" class="navtoggle" aria-label="Toggle navigation" style="width: 32px; height: 32px; border-color: var(--border);"><svg data-dc-tpl="13" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-dc-tpl="14" d="M3 6h18M3 12h18M3 18h18"></path></svg></button>
+      <details data-dc-tpl="15" class="projsw">
+        <summary data-dc-tpl="16" aria-label="Current project: Agent Plan. Switch project">
+          <span data-dc-tpl="17" style="display: flex; flex-direction: column; min-width: 0px;">
+            <span data-dc-tpl="18" style="display: flex; align-items: center; gap: 7px;"><span data-dc-tpl="19" style="font-size: 16px; font-weight: 700; line-height: 1.15; white-space: nowrap;">Agent Plan</span><svg data-dc-tpl="20" class="projsw-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="21" d="m6 9 6 6 6-6"></path></svg></span>
+            <span data-dc-tpl="22" class="mono projsw-path"><svg data-dc-tpl="23" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="24" d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>~/code/agent-plan</span>
+          </span>
+        </summary>
+        <div data-dc-tpl="25" class="projsw-menu">
+          <p data-dc-tpl="26" class="projsw-head">Projects on this machine</p>
+          <a data-dc-tpl="27" class="projsw-item on" href="#" aria-current="true"><span data-dc-tpl="28" class="projsw-txt"><b data-dc-tpl="29">Agent Plan</b><span data-dc-tpl="30" class="mono">~/code/agent-plan</span></span><span data-dc-tpl="31" class="projsw-meta">3 rooms</span><svg data-dc-tpl="32" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent); flex-shrink: 0;"><path data-dc-tpl="33" d="M20 6 9 17l-5-5"></path></svg></a>
+          <a data-dc-tpl="34" class="projsw-item" href="#"><span data-dc-tpl="35" class="projsw-txt"><b data-dc-tpl="36">Heca-Pro</b><span data-dc-tpl="37" class="mono">~/code/heca-pro</span></span><span data-dc-tpl="38" class="projsw-meta">1 room</span></a>
+          <a data-dc-tpl="39" class="projsw-item" href="#"><span data-dc-tpl="40" class="projsw-txt"><b data-dc-tpl="41">Heca</b><span data-dc-tpl="42" class="mono">~/code/heca</span></span><span data-dc-tpl="43" class="projsw-meta">No rooms</span></a>
+          <p data-dc-tpl="44" class="projsw-foot">A project appears here once an agent loads the planner in its folder. Switching keeps the current section.</p>
+        </div>
+      </details>
+    </div>
+    <div data-dc-tpl="45" style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+      <span data-dc-tpl="46" class="wifi-status" title="Web UI server connected — the dashboard is live and updates in real time as agents work" aria-label="Web UI live"><svg data-dc-tpl="47" class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="48" d="M5 12.55a11 11 0 0 1 14 0M2 8.82a16 16 0 0 1 20 0M8.5 16.43a6 6 0 0 1 7 0"></path></svg><span data-dc-tpl="49" class="live-dot"></span></span>
+      <button data-dc-tpl="50" type="button" class="iconbtn" aria-label="Switch to dark theme" style="width: 32px; height: 32px;">
+        
+        <svg data-dc-tpl="56" class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="57" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+      </button>
+      <button data-dc-tpl="58" type="button" class="statchip" aria-expanded="true" title="Tasks running now vs. parked for later — show or hide the list" style="display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); background: var(--surface-elevated); border-radius: 9999px; padding: 4px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; color: var(--text);">
+        <span data-dc-tpl="59" class="statseg" title="In progress — active sessions running now" style="display: inline-flex; align-items: center; gap: 4px; color: var(--inprog-ink);"><span data-dc-tpl="60" class="dot" style="width: 7px; height: 7px; background: var(--in-progress);"></span><span class="sc-interp">3</span><span data-dc-tpl="61" class="seg-text">&nbsp;in&nbsp;progress</span></span>
+        <span data-dc-tpl="62" class="statdiv" aria-hidden="true" style="color: var(--text-subtle); font-weight: 600;">/</span>
+        <span data-dc-tpl="63" class="statseg" title="Parked — checkpointed, waiting to be resumed" style="display: inline-flex; align-items: center; gap: 4px; color: var(--paused-ink);"><svg data-dc-tpl="64" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="var(--paused)" stroke="none" aria-hidden="true"><rect data-dc-tpl="65" x="6" y="5" width="4" height="14" rx="1"></rect><rect data-dc-tpl="66" x="14" y="5" width="4" height="14" rx="1"></rect></svg><span class="sc-interp">1</span><span data-dc-tpl="67" class="seg-text">&nbsp;parked</span></span>
+        <svg data-dc-tpl="68" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: rotate(180deg); color: var(--text-subtle);"><path data-dc-tpl="69" d="m6 9 6 6 6-6"></path></svg>
+      </button>
+    </div>
+  </header>
+  <div data-dc-tpl="70" class="appshell">
+    <aside data-dc-tpl="71" class="sidebar">
+      <button data-dc-tpl="72" type="button" class="sideclose" aria-label="Close menu" style="align-self: flex-end; align-items: center; justify-content: center; gap: 6px; width: auto; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; margin-bottom: 6px;"><svg data-dc-tpl="73" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="74" d="M18 6 6 18M6 6l12 12"></path></svg>Close</button>
+      <div data-dc-tpl="75" class="snavgroup">Work</div>
+      <a data-dc-tpl="76" class="snav" href="Resume.html"><svg data-dc-tpl="77" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="78" d="M9 14 4 9l5-5"></path><path data-dc-tpl="79" d="M4 9h11a5 5 0 0 1 5 5v6"></path></svg>Resume</a>
+      <a data-dc-tpl="80" class="snav on" href="Main.html"><svg data-dc-tpl="81" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="82" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>Planner</a>
+      <a data-dc-tpl="83" class="snav ssub" href="#"><svg data-dc-tpl="84" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="85" d="m3 17 2 2 4-4"></path><path data-dc-tpl="86" d="m3 7 2 2 4-4"></path><path data-dc-tpl="87" d="M13 6h8M13 12h8M13 18h8"></path></svg>Requirements</a>
+      <a data-dc-tpl="88" class="snav ssub" href="#"><svg data-dc-tpl="89" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="90" d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"></path></svg>Ideas</a>
+      <a data-dc-tpl="91" class="snav ssub" href="#"><svg data-dc-tpl="92" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="93" d="M8 3 4 7l4 4"></path><path data-dc-tpl="94" d="M4 7h16"></path><path data-dc-tpl="95" d="m16 21 4-4-4-4"></path><path data-dc-tpl="96" d="M20 17H4"></path></svg>Handoff</a>
+      <a data-dc-tpl="97" class="snav ssub" href="Rooms.html"><svg data-dc-tpl="98" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="99" d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Rooms</a>
+      <a data-dc-tpl="100" class="snav" href="Agents.html"><svg data-dc-tpl="101" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle data-dc-tpl="102" cx="6" cy="6" r="2.5"></circle><circle data-dc-tpl="103" cx="6" cy="18" r="2.5"></circle><circle data-dc-tpl="104" cx="18" cy="12" r="2.5"></circle><path data-dc-tpl="105" d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"></path></svg>Agents &amp; targets</a>
+      <div data-dc-tpl="106" class="snavgroup">Context</div>
+      <a data-dc-tpl="107" class="snav" href="Map.html"><svg data-dc-tpl="108" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="109" x="9" y="3" width="6" height="5" rx="1"></rect><rect data-dc-tpl="110" x="3" y="16" width="6" height="5" rx="1"></rect><rect data-dc-tpl="111" x="15" y="16" width="6" height="5" rx="1"></rect><path data-dc-tpl="112" d="M12 8v4M6 16v-2h12v2"></path></svg>Map</a>
+      <a data-dc-tpl="113" class="snav" href="Code.html"><svg data-dc-tpl="114" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="115" d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg>Code</a>
+      <a data-dc-tpl="116" class="snav" href="Checks.html"><svg data-dc-tpl="117" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="118" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path data-dc-tpl="119" d="m9 12 2 2 4-4"></path></svg>Checks</a>
+      <a data-dc-tpl="120" class="snav" href="Analytics.html"><svg data-dc-tpl="121" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="122" d="M3 3v18h18"></path><rect data-dc-tpl="123" x="7" y="12" width="3" height="6"></rect><rect data-dc-tpl="124" x="12" y="8" width="3" height="10"></rect><rect data-dc-tpl="125" x="17" y="5" width="3" height="13"></rect></svg>Analytics</a>
+      <div data-dc-tpl="126" class="snavgroup">Proposals</div>
+      <a data-dc-tpl="127" class="snav" href="Evaluate.html"><svg data-dc-tpl="128" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="129" d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.2 1 2h6c0-.8.3-1.3 1-2a7 7 0 0 0-4-12z"></path></svg>To evaluate</a>
+      <div data-dc-tpl="130" style="flex-grow: 1; min-height: 10px;"></div>
+      <a data-dc-tpl="131" class="snav" href="Settings.html"><svg data-dc-tpl="132" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle data-dc-tpl="133" cx="12" cy="12" r="3"></circle><path data-dc-tpl="134" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>Settings</a>
+      <div data-dc-tpl="135" class="side-foot">One shared planner<br data-dc-tpl="136">Code &amp; sessions kept separate</div>
+    </aside>
+    <main data-dc-tpl="137" class="shell-pad" style="flex-grow: 1; min-width: 0px; padding: 14px 24px 64px;"><div data-dc-tpl="138" class="dashcol" style="max-width: 1200px; margin: 0px auto; display: flex; flex-direction: column; gap: 18px;">
+
+  
+  <div data-dc-tpl="139" class="stickyhdr" style="display: flex; flex-direction: column; gap: 10px; padding-top: 0px;">
+  
+  
+  <div data-dc-tpl="141" class="card" style="padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;">
+
+    
+    <div data-dc-tpl="143" style="display: flex; flex-direction: column; gap: 6px; max-height: 188px; overflow: auto; overscroll-behavior: contain;">
+      
+        <div data-dc-tpl="145" style="display: flex; align-items: center; gap: 9px; flex-wrap: wrap; border: 1px solid rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.06); border-radius: 11px; padding: 6px 10px;">
+          <span data-dc-tpl="146" class="dot" style="width: 8px; height: 8px; background: var(--in-progress);"></span>
+          <span data-dc-tpl="147" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0;">
+            <button data-dc-tpl="148" type="button" class="seg" aria-label="Open F004"><span class="sc-interp">F004</span></button><span data-dc-tpl="149" class="idsep">/</span><button data-dc-tpl="150" type="button" class="seg" aria-label="Open P039(F004)"><span class="sc-interp">P039</span></button><span data-dc-tpl="151" class="idsep">/</span><button data-dc-tpl="152" type="button" class="seg" aria-label="Open P039(F004)/T012"><span class="sc-interp">T012</span></button>
+            <button data-dc-tpl="153" type="button" class="copyid" aria-label="Copy P039(F004)/T012"><svg data-dc-tpl="154" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="155" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="156" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+          </span>
+          <button data-dc-tpl="157" type="button" class="titlelink tl-strong" style="flex: 1 1 150px; min-width: 0px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><span class="sc-interp">Expose started / closed on the API and the web tree</span></button>
+          <span data-dc-tpl="158" class="mono" style="font-size: 11px; color: var(--text-subtle); flex-shrink: 0;"><span class="sc-interp">claude-1</span></span>
+        </div>
+      
+        <div data-dc-tpl="145" style="display: flex; align-items: center; gap: 9px; flex-wrap: wrap; border: 1px solid rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.06); border-radius: 11px; padding: 6px 10px;">
+          <span data-dc-tpl="146" class="dot" style="width: 8px; height: 8px; background: var(--in-progress);"></span>
+          <span data-dc-tpl="147" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0;">
+            <button data-dc-tpl="148" type="button" class="seg" aria-label="Open F008"><span class="sc-interp">F008</span></button><span data-dc-tpl="149" class="idsep">/</span><button data-dc-tpl="150" type="button" class="seg" aria-label="Open P041(F008)"><span class="sc-interp">P041</span></button><span data-dc-tpl="151" class="idsep">/</span><button data-dc-tpl="152" type="button" class="seg" aria-label="Open P041(F008)/T004"><span class="sc-interp">T004</span></button>
+            <button data-dc-tpl="153" type="button" class="copyid" aria-label="Copy P041(F008)/T004"><svg data-dc-tpl="154" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="155" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="156" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+          </span>
+          <button data-dc-tpl="157" type="button" class="titlelink tl-strong" style="flex: 1 1 150px; min-width: 0px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><span class="sc-interp">Refuse recovery for a process that is still alive</span></button>
+          <span data-dc-tpl="158" class="mono" style="font-size: 11px; color: var(--text-subtle); flex-shrink: 0;"><span class="sc-interp">claude-1</span></span>
+        </div>
+      
+        <div data-dc-tpl="145" style="display: flex; align-items: center; gap: 9px; flex-wrap: wrap; border: 1px solid rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.06); border-radius: 11px; padding: 6px 10px;">
+          <span data-dc-tpl="146" class="dot" style="width: 8px; height: 8px; background: var(--in-progress);"></span>
+          <span data-dc-tpl="147" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0;">
+            <button data-dc-tpl="148" type="button" class="seg" aria-label="Open F003"><span class="sc-interp">F003</span></button><span data-dc-tpl="149" class="idsep">/</span><button data-dc-tpl="150" type="button" class="seg" aria-label="Open P040(F003)"><span class="sc-interp">P040</span></button><span data-dc-tpl="151" class="idsep">/</span><button data-dc-tpl="152" type="button" class="seg" aria-label="Open P040(F003)/T008"><span class="sc-interp">T008</span></button>
+            <button data-dc-tpl="153" type="button" class="copyid" aria-label="Copy P040(F003)/T008"><svg data-dc-tpl="154" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="155" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="156" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+          </span>
+          <button data-dc-tpl="157" type="button" class="titlelink tl-strong" style="flex: 1 1 150px; min-width: 0px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><span class="sc-interp">Live entity-changed WebSocket sync</span></button>
+          <span data-dc-tpl="158" class="mono" style="font-size: 11px; color: var(--text-subtle); flex-shrink: 0;"><span class="sc-interp">claude-3</span></span>
+        </div>
+      
+    </div>
+    
+
+    
+
+    <div data-dc-tpl="172" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 8px;">
+      
+        <span data-dc-tpl="174" class="eyebrow" style="color: var(--accent); flex-shrink: 0;">Next</span>
+        <span data-dc-tpl="175" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0;"><button data-dc-tpl="176" type="button" class="seg" aria-label="Locate P039(F004)/T013"><span class="sc-interp">P039(F004)/T013</span></button></span>
+        <button data-dc-tpl="177" type="button" class="titlelink" style="flex: 1 1 120px; min-width: 0px; font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><span class="sc-interp">Snapshot test the derived-status matrix across every parent/child combination</span></button>
+        <button data-dc-tpl="178" type="button" class="btn btn-primary btn-sm" style="flex-shrink: 0;">Start</button>
+      
+      <span data-dc-tpl="179" style="flex-grow: 1; min-width: 4px;"></span>
+      
+        <button data-dc-tpl="181" type="button" class="fchip" aria-expanded="false" style="flex-shrink: 0;"><span data-dc-tpl="182" class="dot" style="background: var(--paused);"></span><span class="sc-interp">1</span> parked <svg data-dc-tpl="183" class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: rotate(0deg);"><path data-dc-tpl="184" d="m6 9 6 6 6-6"></path></svg></button>
+      
+    </div>
+
+    
+  </div>
+  
+  </div>
+
+  
+  <div data-dc-tpl="203" class="card goal-pad" style="padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; position: relative; z-index: 5;">
+    <div data-dc-tpl="204" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+      <div data-dc-tpl="205" style="display: flex; flex-direction: column; gap: 4px; min-width: 0px; flex: 1 1 320px;">
+        <p data-dc-tpl="206" class="eyebrow">Project goal</p>
+        <h1 data-dc-tpl="207" style="margin: 0px; font-size: 18px; font-weight: 700;"><span class="sc-interp">A durable, inspectable planning workspace for AI coding agents</span></h1>
+      </div>
+      <div data-dc-tpl="208" class="goal-actions" style="display: flex; gap: 8px; flex: 1 1 300px; min-width: 0px; flex-wrap: wrap; justify-content: flex-end; position: relative;">
+        <button data-dc-tpl="209" class="iconbtn" type="button" aria-expanded="false" title="Show / hide project description" style="width: 32px; height: 32px;"><svg data-dc-tpl="210" class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: rotate(0deg);"><path data-dc-tpl="211" d="m6 9 6 6 6-6"></path></svg></button>
+        <button data-dc-tpl="212" class="btn" type="button" title="Project details">
+          <svg data-dc-tpl="213" class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle data-dc-tpl="214" cx="12" cy="12" r="10"></circle><path data-dc-tpl="215" d="M12 16v-4M12 8h.01"></path></svg>
+          <span data-dc-tpl="216" class="btxt">Project details</span>
+        </button>
+        <button data-dc-tpl="217" class="btn" type="button" title="Edit project">
+          <svg data-dc-tpl="218" class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="219" d="M12 20h9"></path><path data-dc-tpl="220" d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+          <span data-dc-tpl="221" class="btxt">Edit</span>
+        </button>
+        <button data-dc-tpl="222" class="btn" type="button" aria-expanded="false" title="Export Markdown">
+          <svg data-dc-tpl="223" class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="224" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path data-dc-tpl="225" d="M7 10l5 5 5-5"></path><path data-dc-tpl="226" d="M12 15V3"></path></svg>
+          <span data-dc-tpl="227" class="btxt">Export</span>
+          <svg data-dc-tpl="228" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="229" d="m6 9 6 6 6-6"></path></svg>
+        </button>
+        
+      </div>
+    </div>
+    
+  </div>
+
+  
+  <div data-dc-tpl="242" class="sumbar" style="display: flex; flex-wrap: wrap; align-items: center; gap: 7px 16px; padding: 9px 16px; border: 1px solid var(--border); background: var(--surface-elevated); border-radius: 12px; font-size: 12px;">
+    <span data-dc-tpl="243" style="display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted);"><strong data-dc-tpl="244" style="color: var(--text); font-size: 13px;">9</strong>features</span>
+    <span data-dc-tpl="245" class="sumsep" aria-hidden="true" style="color: var(--text-subtle);">·</span>
+    <span data-dc-tpl="246" style="display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted);"><strong data-dc-tpl="247" style="color: var(--text); font-size: 13px;">41</strong>phases</span>
+    <span data-dc-tpl="248" class="sumsep" aria-hidden="true" style="color: var(--text-subtle);">·</span>
+    <span data-dc-tpl="249" style="display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted);"><strong data-dc-tpl="250" style="color: var(--text); font-size: 13px;">182</strong>tasks</span>
+    <span data-dc-tpl="251" style="flex-grow: 1; min-width: 8px;"></span>
+    <span data-dc-tpl="252" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted);"><span data-dc-tpl="253"><strong data-dc-tpl="254" style="color: var(--pos); font-size: 13px;">81%</strong> done</span><span data-dc-tpl="255" class="meter" style="width: 96px; max-width: 30vw;"><span data-dc-tpl="256" style="display: block; width: 81%; height: 100%; background: linear-gradient(90deg,var(--task),var(--done));"></span></span></span>
+    <a data-dc-tpl="257" href="Analytics.html" style="display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-weight: 600; text-decoration: none; flex-shrink: 0;">Analytics<svg data-dc-tpl="258" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="259" d="M5 12h14M13 6l6 6-6 6"></path></svg></a>
+  </div>
+
+  
+  <div data-dc-tpl="260" class="panel explorer-pad" id="explorer" style="padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; position: relative;">
+
+    <div data-dc-tpl="261" style="display: flex; flex-direction: column; gap: 12px;">
+      <div data-dc-tpl="262" style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px;">
+        <div data-dc-tpl="263" class="exp-title" style="display: flex; flex-direction: column; gap: 3px; flex-shrink: 0;">
+          <p data-dc-tpl="264" class="eyebrow">Work explorer</p>
+          <h2 data-dc-tpl="265" style="margin: 0px; font-size: 16px; font-weight: 700;">Features · phases · tasks</h2>
+        </div>
+
+
+
+        <button data-dc-tpl="266" type="button" class="btn btn-primary" aria-expanded="false" title="New feature" style="flex-shrink: 0; margin-left: auto;">
+          <svg data-dc-tpl="267" class="ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="268" d="M12 5v14M5 12h14"></path></svg>
+          <span data-dc-tpl="269" class="btxt">New feature</span>
+        </button>
+      </div>
+
+      
+
+      
+      
+
+    </div>
+
+    <div data-dc-tpl="292" class="exp-body" style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;">
+      <div data-dc-tpl="293" class="filterbar-wrap " aria-hidden="false">
+        <div data-dc-tpl="294" class="exp-toolbar">
+        <div data-dc-tpl="295" class="exp-search" style="position: relative; flex: 1 1 80px; min-width: 0px;">
+          <div data-dc-tpl="296" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; border: 1px solid var(--border-strong); background: var(--surface-elevated); border-radius: 14px; padding: 7px 10px; min-height: 40px;">
+            <svg data-dc-tpl="297" class="ico" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle data-dc-tpl="298" cx="11" cy="11" r="7"></circle><path data-dc-tpl="299" d="m21 21-4.3-4.3"></path></svg>
+            
+            <input data-dc-tpl="306" class="exp-input" type="text" placeholder="Search… e.g. feature:4  status:in-progress  title:api" aria-label="Structured search: field:value tokens" value="" style="flex-grow: 1; min-width: 130px; border: 0px; outline: 0px; background: transparent; font-size: 13px; color: var(--text); padding: 3px 0px;">
+          </div>
+          
+        </div>
+        <div data-dc-tpl="314" class="exp-actions" style="display: flex; flex-wrap: nowrap; flex-shrink: 0; align-items: center; gap: 8px;">
+        <button data-dc-tpl="315" type="button" class="fbtn" title="Expand all" aria-label="Expand all"><svg data-dc-tpl="320" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="321" d="m7 15 5 5 5-5M7 9l5-5 5 5"></path></svg><span data-dc-tpl="322" class="btxt"><span class="sc-interp">Expand all</span></span></button>
+        <button data-dc-tpl="323" type="button" class="fbtn " title="Reset all filters" aria-label="Reset all filters"><svg data-dc-tpl="324" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="325" d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path data-dc-tpl="326" d="M3 3v5h5"></path></svg><span data-dc-tpl="327" class="btxt">Reset</span></button>
+        <button data-dc-tpl="328" type="button" class="fbtn exp-hide" title="Hide filters" aria-label="Hide filters" aria-expanded="true"><svg data-dc-tpl="329" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="330" d="M3 4h18l-7 8v6l-4 2v-8z"></path></svg></button>
+        </div>
+        </div>
+      </div>
+      <aside data-dc-tpl="331" aria-label="Feature navigator" style="flex: 1 1 260px; min-width: 0px; display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-elevated); padding: 10px; max-height: 640px; overflow: auto;">
+        <button data-dc-tpl="332" type="button" class="navitem ">
+          <span data-dc-tpl="333" class="dot" style="background: var(--accent); width: 8px; height: 8px;"></span>
+          <span data-dc-tpl="334" style="flex-grow: 1; font-size: 13px; font-weight: 600;">All features</span>
+          <span data-dc-tpl="335" class="mono" style="font-size: 11px; color: var(--text-subtle);"><span class="sc-interp">6</span></span>
+        </button>
+        <div data-dc-tpl="336" style="height: 1px; background: var(--border); margin: 2px 0px;"></div>
+        
+          <button data-dc-tpl="338" type="button" class="navitem on">
+            <span data-dc-tpl="339" class="dot" style="background: rgb(245, 158, 11); width: 8px; height: 8px;"></span>
+            <span data-dc-tpl="340" style="flex-grow: 1; min-width: 0px; display: flex; flex-direction: column; gap: 3px;">
+              <span data-dc-tpl="341" style="display: flex; align-items: flex-start; gap: 7px; min-width: 0px;"><span data-dc-tpl="342" class="mono" style="font-size: 10px; color: var(--text-subtle); flex-shrink: 0; margin-top: 1px;"><span class="sc-interp">F004</span></span><span data-dc-tpl="343" class="ttl2" title="" style="font-size: 13px; font-weight: 600; line-height: 1.3;"><span class="sc-interp">Harness-agnostic planning core</span></span></span>
+              <span data-dc-tpl="344" style="display: flex; align-items: center; gap: 7px;"><span data-dc-tpl="345" class="meter" style="flex-grow: 1; height: 5px;"><span data-dc-tpl="346" style="display: block; width: 30%; height: 100%; background: var(--feature);"></span></span><span data-dc-tpl="347" class="mono" style="font-size: 10px; color: var(--text-subtle);"><span class="sc-interp">3ph · 10t</span></span></span>
+            </span>
+          </button>
+        
+          <button data-dc-tpl="338" type="button" class="navitem ">
+            <span data-dc-tpl="339" class="dot" style="background: rgb(234, 88, 12); width: 8px; height: 8px;"></span>
+            <span data-dc-tpl="340" style="flex-grow: 1; min-width: 0px; display: flex; flex-direction: column; gap: 3px;">
+              <span data-dc-tpl="341" style="display: flex; align-items: flex-start; gap: 7px; min-width: 0px;"><span data-dc-tpl="342" class="mono" style="font-size: 10px; color: var(--text-subtle); flex-shrink: 0; margin-top: 1px;"><span class="sc-interp">F008</span></span><span data-dc-tpl="343" class="ttl2" title="" style="font-size: 13px; font-weight: 600; line-height: 1.3;"><span class="sc-interp">Multi-session ownership and recovery</span></span></span>
+              <span data-dc-tpl="344" style="display: flex; align-items: center; gap: 7px;"><span data-dc-tpl="345" class="meter" style="flex-grow: 1; height: 5px;"><span data-dc-tpl="346" style="display: block; width: 25%; height: 100%; background: var(--feature);"></span></span><span data-dc-tpl="347" class="mono" style="font-size: 10px; color: var(--text-subtle);"><span class="sc-interp">2ph · 4t</span></span></span>
+            </span>
+          </button>
+        
+          <button data-dc-tpl="338" type="button" class="navitem ">
+            <span data-dc-tpl="339" class="dot" style="background: rgb(34, 197, 94); width: 8px; height: 8px;"></span>
+            <span data-dc-tpl="340" style="flex-grow: 1; min-width: 0px; display: flex; flex-direction: column; gap: 3px;">
+              <span data-dc-tpl="341" style="display: flex; align-items: flex-start; gap: 7px; min-width: 0px;"><span data-dc-tpl="342" class="mono" style="font-size: 10px; color: var(--text-subtle); flex-shrink: 0; margin-top: 1px;"><span class="sc-interp">F002</span></span><span data-dc-tpl="343" class="ttl2" title="" style="font-size: 13px; font-weight: 600; line-height: 1.3;"><span class="sc-interp">Claude Code plugin and marketplace</span></span></span>
+              <span data-dc-tpl="344" style="display: flex; align-items: center; gap: 7px;"><span data-dc-tpl="345" class="meter" style="flex-grow: 1; height: 5px;"><span data-dc-tpl="346" style="display: block; width: 100%; height: 100%; background: var(--feature);"></span></span><span data-dc-tpl="347" class="mono" style="font-size: 10px; color: var(--text-subtle);"><span class="sc-interp">1ph · 2t</span></span></span>
+            </span>
+          </button>
+        
+          <button data-dc-tpl="338" type="button" class="navitem ">
+            <span data-dc-tpl="339" class="dot" style="background: rgb(245, 158, 11); width: 8px; height: 8px;"></span>
+            <span data-dc-tpl="340" style="flex-grow: 1; min-width: 0px; display: flex; flex-direction: column; gap: 3px;">
+              <span data-dc-tpl="341" style="display: flex; align-items: flex-start; gap: 7px; min-width: 0px;"><span data-dc-tpl="342" class="mono" style="font-size: 10px; color: var(--text-subtle); flex-shrink: 0; margin-top: 1px;"><span class="sc-interp">F003</span></span><span data-dc-tpl="343" class="ttl2" title="" style="font-size: 13px; font-weight: 600; line-height: 1.3;"><span class="sc-interp">Local server and React dashboard</span></span></span>
+              <span data-dc-tpl="344" style="display: flex; align-items: center; gap: 7px;"><span data-dc-tpl="345" class="meter" style="flex-grow: 1; height: 5px;"><span data-dc-tpl="346" style="display: block; width: 50%; height: 100%; background: var(--feature);"></span></span><span data-dc-tpl="347" class="mono" style="font-size: 10px; color: var(--text-subtle);"><span class="sc-interp">1ph · 4t</span></span></span>
+            </span>
+          </button>
+        
+          <button data-dc-tpl="338" type="button" class="navitem ">
+            <span data-dc-tpl="339" class="dot" style="background: rgb(14, 165, 233); width: 8px; height: 8px;"></span>
+            <span data-dc-tpl="340" style="flex-grow: 1; min-width: 0px; display: flex; flex-direction: column; gap: 3px;">
+              <span data-dc-tpl="341" style="display: flex; align-items: flex-start; gap: 7px; min-width: 0px;"><span data-dc-tpl="342" class="mono" style="font-size: 10px; color: var(--text-subtle); flex-shrink: 0; margin-top: 1px;"><span class="sc-interp">F007</span></span><span data-dc-tpl="343" class="ttl2" title="" style="font-size: 13px; font-weight: 600; line-height: 1.3;"><span class="sc-interp">Public read API v1</span></span></span>
+              <span data-dc-tpl="344" style="display: flex; align-items: center; gap: 7px;"><span data-dc-tpl="345" class="meter" style="flex-grow: 1; height: 5px;"><span data-dc-tpl="346" style="display: block; width: 0%; height: 100%; background: var(--feature);"></span></span><span data-dc-tpl="347" class="mono" style="font-size: 10px; color: var(--text-subtle);"><span class="sc-interp">1ph · 2t</span></span></span>
+            </span>
+          </button>
+        
+          <button data-dc-tpl="338" type="button" class="navitem ">
+            <span data-dc-tpl="339" class="dot" style="background: rgb(14, 165, 233); width: 8px; height: 8px;"></span>
+            <span data-dc-tpl="340" style="flex-grow: 1; min-width: 0px; display: flex; flex-direction: column; gap: 3px;">
+              <span data-dc-tpl="341" style="display: flex; align-items: flex-start; gap: 7px; min-width: 0px;"><span data-dc-tpl="342" class="mono" style="font-size: 10px; color: var(--text-subtle); flex-shrink: 0; margin-top: 1px;"><span class="sc-interp">F009</span></span><span data-dc-tpl="343" class="ttl2" title="" style="font-size: 13px; font-weight: 600; line-height: 1.3;"><span class="sc-interp">OpenCode and Zed adapters</span></span></span>
+              <span data-dc-tpl="344" style="display: flex; align-items: center; gap: 7px;"><span data-dc-tpl="345" class="meter" style="flex-grow: 1; height: 5px;"><span data-dc-tpl="346" style="display: block; width: 0%; height: 100%; background: var(--feature);"></span></span><span data-dc-tpl="347" class="mono" style="font-size: 10px; color: var(--text-subtle);"><span class="sc-interp">1ph · 2t</span></span></span>
+            </span>
+          </button>
+        
+      </aside>
+
+      <div data-dc-tpl="348" class="exp-tree" style="flex: 999 1 500px; min-width: 0px; display: flex; flex-direction: column; gap: 10px;"><div data-dc-tpl="349" id="filt-sentinel" aria-hidden="true" style="height: 0px;"></div>
+        
+
+        
+          <div data-dc-tpl="358" style="display: flex; flex-direction: column; gap: 8px;">
+            <div data-dc-tpl="359" class="trow" style="padding: 11px 14px; gap: 10px; align-items: flex-start; flex-wrap: wrap;">
+              <button data-dc-tpl="360" type="button" class="iconbtn" aria-label="Toggle feature" aria-expanded="true" style="transform: rotate(90deg);"><svg data-dc-tpl="361" class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="362" d="m9 18 6-6-6-6"></path></svg></button>
+              <span data-dc-tpl="363" style="width: 4px; align-self: stretch; border-radius: 9999px; background: var(--feature); min-height: 24px;"></span>
+              <span data-dc-tpl="364" class="ent" style="background: rgba(139, 92, 246, 0.14); color: var(--feature); margin-top: 1px;">FEATURE</span>
+              <span data-dc-tpl="365" style="display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; margin-top: 1px;">
+                <button data-dc-tpl="366" type="button" class="seg" aria-label="Open feature F004"><span class="sc-interp">F004</span></button>
+                <button data-dc-tpl="367" type="button" class="copyid" aria-label="Copy F004"><svg data-dc-tpl="368" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="369" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="370" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+                <button data-dc-tpl="371" type="button" class="shortid" aria-label="Copy short id a3f9c2"><span class="sc-interp">a3f9c2</span></button>
+              </span>
+              <span data-dc-tpl="372" class="ttl2" style="flex: 1 1 180px; min-width: 0px; font-size: 14px; font-weight: 600; line-height: 1.35;"><span class="sc-interp">Harness-agnostic planning core</span></span>
+              <label data-dc-tpl="373" title="Filter this feature's phases" style="display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; margin-top: 1px;">
+                <svg data-dc-tpl="374" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="375" d="M3 4h18l-7 8v6l-4 2v-8z"></path></svg>
+                <select data-dc-tpl="376" class="selmini" aria-label="Filter phases in F004"><option data-dc-tpl="377" value="all">All phases</option><option data-dc-tpl="378" value="in-progress">In progress</option><option data-dc-tpl="379" value="planned">Planned</option><option data-dc-tpl="380" value="paused">Paused</option><option data-dc-tpl="381" value="blocked">Blocked</option><option data-dc-tpl="382" value="done">Done</option></select>
+              </label>
+              <div data-dc-tpl="383" class="meter" style="width: 90px; margin-top: 6px;"><div data-dc-tpl="384" style="width: 30%; height: 100%; background: var(--feature);"></div></div>
+              <span data-dc-tpl="385" class="badge" style="background: rgba(245, 158, 11, 0.14); color: var(--inprog-ink); margin-top: 1px;"><span data-dc-tpl="386" class="dot" style="background: rgb(245, 158, 11);"></span><span class="sc-interp">In progress</span></span>
+            </div>
+
+            
+            <div data-dc-tpl="388" class="indent-f" style="display: flex; flex-direction: column; gap: 8px;">
+              
+                <div data-dc-tpl="390" style="display: flex; flex-direction: column; gap: 6px;">
+                  <div data-dc-tpl="391" class="trow" style="padding: 9px 12px; gap: 10px; align-items: flex-start; flex-wrap: wrap;">
+                    <button data-dc-tpl="392" type="button" class="iconbtn" aria-label="Toggle phase" aria-expanded="true" style="transform: rotate(90deg); width: 22px; height: 22px;"><svg data-dc-tpl="393" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="394" d="m9 18 6-6-6-6"></path></svg></button>
+                    <span data-dc-tpl="395" style="width: 4px; align-self: stretch; border-radius: 9999px; background: var(--phase); min-height: 20px;"></span>
+                    <span data-dc-tpl="396" class="ent" style="background: rgba(6, 182, 212, 0.14); color: var(--phase-ink); margin-top: 1px;">PHASE</span>
+                    <span data-dc-tpl="397" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: 1px;">
+                      <button data-dc-tpl="398" type="button" class="seg" aria-label="Open feature F004"><span class="sc-interp">F004</span></button><span data-dc-tpl="399" class="idsep">/</span><button data-dc-tpl="400" type="button" class="seg" aria-label="Open phase P039(F004)"><span class="sc-interp">P039</span></button>
+                      <button data-dc-tpl="401" type="button" class="copyid" aria-label="Copy P039(F004)"><svg data-dc-tpl="402" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="403" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="404" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+                      <button data-dc-tpl="405" type="button" class="shortid" aria-label="Copy short id 7d12e0"><span class="sc-interp">7d12e0</span></button>
+                    </span>
+                    <span data-dc-tpl="406" class="ttl2" style="flex: 1 1 160px; min-width: 0px; font-size: 13px; font-weight: 600; line-height: 1.35;"><span class="sc-interp">Derived display statuses</span></span>
+                    <select data-dc-tpl="407" class="selmini" aria-label="Filter tasks in P039(F004)" style="margin-top: 1px;"><option data-dc-tpl="408" value="all">All tasks</option><option data-dc-tpl="409" value="in-progress">In progress</option><option data-dc-tpl="410" value="planned">Planned</option><option data-dc-tpl="411" value="paused">Paused</option><option data-dc-tpl="412" value="blocked">Blocked</option><option data-dc-tpl="413" value="done">Done</option></select>
+                    <button data-dc-tpl="414" type="button" class="copyid" title="Reset task filter" aria-label="Reset task filter for P039(F004)" style="margin-top: 3px;"><svg data-dc-tpl="415" class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="416" d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path data-dc-tpl="417" d="M3 3v5h5"></path></svg></button>
+                    <div data-dc-tpl="418" class="meter" style="width: 72px; margin-top: 6px;"><div data-dc-tpl="419" style="width: 17%; height: 100%; background: var(--phase);"></div></div>
+                    <span data-dc-tpl="420" class="mono" style="font-size: 11px; color: var(--text-subtle); margin-top: 3px;"><span class="sc-interp">1/6</span></span>
+                    <span data-dc-tpl="421" class="badge" style="background: rgba(245, 158, 11, 0.14); color: var(--inprog-ink); margin-top: 1px;"><span data-dc-tpl="422" class="dot" style="background: rgb(245, 158, 11);"></span><span class="sc-interp">In progress</span></span>
+                  </div>
+
+                  
+                  <div data-dc-tpl="424" class="indent-p" style="display: flex; flex-direction: column; gap: 6px;">
+                    
+                      <div data-dc-tpl="426" class="trow" id="" style="padding: 9px 12px; gap: 9px; align-items: flex-start; flex-wrap: wrap; background: var(--surface-elevated); border-color: var(--border);">
+                        <span data-dc-tpl="427" class="ent" style="background: rgba(16, 185, 129, 0.14); color: var(--task-ink); margin-top: 1px;">TASK</span>
+                        <span data-dc-tpl="428" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: 1px;">
+                          <button data-dc-tpl="429" type="button" class="seg" aria-label="Open feature F004"><span class="sc-interp">F004</span></button><span data-dc-tpl="430" class="idsep">/</span><button data-dc-tpl="431" type="button" class="seg" aria-label="Open phase P039(F004)"><span class="sc-interp">P039</span></button><span data-dc-tpl="432" class="idsep">/</span><button data-dc-tpl="433" type="button" class="seg" aria-label="Open task P039(F004)/T011"><span class="sc-interp">T011</span></button>
+                          <button data-dc-tpl="434" type="button" class="copyid" aria-label="Copy P039(F004)/T011"><svg data-dc-tpl="435" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="436" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="437" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+                          <button data-dc-tpl="438" type="button" class="shortid" aria-label="Copy short id 4b9a10"><span class="sc-interp">4b9a10</span></button>
+                        </span>
+                        <button data-dc-tpl="439" type="button" class="titlelink ttl2 tl-done" style="flex: 1 1 160px; min-width: 0px; font-size: 13px; line-height: 1.4;"><span class="sc-interp">Map child statuses to a parent rollup</span></button>
+                        
+                        <span data-dc-tpl="442" class="badge" style="background: rgba(34, 197, 94, 0.14); color: var(--done-ink); margin-top: 1px;"><span data-dc-tpl="443" class="dot" style="background: rgb(34, 197, 94);"></span><span class="sc-interp">Done</span></span>
+                      </div>
+                    
+                      <div data-dc-tpl="426" class="trow" id="" style="padding: 9px 12px; gap: 9px; align-items: flex-start; flex-wrap: wrap; background: var(--surface-elevated); border-color: var(--border);">
+                        <span data-dc-tpl="427" class="ent" style="background: rgba(16, 185, 129, 0.14); color: var(--task-ink); margin-top: 1px;">TASK</span>
+                        <span data-dc-tpl="428" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: 1px;">
+                          <button data-dc-tpl="429" type="button" class="seg" aria-label="Open feature F004"><span class="sc-interp">F004</span></button><span data-dc-tpl="430" class="idsep">/</span><button data-dc-tpl="431" type="button" class="seg" aria-label="Open phase P039(F004)"><span class="sc-interp">P039</span></button><span data-dc-tpl="432" class="idsep">/</span><button data-dc-tpl="433" type="button" class="seg" aria-label="Open task P039(F004)/T012"><span class="sc-interp">T012</span></button>
+                          <button data-dc-tpl="434" type="button" class="copyid" aria-label="Copy P039(F004)/T012"><svg data-dc-tpl="435" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="436" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="437" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+                          <button data-dc-tpl="438" type="button" class="shortid" aria-label="Copy short id c18f22"><span class="sc-interp">c18f22</span></button>
+                        </span>
+                        <button data-dc-tpl="439" type="button" class="titlelink ttl2 tl-strong" style="flex: 1 1 160px; min-width: 0px; font-size: 13px; line-height: 1.4;"><span class="sc-interp">Expose started / closed on the API and the web tree</span></button>
+                        <span data-dc-tpl="441" class="mono" style="font-size: 10px; color: var(--text-subtle); margin-top: 2px; flex-shrink: 0;"><span class="sc-interp">claude-1</span></span>
+                        <span data-dc-tpl="442" class="badge" style="background: rgba(245, 158, 11, 0.14); color: var(--inprog-ink); margin-top: 1px;"><span data-dc-tpl="443" class="dot" style="background: rgb(245, 158, 11);"></span><span class="sc-interp">In progress</span></span>
+                      </div>
+                    
+                      <div data-dc-tpl="426" class="trow" id="" style="padding: 9px 12px; gap: 9px; align-items: flex-start; flex-wrap: wrap; background: var(--surface-elevated); border-color: var(--border);">
+                        <span data-dc-tpl="427" class="ent" style="background: rgba(16, 185, 129, 0.14); color: var(--task-ink); margin-top: 1px;">TASK</span>
+                        <span data-dc-tpl="428" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: 1px;">
+                          <button data-dc-tpl="429" type="button" class="seg" aria-label="Open feature F004"><span class="sc-interp">F004</span></button><span data-dc-tpl="430" class="idsep">/</span><button data-dc-tpl="431" type="button" class="seg" aria-label="Open phase P039(F004)"><span class="sc-interp">P039</span></button><span data-dc-tpl="432" class="idsep">/</span><button data-dc-tpl="433" type="button" class="seg" aria-label="Open task P039(F004)/T013"><span class="sc-interp">T013</span></button>
+                          <button data-dc-tpl="434" type="button" class="copyid" aria-label="Copy P039(F004)/T013"><svg data-dc-tpl="435" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="436" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="437" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+                          <button data-dc-tpl="438" type="button" class="shortid" aria-label="Copy short id 9e5531"><span class="sc-interp">9e5531</span></button>
+                        </span>
+                        <button data-dc-tpl="439" type="button" class="titlelink ttl2" style="flex: 1 1 160px; min-width: 0px; font-size: 13px; line-height: 1.4;"><span class="sc-interp">Snapshot test the derived-status matrix across every parent/child combination</span></button>
+                        
+                        <span data-dc-tpl="442" class="badge" style="background: rgba(14, 165, 233, 0.14); color: var(--planned-ink); margin-top: 1px;"><span data-dc-tpl="443" class="dot" style="background: rgb(14, 165, 233);"></span><span class="sc-interp">Planned</span></span>
+                      </div>
+                    
+                      <div data-dc-tpl="426" class="trow" id="" style="padding: 9px 12px; gap: 9px; align-items: flex-start; flex-wrap: wrap; background: var(--surface-elevated); border-color: var(--border);">
+                        <span data-dc-tpl="427" class="ent" style="background: rgba(16, 185, 129, 0.14); color: var(--task-ink); margin-top: 1px;">TASK</span>
+                        <span data-dc-tpl="428" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: 1px;">
+                          <button data-dc-tpl="429" type="button" class="seg" aria-label="Open feature F004"><span class="sc-interp">F004</span></button><span data-dc-tpl="430" class="idsep">/</span><button data-dc-tpl="431" type="button" class="seg" aria-label="Open phase P039(F004)"><span class="sc-interp">P039</span></button><span data-dc-tpl="432" class="idsep">/</span><button data-dc-tpl="433" type="button" class="seg" aria-label="Open task P039(F004)/T014"><span class="sc-interp">T014</span></button>
+                          <button data-dc-tpl="434" type="button" class="copyid" aria-label="Copy P039(F004)/T014"><svg data-dc-tpl="435" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="436" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="437" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+                          <button data-dc-tpl="438" type="button" class="shortid" aria-label="Copy short id 2a0749"><span class="sc-interp">2a0749</span></button>
+                        </span>
+                        <button data-dc-tpl="439" type="button" class="titlelink ttl2" style="flex: 1 1 160px; min-width: 0px; font-size: 13px; line-height: 1.4;"><span class="sc-interp">Document the rollup precedence rules</span></button>
+                        
+                        <span data-dc-tpl="442" class="badge" style="background: rgba(14, 165, 233, 0.14); color: var(--planned-ink); margin-top: 1px;"><span data-dc-tpl="443" class="dot" style="background: rgb(14, 165, 233);"></span><span class="sc-interp">Planned</span></span>
+                      </div>
+                    
+                    <button data-dc-tpl="445" type="button" style="align-self: flex-start; border: 0px; background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; padding: 4px 2px;"><span class="sc-interp">Show 2 more</span></button>
+                    
+                    <button data-dc-tpl="447" type="button" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--border-strong); background: transparent; color: var(--text-subtle); border-radius: 11px; padding: 6px 11px; font-size: 12px; font-weight: 600; cursor: pointer;"><svg data-dc-tpl="448" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="449" d="M12 5v14M5 12h14"></path></svg>Add task to <span data-dc-tpl="450" class="mono" style="font-size: 11px;"><span class="sc-interp">P039(F004)</span></span></button>
+                    
+                    
+                  </div>
+                  
+                </div>
+              
+                <div data-dc-tpl="390" style="display: flex; flex-direction: column; gap: 6px;">
+                  <div data-dc-tpl="391" class="trow" style="padding: 9px 12px; gap: 10px; align-items: flex-start; flex-wrap: wrap;">
+                    <button data-dc-tpl="392" type="button" class="iconbtn" aria-label="Toggle phase" aria-expanded="true" style="transform: rotate(90deg); width: 22px; height: 22px;"><svg data-dc-tpl="393" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="394" d="m9 18 6-6-6-6"></path></svg></button>
+                    <span data-dc-tpl="395" style="width: 4px; align-self: stretch; border-radius: 9999px; background: var(--phase); min-height: 20px;"></span>
+                    <span data-dc-tpl="396" class="ent" style="background: rgba(6, 182, 212, 0.14); color: var(--phase-ink); margin-top: 1px;">PHASE</span>
+                    <span data-dc-tpl="397" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: 1px;">
+                      <button data-dc-tpl="398" type="button" class="seg" aria-label="Open feature F004"><span class="sc-interp">F004</span></button><span data-dc-tpl="399" class="idsep">/</span><button data-dc-tpl="400" type="button" class="seg" aria-label="Open phase P042(F004)"><span class="sc-interp">P042</span></button>
+                      <button data-dc-tpl="401" type="button" class="copyid" aria-label="Copy P042(F004)"><svg data-dc-tpl="402" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="403" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="404" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+                      <button data-dc-tpl="405" type="button" class="shortid" aria-label="Copy short id b0a4e1"><span class="sc-interp">b0a4e1</span></button>
+                    </span>
+                    <span data-dc-tpl="406" class="ttl2" style="flex: 1 1 160px; min-width: 0px; font-size: 13px; font-weight: 600; line-height: 1.35;"><span class="sc-interp">Zod schema and public JSON export</span></span>
+                    <select data-dc-tpl="407" class="selmini" aria-label="Filter tasks in P042(F004)" style="margin-top: 1px;"><option data-dc-tpl="408" value="all">All tasks</option><option data-dc-tpl="409" value="in-progress">In progress</option><option data-dc-tpl="410" value="planned">Planned</option><option data-dc-tpl="411" value="paused">Paused</option><option data-dc-tpl="412" value="blocked">Blocked</option><option data-dc-tpl="413" value="done">Done</option></select>
+                    <button data-dc-tpl="414" type="button" class="copyid" title="Reset task filter" aria-label="Reset task filter for P042(F004)" style="margin-top: 3px;"><svg data-dc-tpl="415" class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="416" d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path data-dc-tpl="417" d="M3 3v5h5"></path></svg></button>
+                    <div data-dc-tpl="418" class="meter" style="width: 72px; margin-top: 6px;"><div data-dc-tpl="419" style="width: 0%; height: 100%; background: var(--phase);"></div></div>
+                    <span data-dc-tpl="420" class="mono" style="font-size: 11px; color: var(--text-subtle); margin-top: 3px;"><span class="sc-interp">0/2</span></span>
+                    <span data-dc-tpl="421" class="badge" style="background: rgba(14, 165, 233, 0.14); color: var(--planned-ink); margin-top: 1px;"><span data-dc-tpl="422" class="dot" style="background: rgb(14, 165, 233);"></span><span class="sc-interp">Planned</span></span>
+                  </div>
+
+                  
+                  <div data-dc-tpl="424" class="indent-p" style="display: flex; flex-direction: column; gap: 6px;">
+                    
+                      <div data-dc-tpl="426" class="trow" id="" style="padding: 9px 12px; gap: 9px; align-items: flex-start; flex-wrap: wrap; background: var(--surface-elevated); border-color: var(--border);">
+                        <span data-dc-tpl="427" class="ent" style="background: rgba(16, 185, 129, 0.14); color: var(--task-ink); margin-top: 1px;">TASK</span>
+                        <span data-dc-tpl="428" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: 1px;">
+                          <button data-dc-tpl="429" type="button" class="seg" aria-label="Open feature F004"><span class="sc-interp">F004</span></button><span data-dc-tpl="430" class="idsep">/</span><button data-dc-tpl="431" type="button" class="seg" aria-label="Open phase P042(F004)"><span class="sc-interp">P042</span></button><span data-dc-tpl="432" class="idsep">/</span><button data-dc-tpl="433" type="button" class="seg" aria-label="Open task P042(F004)/T001"><span class="sc-interp">T001</span></button>
+                          <button data-dc-tpl="434" type="button" class="copyid" aria-label="Copy P042(F004)/T001"><svg data-dc-tpl="435" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="436" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="437" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+                          <button data-dc-tpl="438" type="button" class="shortid" aria-label="Copy short id 5c2db7"><span class="sc-interp">5c2db7</span></button>
+                        </span>
+                        <button data-dc-tpl="439" type="button" class="titlelink ttl2" style="flex: 1 1 160px; min-width: 0px; font-size: 13px; line-height: 1.4;"><span class="sc-interp">Generate planner-schema.json from the core Zod schemas</span></button>
+                        
+                        <span data-dc-tpl="442" class="badge" style="background: rgba(14, 165, 233, 0.14); color: var(--planned-ink); margin-top: 1px;"><span data-dc-tpl="443" class="dot" style="background: rgb(14, 165, 233);"></span><span class="sc-interp">Planned</span></span>
+                      </div>
+                    
+                      <div data-dc-tpl="426" class="trow" id="" style="padding: 9px 12px; gap: 9px; align-items: flex-start; flex-wrap: wrap; background: var(--surface-elevated); border-color: var(--border);">
+                        <span data-dc-tpl="427" class="ent" style="background: rgba(16, 185, 129, 0.14); color: var(--task-ink); margin-top: 1px;">TASK</span>
+                        <span data-dc-tpl="428" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: 1px;">
+                          <button data-dc-tpl="429" type="button" class="seg" aria-label="Open feature F004"><span class="sc-interp">F004</span></button><span data-dc-tpl="430" class="idsep">/</span><button data-dc-tpl="431" type="button" class="seg" aria-label="Open phase P042(F004)"><span class="sc-interp">P042</span></button><span data-dc-tpl="432" class="idsep">/</span><button data-dc-tpl="433" type="button" class="seg" aria-label="Open task P042(F004)/T002"><span class="sc-interp">T002</span></button>
+                          <button data-dc-tpl="434" type="button" class="copyid" aria-label="Copy P042(F004)/T002"><svg data-dc-tpl="435" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="436" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="437" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+                          <button data-dc-tpl="438" type="button" class="shortid" aria-label="Copy short id e7b130"><span class="sc-interp">e7b130</span></button>
+                        </span>
+                        <button data-dc-tpl="439" type="button" class="titlelink ttl2" style="flex: 1 1 160px; min-width: 0px; font-size: 13px; line-height: 1.4;"><span class="sc-interp">Validate .planner/ against the schema on load</span></button>
+                        
+                        <span data-dc-tpl="442" class="badge" style="background: rgba(14, 165, 233, 0.14); color: var(--planned-ink); margin-top: 1px;"><span data-dc-tpl="443" class="dot" style="background: rgb(14, 165, 233);"></span><span class="sc-interp">Planned</span></span>
+                      </div>
+                    
+                    
+                    
+                    <button data-dc-tpl="447" type="button" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--border-strong); background: transparent; color: var(--text-subtle); border-radius: 11px; padding: 6px 11px; font-size: 12px; font-weight: 600; cursor: pointer;"><svg data-dc-tpl="448" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="449" d="M12 5v14M5 12h14"></path></svg>Add task to <span data-dc-tpl="450" class="mono" style="font-size: 11px;"><span class="sc-interp">P042(F004)</span></span></button>
+                    
+                    
+                  </div>
+                  
+                </div>
+              
+                <div data-dc-tpl="390" style="display: flex; flex-direction: column; gap: 6px;">
+                  <div data-dc-tpl="391" class="trow" style="padding: 9px 12px; gap: 10px; align-items: flex-start; flex-wrap: wrap;">
+                    <button data-dc-tpl="392" type="button" class="iconbtn" aria-label="Toggle phase" aria-expanded="true" style="transform: rotate(90deg); width: 22px; height: 22px;"><svg data-dc-tpl="393" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="394" d="m9 18 6-6-6-6"></path></svg></button>
+                    <span data-dc-tpl="395" style="width: 4px; align-self: stretch; border-radius: 9999px; background: var(--phase); min-height: 20px;"></span>
+                    <span data-dc-tpl="396" class="ent" style="background: rgba(6, 182, 212, 0.14); color: var(--phase-ink); margin-top: 1px;">PHASE</span>
+                    <span data-dc-tpl="397" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: 1px;">
+                      <button data-dc-tpl="398" type="button" class="seg" aria-label="Open feature F004"><span class="sc-interp">F004</span></button><span data-dc-tpl="399" class="idsep">/</span><button data-dc-tpl="400" type="button" class="seg" aria-label="Open phase P031(F004)"><span class="sc-interp">P031</span></button>
+                      <button data-dc-tpl="401" type="button" class="copyid" aria-label="Copy P031(F004)"><svg data-dc-tpl="402" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="403" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="404" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+                      <button data-dc-tpl="405" type="button" class="shortid" aria-label="Copy short id 11f8aa"><span class="sc-interp">11f8aa</span></button>
+                    </span>
+                    <span data-dc-tpl="406" class="ttl2" style="flex: 1 1 160px; min-width: 0px; font-size: 13px; font-weight: 600; line-height: 1.35;"><span class="sc-interp">Core planning model</span></span>
+                    <select data-dc-tpl="407" class="selmini" aria-label="Filter tasks in P031(F004)" style="margin-top: 1px;"><option data-dc-tpl="408" value="all">All tasks</option><option data-dc-tpl="409" value="in-progress">In progress</option><option data-dc-tpl="410" value="planned">Planned</option><option data-dc-tpl="411" value="paused">Paused</option><option data-dc-tpl="412" value="blocked">Blocked</option><option data-dc-tpl="413" value="done">Done</option></select>
+                    <button data-dc-tpl="414" type="button" class="copyid" title="Reset task filter" aria-label="Reset task filter for P031(F004)" style="margin-top: 3px;"><svg data-dc-tpl="415" class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="416" d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path data-dc-tpl="417" d="M3 3v5h5"></path></svg></button>
+                    <div data-dc-tpl="418" class="meter" style="width: 72px; margin-top: 6px;"><div data-dc-tpl="419" style="width: 100%; height: 100%; background: var(--phase);"></div></div>
+                    <span data-dc-tpl="420" class="mono" style="font-size: 11px; color: var(--text-subtle); margin-top: 3px;"><span class="sc-interp">2/2</span></span>
+                    <span data-dc-tpl="421" class="badge" style="background: rgba(34, 197, 94, 0.14); color: var(--done-ink); margin-top: 1px;"><span data-dc-tpl="422" class="dot" style="background: rgb(34, 197, 94);"></span><span class="sc-interp">Done</span></span>
+                  </div>
+
+                  
+                  <div data-dc-tpl="424" class="indent-p" style="display: flex; flex-direction: column; gap: 6px;">
+                    
+                      <div data-dc-tpl="426" class="trow" id="" style="padding: 9px 12px; gap: 9px; align-items: flex-start; flex-wrap: wrap; background: var(--surface-elevated); border-color: var(--border);">
+                        <span data-dc-tpl="427" class="ent" style="background: rgba(16, 185, 129, 0.14); color: var(--task-ink); margin-top: 1px;">TASK</span>
+                        <span data-dc-tpl="428" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: 1px;">
+                          <button data-dc-tpl="429" type="button" class="seg" aria-label="Open feature F004"><span class="sc-interp">F004</span></button><span data-dc-tpl="430" class="idsep">/</span><button data-dc-tpl="431" type="button" class="seg" aria-label="Open phase P031(F004)"><span class="sc-interp">P031</span></button><span data-dc-tpl="432" class="idsep">/</span><button data-dc-tpl="433" type="button" class="seg" aria-label="Open task P031(F004)/T001"><span class="sc-interp">T001</span></button>
+                          <button data-dc-tpl="434" type="button" class="copyid" aria-label="Copy P031(F004)/T001"><svg data-dc-tpl="435" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="436" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="437" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+                          <button data-dc-tpl="438" type="button" class="shortid" aria-label="Copy short id aa1002"><span class="sc-interp">aa1002</span></button>
+                        </span>
+                        <button data-dc-tpl="439" type="button" class="titlelink ttl2 tl-done" style="flex: 1 1 160px; min-width: 0px; font-size: 13px; line-height: 1.4;"><span class="sc-interp">project → features → phases → tasks hierarchy model</span></button>
+                        
+                        <span data-dc-tpl="442" class="badge" style="background: rgba(34, 197, 94, 0.14); color: var(--done-ink); margin-top: 1px;"><span data-dc-tpl="443" class="dot" style="background: rgb(34, 197, 94);"></span><span class="sc-interp">Done</span></span>
+                      </div>
+                    
+                      <div data-dc-tpl="426" class="trow" id="" style="padding: 9px 12px; gap: 9px; align-items: flex-start; flex-wrap: wrap; background: var(--surface-elevated); border-color: var(--border);">
+                        <span data-dc-tpl="427" class="ent" style="background: rgba(16, 185, 129, 0.14); color: var(--task-ink); margin-top: 1px;">TASK</span>
+                        <span data-dc-tpl="428" style="display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: 1px;">
+                          <button data-dc-tpl="429" type="button" class="seg" aria-label="Open feature F004"><span class="sc-interp">F004</span></button><span data-dc-tpl="430" class="idsep">/</span><button data-dc-tpl="431" type="button" class="seg" aria-label="Open phase P031(F004)"><span class="sc-interp">P031</span></button><span data-dc-tpl="432" class="idsep">/</span><button data-dc-tpl="433" type="button" class="seg" aria-label="Open task P031(F004)/T002"><span class="sc-interp">T002</span></button>
+                          <button data-dc-tpl="434" type="button" class="copyid" aria-label="Copy P031(F004)/T002"><svg data-dc-tpl="435" class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="436" x="9" y="9" width="11" height="11" rx="2"></rect><path data-dc-tpl="437" d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
+                          <button data-dc-tpl="438" type="button" class="shortid" aria-label="Copy short id aa1103"><span class="sc-interp">aa1103</span></button>
+                        </span>
+                        <button data-dc-tpl="439" type="button" class="titlelink ttl2 tl-done" style="flex: 1 1 160px; min-width: 0px; font-size: 13px; line-height: 1.4;"><span class="sc-interp">Atomic task-start ownership claim</span></button>
+                        
+                        <span data-dc-tpl="442" class="badge" style="background: rgba(34, 197, 94, 0.14); color: var(--done-ink); margin-top: 1px;"><span data-dc-tpl="443" class="dot" style="background: rgb(34, 197, 94);"></span><span class="sc-interp">Done</span></span>
+                      </div>
+                    
+                    
+                    
+                    <button data-dc-tpl="447" type="button" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--border-strong); background: transparent; color: var(--text-subtle); border-radius: 11px; padding: 6px 11px; font-size: 12px; font-weight: 600; cursor: pointer;"><svg data-dc-tpl="448" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="449" d="M12 5v14M5 12h14"></path></svg>Add task to <span data-dc-tpl="450" class="mono" style="font-size: 11px;"><span class="sc-interp">P031(F004)</span></span></button>
+                    
+                    
+                  </div>
+                  
+                </div>
+              
+              <button data-dc-tpl="458" type="button" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--border-strong); background: transparent; color: var(--text-subtle); border-radius: 11px; padding: 6px 11px; font-size: 12px; font-weight: 600; cursor: pointer;"><svg data-dc-tpl="459" class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="460" d="M12 5v14M5 12h14"></path></svg>Add phase to <span data-dc-tpl="461" class="mono" style="font-size: 11px;"><span class="sc-interp">F004</span></span></button>
+            </div>
+            
+          </div>
+        
+      </div>
+    </div>
+  </div>
+
+  
+  <div data-dc-tpl="462" class="grid-auto">
+    <div data-dc-tpl="463" class="card" style="padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;">
+      <p data-dc-tpl="464" class="eyebrow">Latest completed</p>
+      <div data-dc-tpl="465" style="display: flex; flex-direction: column; gap: 7px;">
+        <div data-dc-tpl="466" class="trow" style="padding: 9px 12px; align-items: center; gap: 8px;"><span data-dc-tpl="467" class="dot" style="background: var(--done); width: 8px; height: 8px;"></span><span data-dc-tpl="468" class="mono" style="font-size: 12px; color: var(--text-subtle); flex-shrink: 0;">P040(F006)/T007</span><span data-dc-tpl="469" style="flex: 1 1 120px; min-width: 0px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Publish @agent-plan/mcp 0.2.1 to npm</span><span data-dc-tpl="470" style="font-size: 11px; color: var(--text-subtle); flex-shrink: 0;">2h ago</span></div>
+        <div data-dc-tpl="471" class="trow" style="padding: 9px 12px; align-items: center; gap: 8px;"><span data-dc-tpl="472" class="dot" style="background: var(--done); width: 8px; height: 8px;"></span><span data-dc-tpl="473" class="mono" style="font-size: 12px; color: var(--text-subtle); flex-shrink: 0;">P039(F004)/T011</span><span data-dc-tpl="474" style="flex: 1 1 120px; min-width: 0px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Map child statuses to a parent rollup</span><span data-dc-tpl="475" style="font-size: 11px; color: var(--text-subtle); flex-shrink: 0;">5h ago</span></div>
+        <div data-dc-tpl="476" class="trow" style="padding: 9px 12px; align-items: center; gap: 8px;"><span data-dc-tpl="477" class="dot" style="background: var(--done); width: 8px; height: 8px;"></span><span data-dc-tpl="478" class="mono" style="font-size: 12px; color: var(--text-subtle); flex-shrink: 0;">P038(F002)/T004</span><span data-dc-tpl="479" style="flex: 1 1 120px; min-width: 0px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Generated /planner slash-command router</span><span data-dc-tpl="480" style="font-size: 11px; color: var(--text-subtle); flex-shrink: 0;">yesterday</span></div>
+      </div>
+    </div>
+    <div data-dc-tpl="481" class="card" id="new" style="padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;">
+      <p data-dc-tpl="482" class="eyebrow">Newly added</p>
+      <div data-dc-tpl="483" style="display: flex; flex-direction: column; gap: 7px;">
+        <div data-dc-tpl="484" class="trow" style="padding: 9px 12px; align-items: center; gap: 8px;"><span data-dc-tpl="485" class="dot" style="background: var(--planned); width: 8px; height: 8px;"></span><span data-dc-tpl="486" class="mono" style="font-size: 12px; color: var(--text-subtle); flex-shrink: 0;">P041(F008)/T004</span><span data-dc-tpl="487" style="flex: 1 1 120px; min-width: 0px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Zed MCP context-server setup doc</span><span data-dc-tpl="488" style="font-size: 11px; color: var(--text-subtle); flex-shrink: 0;">18m ago</span></div>
+        <div data-dc-tpl="489" class="trow" style="padding: 9px 12px; align-items: center; gap: 8px;"><span data-dc-tpl="490" class="dot" style="background: var(--planned); width: 8px; height: 8px;"></span><span data-dc-tpl="491" class="mono" style="font-size: 12px; color: var(--text-subtle); flex-shrink: 0;">P041(F008)/T005</span><span data-dc-tpl="492" style="flex: 1 1 120px; min-width: 0px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Harden session-recover against live processes</span><span data-dc-tpl="493" style="font-size: 11px; color: var(--text-subtle); flex-shrink: 0;">41m ago</span></div>
+        <div data-dc-tpl="494" class="trow" style="padding: 9px 12px; align-items: center; gap: 8px;"><span data-dc-tpl="495" class="dot" style="background: var(--draft); width: 8px; height: 8px;"></span><span data-dc-tpl="496" class="mono" style="font-size: 12px; color: var(--text-subtle); flex-shrink: 0;">P036(F009)/T021</span><span data-dc-tpl="497" style="flex: 1 1 120px; min-width: 0px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Draft: OpenCode autosuggest shortcuts</span><span data-dc-tpl="498" style="font-size: 11px; color: var(--text-subtle); flex-shrink: 0;">today</span></div>
+      </div>
+    </div>
+  </div></div>
+    </main>
+  </div><button data-dc-tpl="554" type="button" id="filt-toggle" class="exp-toggle " title="Show filters" aria-label="Show filters" aria-expanded="false" style="position: fixed; right: 0px; z-index: 55; align-items: center; justify-content: center; width: 30px; height: 44px; padding: 0px; border-top-color: ; border-top-style: ; border-top-width: ; border-bottom-color: ; border-bottom-style: ; border-bottom-width: ; border-left-color: ; border-left-style: ; border-left-width: ; border-image-source: ; border-image-slice: ; border-image-width: ; border-image-outset: ; border-image-repeat: ; border-right: 0px; background: var(--surface-elevated); color: var(--accent); border-radius: 12px 0px 0px 12px; cursor: pointer; box-shadow: var(--shadow-panel);"><svg data-dc-tpl="557" class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="558" d="M3 4h18l-7 8v6l-4 2v-8z"></path></svg></button></div></div></div>
+
+
+
+
+</body></html>
