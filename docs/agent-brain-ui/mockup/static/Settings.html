@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en"><head><style>.sc-placeholder{background:color-mix(in srgb,currentColor 8%,transparent);border:1px solid color-mix(in srgb,currentColor 50%,transparent);border-radius:2px;box-sizing:border-box;overflow:hidden}@keyframes sc-shine{0%{background-position:100% 50%}100%{background-position:0% 50%}}html.sc-dc-streaming .sc-placeholder,html.sc-dc-streaming .sc-interp.sc-missing{position:relative;background:color-mix(in srgb,currentColor 5%,transparent);border-color:transparent}html.sc-dc-streaming .sc-placeholder::before,html.sc-dc-streaming .sc-interp.sc-missing::before{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(217,119,87,0) 25%,rgba(247,225,211,.95) 37%,rgba(217,119,87,0) 63%);background-size:400% 100%;animation:sc-shine 1.4s ease infinite}html.sc-dc-streaming .sc-placeholder:nth-child(n+9 of .sc-placeholder)::before,html.sc-dc-streaming .sc-interp.sc-missing:nth-child(n+9 of .sc-interp.sc-missing)::before{animation:none;background:color-mix(in srgb,currentColor 8%,transparent)}.sc-placeholder-error{padding:4px 8px;font:11px/1.4 ui-monospace,monospace;color:color-mix(in srgb,currentColor 70%,transparent);word-break:break-word}.sc-interp.sc-missing{display:inline-block;width:2em;height:1em;overflow:hidden;vertical-align:text-bottom;background:rgba(255,255,255,.3);border:1px solid rgba(0,0,0,.5);border-radius:2px;box-sizing:border-box;color:transparent;user-select:none}.sc-interp.sc-unresolved{font-family:ui-monospace,monospace;font-size:.85em;color:color-mix(in srgb,currentColor 50%,transparent);background:color-mix(in srgb,currentColor 10%,transparent);border-radius:3px;padding:0 3px}.sc-host.sc-has-error{position:relative}.sc-logic-error{position:absolute;top:8px;left:8px;z-index:2147483647;max-width:60ch;padding:6px 10px;background:#b00020;color:#fff;font:12px/1.4 ui-monospace,monospace;border-radius:4px;white-space:pre-wrap;pointer-events:none}@media print{@page{margin: 0.5cm;}figure,table{break-inside: avoid;}#dc-root,#dc-root > .sc-host{height: auto;}*,*::before,*::after{print-color-adjust: exact;-webkit-print-color-adjust: exact;backdrop-filter: none !important;-webkit-backdrop-filter: none !important;animation-delay: -99s !important;animation-duration: .001s !important;animation-iteration-count: 1 !important;animation-fill-mode: both !important;animation-play-state: running !important;transition-duration: 0s !important;}}</style>
+<meta charset="utf-8">
+<title>Agent Plan — Settings</title>
+<style>x-dc{display:none!important}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com" data-dc-tpl="1"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" data-dc-tpl="2"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" data-dc-tpl="3"><style data-dc-tpl="4">
+  :root{
+    --bg-base:#f8fafc; --surface-elevated:#ffffff; --sidebar:#f1f5f9;
+    --border:rgba(148,163,184,0.22); --border-strong:rgba(148,163,184,0.34);
+    --text:#0f172a; --text-muted:#475569; --text-subtle:#64748b;
+    --accent:#6366f1; --accent-soft:rgba(99,102,241,0.12);
+    --feature:#8b5cf6; --phase:#06b6d4; --task:#10b981;
+    --pos-ink:#15803d; --warn-ink:#b45309; --bad-ink:#b91c1c; --mut-bg:rgba(148,163,184,0.16);
+    --pos-bg:rgba(34,197,94,0.14); --warn-bg:rgba(234,88,12,0.14); --bad-bg:rgba(239,68,68,0.12);
+    --track:rgba(148,163,184,0.3); --field:#ffffff;
+  }
+  .t-dark{
+    --bg-base:#0a1220; --surface-elevated:#111827; --sidebar:#0d1526;
+    --border:rgba(148,163,184,0.14); --border-strong:rgba(148,163,184,0.26);
+    --text:#f1f5f9; --text-muted:#94a3b8; --text-subtle:#7c8aa0;
+    --accent:#818cf8; --accent-soft:rgba(129,140,248,0.16);
+    --feature:#a78bfa; --phase:#22d3ee; --task:#34d399;
+    --pos-ink:#4ade80; --warn-ink:#fbbf24; --bad-ink:#f87171; --mut-bg:rgba(148,163,184,0.12);
+    --pos-bg:rgba(34,197,94,0.13); --warn-bg:rgba(234,88,12,0.15); --bad-bg:rgba(239,68,68,0.13);
+    --track:rgba(148,163,184,0.2); --field:#0d1526;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg-base);-webkit-font-smoothing:antialiased}
+  .app{height:100vh;overflow:hidden;color:var(--text);background:var(--bg-base);display:flex;flex-direction:column}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  .eyebrow{font-size:10px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--text-subtle);margin:0}
+  a{color:inherit;text-decoration:none}
+  .pill{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:2px 8px;font-size:10.5px;font-weight:600;line-height:1.35;white-space:nowrap}
+  .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);border-radius:10px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn-primary:hover{border-color:var(--accent);filter:brightness(1.05)}
+  .btn-danger{color:var(--bad-ink);border-color:rgba(239,68,68,0.4)}
+  .btn-danger:hover{border-color:var(--bad-ink)}
+  .ico{display:inline-block;vertical-align:middle;flex-shrink:0}
+  .navgroup{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle);padding:0 12px;margin:14px 0 6px}
+  .navitem{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:11px;padding:9px 12px;cursor:pointer;color:var(--text-muted);font-size:14px;font-weight:600}
+  .navitem:hover{background:var(--surface-elevated);color:var(--text)}
+  .navitem.on{background:var(--surface-elevated);border-color:var(--border);color:var(--text)}
+  .navitem.on .ico{color:var(--accent)}
+  .subitem{padding-left:34px;font-size:13px}
+  .card{background:var(--surface-elevated);border:1px solid var(--border);border-radius:14px}
+  .seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:9px;overflow:hidden}
+  .seg button{border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer}
+  .seg button+button{border-left:1px solid var(--border-strong)}
+  .seg button.on{background:var(--accent);color:#fff}
+  .sidebar{transition:width .18s ease, transform .2s ease;overflow-y:auto}
+  .shell>main{overflow:auto;min-height:0}
+  .navtoggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);cursor:pointer;flex-shrink:0}
+  .scrim{display:none}
+  *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:9999px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--text-subtle);background-clip:content-box;border:3px solid transparent}
+  .app.nav-collapsed .sidebar{width:64px !important}
+  .app.nav-collapsed .navitem{justify-content:center;gap:0;font-size:0;padding-left:0;padding-right:0}
+  .app.nav-collapsed .navgroup,.app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:none}
+  /* settings */
+  .shd{display:flex;align-items:flex-start;gap:11px;padding:15px 16px 13px;border-bottom:1px solid var(--border)}
+  .gico{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--accent-soft);color:var(--accent)}
+  .shd h3{margin:0;font-size:14.5px;font-weight:700}
+  .shd .gsub{margin:3px 0 0;font-size:11.5px;color:var(--text-subtle);line-height:1.45}
+  .srow{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:13px 16px}
+  .srow+.srow{border-top:1px solid var(--border)}
+  .lbl{font-size:13.5px;font-weight:600;line-height:1.3}
+  .dsc{font-size:11.5px;color:var(--text-subtle);margin-top:2px;max-width:440px;line-height:1.45}
+  .field{background:var(--field);border:1px solid var(--border-strong);border-radius:9px;padding:8px 11px;font-size:13px;color:var(--text);min-width:200px;font-family:inherit}
+  .field.mono{font-family:"JetBrains Mono",monospace;font-size:12px}
+  .sel{appearance:none;-webkit-appearance:none;background:var(--field);border:1px solid var(--border-strong);border-radius:9px;padding:8px 32px 8px 11px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 9px center}
+  .sw{width:40px;height:23px;border-radius:9999px;background:var(--track);position:relative;cursor:pointer;border:0;flex-shrink:0;transition:background .15s;padding:0}
+  .sw.on{background:var(--accent)}
+  .sw i{position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,0.25)}
+  .sw.on i{left:19px}
+  .chip-agent{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-strong);border-radius:9px;padding:6px 11px;font-size:12.5px;font-weight:600}
+  .vbadge{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(217,119,87,0.16)}
+  .rpt{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 16px}
+  .rpt+.rpt{border-top:1px solid var(--border)}
+  @media (max-width:1180px){
+    .sidebar{position:fixed;top:0;bottom:0;left:0;z-index:60;width:248px !important;flex-direction:column !important;transform:translateX(-100%);box-shadow:0 20px 50px rgba(0,0,0,0.35);overflow-y:auto}
+    .app:not(.nav-collapsed) .sidebar{transform:translateX(0)}
+    .app.nav-collapsed .sidebar{width:248px !important}
+    .app.nav-collapsed .navitem{font-size:14px;gap:11px;justify-content:flex-start;padding:9px 12px}
+    .app.nav-collapsed .navgroup{display:block}
+    .app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:flex}
+    .app:not(.nav-collapsed) .scrim{display:block;position:fixed;inset:0;background:rgba(2,6,23,0.5);z-index:55}
+    .pad{padding:16px 12px !important}
+    .field,.sel{min-width:0;width:100%}
+  }
+  .sideclose{display:none}
+  @media (max-width:1180px){ .sideclose{display:inline-flex !important} }
+  @media (max-width:760px){ .hdr-cap{display:none} }
+
+  /* project switcher + mobile shell (rooms proposal, 2026-11-02) */
+  .projsw{position:relative;min-width:0}
+  .projsw>summary{list-style:none;cursor:pointer;display:flex;align-items:center;border-radius:10px;padding:4px 8px;margin:-4px -8px;min-width:0;color:var(--text)}
+  .projsw>summary::-webkit-details-marker{display:none}
+  .projsw>summary:hover{background:var(--accent-soft)}
+  .projsw>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .projsw[open] .projsw-caret{transform:rotate(180deg)}
+  .projsw[open]>summary{position:relative;z-index:72}
+  .projsw[open]>summary::before{content:"";position:fixed;inset:0;z-index:-1;cursor:default}
+  .projsw-menu{z-index:73 !important;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+  header:has(.projsw[open]){z-index:90 !important}
+  .projsw-path{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-subtle);margin-top:1px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .projsw-menu{position:absolute;top:calc(100% + 10px);left:-8px;z-index:70;width:min(330px,calc(100vw - 32px));background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:14px;box-shadow:0 20px 50px -20px rgba(2,6,23,0.55);padding:8px;display:flex;flex-direction:column;gap:2px}
+  .projsw-head{margin:4px 8px 6px;font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)}
+  .projsw-item{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 10px;border-radius:10px;color:var(--text);text-decoration:none}
+  .projsw-item:hover,.projsw-item.on{background:var(--accent-soft)}
+  .projsw-txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto;font-size:13.5px}
+  .projsw-txt .mono{font-size:10.5px;color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .projsw-meta{font-size:11px;color:var(--text-subtle);white-space:nowrap}
+  .projsw-foot{margin:6px 8px 4px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;line-height:1.5;color:var(--text-subtle)}
+  @supports (height:100dvh){ .app,.approot{height:100dvh} }
+  @media (max-width:760px){
+    .app,.approot{height:auto !important;min-height:100dvh;overflow:visible !important}
+    .app main,.approot main,.shell>main{overflow:visible !important}
+    .app>div:nth-child(2),.approot>div:nth-child(2){padding:6px 16px !important;font-size:10px !important;gap:6px !important}
+    .app>div:nth-child(2)>span:first-child,.approot>div:nth-child(2)>span:first-child{display:none}
+    .app>header,.approot>header{padding:8px 12px !important;gap:8px !important}
+    .hdr-hide-sm{display:none !important}
+    .stickyhdr,[style*="position:sticky"]{position:static !important}
+    .filterbar-wrap{top:0 !important}
+    .msglist{height:min(560px,62dvh) !important}
+    input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{font-size:16px !important}
+  }
+  .wifi-status{display:inline-flex;align-items:center;gap:4px;color:var(--done,#22c55e)}
+  .live-dot{width:7px;height:7px;border-radius:9999px;background:var(--done,#22c55e);display:inline-block;animation:livepulse 1.6s ease-in-out infinite}
+  @keyframes livepulse{0%,100%{opacity:1}50%{opacity:.35}}
+</style><meta name="generator" content="scripts/export-mockup-static.mjs">
+</head>
+<body>
+<div id="dc-root"><div class="sc-host" data-sc-name="Settings"><div data-dc-tpl="5" class="app t-dark ">
+  <div data-dc-tpl="6" class="scrim"></div>
+  <div data-dc-tpl="7" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 24px; background: var(--sidebar); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text-subtle);">
+    <span data-dc-tpl="8" class="mono">F025 · Web UI reorganization proposal</span><span data-dc-tpl="9">Demo scenario · illustrative data</span>
+  </div>
+
+  <header data-dc-tpl="10" class="apphdr pad" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 11px 20px; border-bottom: 1px solid var(--border);">
+    <div data-dc-tpl="11" class="hb-left" style="display: flex; align-items: center; gap: 11px; min-width: 0px; flex: 1 1 auto;">
+      <button data-dc-tpl="12" type="button" class="navtoggle" aria-label="Toggle navigation" style="width: 32px; height: 32px; border-color: var(--border);"><svg data-dc-tpl="13" class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-dc-tpl="14" d="M3 6h18M3 12h18M3 18h18"></path></svg></button>
+      <details data-dc-tpl="15" class="projsw">
+        <summary data-dc-tpl="16" aria-label="Current project: Agent Plan. Switch project">
+          <span data-dc-tpl="17" style="display: flex; flex-direction: column; min-width: 0px;">
+            <span data-dc-tpl="18" style="display: flex; align-items: center; gap: 7px;"><span data-dc-tpl="19" style="font-size: 16px; font-weight: 700; line-height: 1.15; white-space: nowrap;">Agent Plan</span><svg data-dc-tpl="20" class="projsw-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="21" d="m6 9 6 6 6-6"></path></svg></span>
+            <span data-dc-tpl="22" class="mono projsw-path"><svg data-dc-tpl="23" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="24" d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>~/code/agent-plan</span>
+          </span>
+        </summary>
+        <div data-dc-tpl="25" class="projsw-menu">
+          <p data-dc-tpl="26" class="projsw-head">Projects on this machine</p>
+          <a data-dc-tpl="27" class="projsw-item on" href="#" aria-current="true"><span data-dc-tpl="28" class="projsw-txt"><b data-dc-tpl="29">Agent Plan</b><span data-dc-tpl="30" class="mono">~/code/agent-plan</span></span><span data-dc-tpl="31" class="projsw-meta">3 rooms</span><svg data-dc-tpl="32" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent); flex-shrink: 0;"><path data-dc-tpl="33" d="M20 6 9 17l-5-5"></path></svg></a>
+          <a data-dc-tpl="34" class="projsw-item" href="#"><span data-dc-tpl="35" class="projsw-txt"><b data-dc-tpl="36">Heca-Pro</b><span data-dc-tpl="37" class="mono">~/code/heca-pro</span></span><span data-dc-tpl="38" class="projsw-meta">1 room</span></a>
+          <a data-dc-tpl="39" class="projsw-item" href="#"><span data-dc-tpl="40" class="projsw-txt"><b data-dc-tpl="41">Heca</b><span data-dc-tpl="42" class="mono">~/code/heca</span></span><span data-dc-tpl="43" class="projsw-meta">No rooms</span></a>
+          <p data-dc-tpl="44" class="projsw-foot">A project appears here once an agent loads the planner in its folder. Switching keeps the current section.</p>
+        </div>
+      </details>
+    </div>
+    <div data-dc-tpl="45" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+      <span data-dc-tpl="46" class="wifi-status" title="Web UI server connected — the dashboard is live and updates in real time as agents work" aria-label="Web UI live"><svg data-dc-tpl="47" class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="48" d="M5 12.55a11 11 0 0 1 14 0M2 8.82a16 16 0 0 1 20 0M8.5 16.43a6 6 0 0 1 7 0"></path></svg><span data-dc-tpl="49" class="live-dot"></span></span>
+      <span data-dc-tpl="50" class="pill hdr-cap" title="Provider capabilities" style="background: var(--accent-soft); color: var(--accent);">TypeScript · syntactic ✓ · semantic ✓</span>
+      <button data-dc-tpl="51" type="button" class="btn" aria-label="Toggle theme" style="padding: 7px; width: 32px; height: 32px; justify-content: center;">
+        <svg data-dc-tpl="53" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle data-dc-tpl="54" cx="12" cy="12" r="4"></circle><path data-dc-tpl="55" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"></path></svg>
+        
+      </button>
+    </div>
+  </header>
+
+  <div data-dc-tpl="59" class="shell" style="display: flex; flex-grow: 1; min-height: 0px;">
+    <aside data-dc-tpl="60" class="sidebar" style="width: 230px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; background: var(--sidebar);">
+      <button data-dc-tpl="61" type="button" class="sideclose" aria-label="Close menu" style="align-self: flex-end; align-items: center; justify-content: center; gap: 6px; width: auto; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; margin-bottom: 6px;"><svg data-dc-tpl="62" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="63" d="M18 6 6 18M6 6l12 12"></path></svg>Close</button>
+      <div data-dc-tpl="64" class="navgroup">Work</div>
+      <a data-dc-tpl="65" class="navitem" href="Resume.html"><svg data-dc-tpl="66" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="67" d="M9 14 4 9l5-5"></path><path data-dc-tpl="68" d="M4 9h11a5 5 0 0 1 5 5v6"></path></svg>Resume</a>
+      <a data-dc-tpl="69" class="navitem" href="Main.html"><svg data-dc-tpl="70" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="71" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>Planner</a>
+      <a data-dc-tpl="72" class="navitem subitem" href="#"><svg data-dc-tpl="73" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="74" d="m3 17 2 2 4-4"></path><path data-dc-tpl="75" d="m3 7 2 2 4-4"></path><path data-dc-tpl="76" d="M13 6h8M13 12h8M13 18h8"></path></svg>Requirements</a>
+      <a data-dc-tpl="77" class="navitem subitem" href="#"><svg data-dc-tpl="78" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="79" d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"></path></svg>Ideas</a>
+      <a data-dc-tpl="80" class="navitem subitem" href="#"><svg data-dc-tpl="81" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="82" d="M8 3 4 7l4 4"></path><path data-dc-tpl="83" d="M4 7h16"></path><path data-dc-tpl="84" d="m16 21 4-4-4-4"></path><path data-dc-tpl="85" d="M20 17H4"></path></svg>Handoff</a>
+      <a data-dc-tpl="86" class="navitem subitem" href="Rooms.html"><svg data-dc-tpl="87" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="88" d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Rooms</a>
+      <a data-dc-tpl="89" class="navitem" href="Agents.html"><svg data-dc-tpl="90" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle data-dc-tpl="91" cx="6" cy="6" r="2.5"></circle><circle data-dc-tpl="92" cx="6" cy="18" r="2.5"></circle><circle data-dc-tpl="93" cx="18" cy="12" r="2.5"></circle><path data-dc-tpl="94" d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"></path></svg>Agents &amp; targets</a>
+      <div data-dc-tpl="95" class="navgroup">Context</div>
+      <a data-dc-tpl="96" class="navitem" href="Map.html"><svg data-dc-tpl="97" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect data-dc-tpl="98" x="9" y="3" width="6" height="5" rx="1"></rect><rect data-dc-tpl="99" x="3" y="16" width="6" height="5" rx="1"></rect><rect data-dc-tpl="100" x="15" y="16" width="6" height="5" rx="1"></rect><path data-dc-tpl="101" d="M12 8v4M6 16v-2h12v2"></path></svg>Map</a>
+      <a data-dc-tpl="102" class="navitem" href="Code.html"><svg data-dc-tpl="103" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="104" d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg>Code</a>
+      <a data-dc-tpl="105" class="navitem" href="Checks.html"><svg data-dc-tpl="106" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="107" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path data-dc-tpl="108" d="m9 12 2 2 4-4"></path></svg>Checks</a>
+      <a data-dc-tpl="109" class="navitem" href="Analytics.html"><svg data-dc-tpl="110" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="111" d="M3 3v18h18"></path><rect data-dc-tpl="112" x="7" y="12" width="3" height="6"></rect><rect data-dc-tpl="113" x="12" y="8" width="3" height="10"></rect><rect data-dc-tpl="114" x="17" y="5" width="3" height="13"></rect></svg>Analytics</a>
+      <div data-dc-tpl="115" class="navgroup">Proposals</div>
+      <a data-dc-tpl="116" class="navitem" href="Evaluate.html"><svg data-dc-tpl="117" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path data-dc-tpl="118" d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.2 1 2h6c0-.8.3-1.3 1-2a7 7 0 0 0-4-12z"></path></svg>To evaluate</a>
+      <div data-dc-tpl="119" style="flex-grow: 1;"></div>
+      <a data-dc-tpl="120" class="navitem on" href="Settings.html"><svg data-dc-tpl="121" class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle data-dc-tpl="122" cx="12" cy="12" r="3"></circle><path data-dc-tpl="123" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>Settings</a>
+      <div data-dc-tpl="124" class="side-foot" style="border-top: 1px solid var(--border); margin-top: 8px; padding: 12px 12px 4px; font-size: 11px; color: var(--text-subtle); line-height: 1.6;">One shared planner<br data-dc-tpl="125">Code &amp; sessions kept separate</div>
+    </aside>
+
+    <main data-dc-tpl="126" class="pad" style="flex-grow: 1; min-width: 0px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; overflow: auto;">
+      <div data-dc-tpl="127" style="max-width: 860px; width: 100%; margin: 0px auto; display: flex; flex-direction: column; gap: 14px;">
+        <div data-dc-tpl="128">
+          <p data-dc-tpl="129" class="eyebrow">Project · Settings</p>
+          <h1 data-dc-tpl="130" style="margin: 4px 0px 0px; font-size: 21px; font-weight: 700;">Settings</h1>
+          <p data-dc-tpl="131" style="margin: 4px 0px 0px; font-size: 12.5px; color: var(--text-subtle); max-width: 560px; line-height: 1.5;">Project memory, how context is delivered to agents, and how the <code data-dc-tpl="132" class="mono">.planner</code> workspace is backed up, exported and restored.</p>
+        </div>
+
+        
+        <div data-dc-tpl="133" class="card">
+          <div data-dc-tpl="134" class="shd">
+            <span data-dc-tpl="135" class="gico"><svg data-dc-tpl="136" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-dc-tpl="137" d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg></span>
+            <div data-dc-tpl="138"><h3 data-dc-tpl="139">Project</h3><p data-dc-tpl="140" class="gsub">Identity and where the plan lives. The workspace is separate from the integration target.</p></div>
+          </div>
+          <div data-dc-tpl="141" class="srow"><div data-dc-tpl="142"><div data-dc-tpl="143" class="lbl">Project name</div><div data-dc-tpl="144" class="dsc">Shown across the planner and in handoffs.</div></div><input data-dc-tpl="145" class="field" aria-label="Project name" value="Example Project"></div>
+          <div data-dc-tpl="146" class="srow"><div data-dc-tpl="147"><div data-dc-tpl="148" class="lbl">Workspace</div><div data-dc-tpl="149" class="dsc">The <code data-dc-tpl="150" class="mono">.planner</code> directory tracked in this repo — plan, anchors, decisions.</div></div><input data-dc-tpl="151" class="field mono" aria-label="Workspace" value=".planner/ · feat/one"></div>
+          <div data-dc-tpl="152" class="srow"><div data-dc-tpl="153"><div data-dc-tpl="154" class="lbl">Default integration target</div><div data-dc-tpl="155" class="dsc">Where finished work integrates. Work status and integration status stay distinct.</div></div>
+            <select data-dc-tpl="156" class="sel" aria-label="Integration target"><option data-dc-tpl="157">develop</option><option data-dc-tpl="158">main</option><option data-dc-tpl="159">next</option></select>
+          </div>
+          <div data-dc-tpl="160" class="srow"><div data-dc-tpl="161"><div data-dc-tpl="162" class="lbl">Provider capabilities</div><div data-dc-tpl="163" class="dsc">Detected for the active language. Semantic relations need a semantic-capable provider.</div></div>
+            <div data-dc-tpl="164" style="display: flex; gap: 6px; flex-wrap: wrap;"><span data-dc-tpl="165" class="pill" style="background: var(--pos-bg); color: var(--pos-ink);">syntactic ✓</span><span data-dc-tpl="166" class="pill" style="background: var(--pos-bg); color: var(--pos-ink);">semantic ✓</span></div>
+          </div>
+        </div>
+
+        
+        <div data-dc-tpl="167" class="card">
+          <div data-dc-tpl="168" class="shd">
+            <span data-dc-tpl="169" class="gico"><svg data-dc-tpl="170" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle data-dc-tpl="171" cx="6" cy="6" r="2.5"></circle><circle data-dc-tpl="172" cx="6" cy="18" r="2.5"></circle><circle data-dc-tpl="173" cx="18" cy="12" r="2.5"></circle><path data-dc-tpl="174" d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"></path></svg></span>
+            <div data-dc-tpl="175"><h3 data-dc-tpl="176">Agents &amp; sessions</h3><p data-dc-tpl="177" class="gsub">Defaults applied when a new session is created.</p></div>
+          </div>
+          <div data-dc-tpl="178" class="srow"><div data-dc-tpl="179"><div data-dc-tpl="180" class="lbl">Default agent</div><div data-dc-tpl="181" class="dsc">Vendor and model a new session starts with.</div></div>
+            <span data-dc-tpl="182" class="chip-agent"><span data-dc-tpl="183" class="vbadge"><svg data-dc-tpl="184" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="185" d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"></path></svg></span>Opus 5.5<svg data-dc-tpl="186" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-dc-tpl="187" d="M6 9l6 6 6-6"></path></svg></span>
+          </div>
+          <div data-dc-tpl="188" class="srow"><div data-dc-tpl="189"><div data-dc-tpl="190" class="lbl">Session name prefix</div><div data-dc-tpl="191" class="dsc">Human-readable session ids, e.g. <span data-dc-tpl="192" class="mono">sess-a1</span>.</div></div><input data-dc-tpl="193" class="field mono" aria-label="Session prefix" value="sess-"></div>
+          <div data-dc-tpl="194" class="srow"><div data-dc-tpl="195"><div data-dc-tpl="196" class="lbl">Max concurrent sessions</div><div data-dc-tpl="197" class="dsc">Agents working the plan at the same time.</div></div>
+            <select data-dc-tpl="198" class="sel" aria-label="Max sessions"><option data-dc-tpl="199">2</option><option data-dc-tpl="200">4</option><option data-dc-tpl="201">6</option><option data-dc-tpl="202">8</option></select>
+          </div>
+          <div data-dc-tpl="203" class="srow"><div data-dc-tpl="204"><div data-dc-tpl="205" class="lbl">Auto-handoff on idle</div><div data-dc-tpl="206" class="dsc">Package a handoff automatically when a session goes idle mid-task.</div></div>
+            <button data-dc-tpl="207" type="button" class="sw on" role="switch" aria-checked="true"><i data-dc-tpl="208"></i></button>
+          </div>
+        </div>
+
+        
+        <div data-dc-tpl="209" class="card">
+          <div data-dc-tpl="210" class="shd">
+            <span data-dc-tpl="211" class="gico"><svg data-dc-tpl="212" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-dc-tpl="213" d="m7.5 4.3 4.5-2.3 4.5 2.3 4.5 2.3v9.4l-4.5 2.3-4.5 2.3-4.5-2.3L3 16V6.6z"></path><path data-dc-tpl="214" d="M12 22V12M21 6.6 12 12 3 6.6"></path></svg></span>
+            <div data-dc-tpl="215"><h3 data-dc-tpl="216">Context delivery</h3><p data-dc-tpl="217" class="gsub">What each agent receives, and the budget it is bounded by. Cost is measured after delivery, not estimated.</p></div>
+          </div>
+          <div data-dc-tpl="218" class="srow"><div data-dc-tpl="219"><div data-dc-tpl="220" class="lbl">Context budget</div><div data-dc-tpl="221" class="dsc">Upper bound of tokens assembled per task. Shown as measured usage in Checks.</div></div>
+            <select data-dc-tpl="222" class="sel" aria-label="Budget"><option data-dc-tpl="223">60k tokens</option><option data-dc-tpl="224">90k tokens</option><option data-dc-tpl="225">120k tokens</option><option data-dc-tpl="226">200k tokens</option></select>
+          </div>
+          <div data-dc-tpl="227" class="srow"><div data-dc-tpl="228"><div data-dc-tpl="229" class="lbl">Include in context</div><div data-dc-tpl="230" class="dsc">Which project memory an agent gets by default. Each still counts toward the budget.</div></div>
+            <div data-dc-tpl="231" style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end;">
+              <button data-dc-tpl="232" type="button" class="btn btn-primary">Decisions</button>
+              <button data-dc-tpl="233" type="button" class="btn btn-primary">Conventions</button>
+              <button data-dc-tpl="234" type="button" class="btn btn-primary">Tests</button>
+              <button data-dc-tpl="235" type="button" class="btn">Related code</button>
+            </div>
+          </div>
+          <div data-dc-tpl="236" class="srow"><div data-dc-tpl="237"><div data-dc-tpl="238" class="lbl">Reconcile anchors on save</div><div data-dc-tpl="239" class="dsc">After each save, re-resolve code anchors and flag what became stale or invalidated.</div></div>
+            <button data-dc-tpl="240" type="button" class="sw on" role="switch"><i data-dc-tpl="241"></i></button>
+          </div>
+        </div>
+
+        
+        <div data-dc-tpl="242" class="card">
+          <div data-dc-tpl="243" class="shd">
+            <span data-dc-tpl="244" class="gico"><svg data-dc-tpl="245" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse data-dc-tpl="246" cx="12" cy="5" rx="9" ry="3"></ellipse><path data-dc-tpl="247" d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"></path></svg></span>
+            <div data-dc-tpl="248" style="flex-grow: 1;"><h3 data-dc-tpl="249">Backup</h3><p data-dc-tpl="250" class="gsub">Point-in-time snapshots of the <code data-dc-tpl="251" class="mono">.planner</code> workspace, kept locally so work is never lost.</p></div>
+            <button data-dc-tpl="252" type="button" class="btn btn-primary" style="align-self: center;"><svg data-dc-tpl="253" class="ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-dc-tpl="254" d="M21 12a9 9 0 1 1-3-6.7"></path><path data-dc-tpl="255" d="M21 3v5h-5"></path></svg>Back up now</button>
+          </div>
+          <div data-dc-tpl="256" class="srow"><div data-dc-tpl="257"><div data-dc-tpl="258" class="lbl">Automatic backups</div><div data-dc-tpl="259" class="dsc">Snapshot on a schedule and before risky operations (restore, reset, bulk edits).</div></div>
+            <div data-dc-tpl="260" style="display: flex; align-items: center; gap: 12px;"><select data-dc-tpl="261" class="sel" aria-label="Frequency"><option data-dc-tpl="262">Every 15 min</option><option data-dc-tpl="263">Every 30 min</option><option data-dc-tpl="264">Hourly</option></select><button data-dc-tpl="265" type="button" class="sw on" role="switch"><i data-dc-tpl="266"></i></button></div>
+          </div>
+          <div data-dc-tpl="267" style="padding: 6px 16px 4px;"><p data-dc-tpl="268" class="eyebrow">Restore points · last 12 min ago · 3.2 MB</p></div>
+          <div data-dc-tpl="269" class="rpt"><div data-dc-tpl="270" style="display: flex; align-items: center; gap: 9px;"><svg data-dc-tpl="271" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--pos-ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle data-dc-tpl="272" cx="12" cy="12" r="9"></circle><path data-dc-tpl="273" d="M12 7v5l3 2"></path></svg><div data-dc-tpl="274"><div data-dc-tpl="275" class="lbl" style="font-weight: 600;">Today · 14:38</div><div data-dc-tpl="276" class="dsc">auto · 3.2 MB · 41 tasks, 12 anchors</div></div></div><button data-dc-tpl="277" type="button" class="btn">Restore</button></div>
+          <div data-dc-tpl="278" class="rpt"><div data-dc-tpl="279" style="display: flex; align-items: center; gap: 9px;"><svg data-dc-tpl="280" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle data-dc-tpl="281" cx="12" cy="12" r="9"></circle><path data-dc-tpl="282" d="M12 7v5l3 2"></path></svg><div data-dc-tpl="283"><div data-dc-tpl="284" class="lbl" style="font-weight: 600;">Today · 09:02</div><div data-dc-tpl="285" class="dsc">before restore · 3.1 MB</div></div></div><button data-dc-tpl="286" type="button" class="btn">Restore</button></div>
+          <div data-dc-tpl="287" class="rpt"><div data-dc-tpl="288" style="display: flex; align-items: center; gap: 9px;"><svg data-dc-tpl="289" class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle data-dc-tpl="290" cx="12" cy="12" r="9"></circle><path data-dc-tpl="291" d="M12 7v5l3 2"></path></svg><div data-dc-tpl="292"><div data-dc-tpl="293" class="lbl" style="font-weight: 600;">Yesterday · 18:20</div><div data-dc-tpl="294" class="dsc">auto · 3.0 MB</div></div></div><button data-dc-tpl="295" type="button" class="btn">Restore</button></div>
+        </div>
+
+        
+        <div data-dc-tpl="296" class="card">
+          <div data-dc-tpl="297" class="shd">
+            <span data-dc-tpl="298" class="gico"><svg data-dc-tpl="299" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-dc-tpl="300" d="M12 3v12"></path><path data-dc-tpl="301" d="m8 11 4 4 4-4"></path><path data-dc-tpl="302" d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path></svg></span>
+            <div data-dc-tpl="303"><h3 data-dc-tpl="304">Export &amp; import</h3><p data-dc-tpl="305" class="gsub">Move the whole project memory between machines or repos as a portable bundle.</p></div>
+          </div>
+          <div data-dc-tpl="306" class="srow"><div data-dc-tpl="307"><div data-dc-tpl="308" class="lbl">Export project memory</div><div data-dc-tpl="309" class="dsc">Plan, code anchors, decisions and conventions in one <span data-dc-tpl="310" class="mono">.planner</span> bundle.</div></div>
+            <div data-dc-tpl="311" style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end;"><span data-dc-tpl="312" class="pill" style="background: var(--mut-bg); color: var(--text-subtle);">plan</span><span data-dc-tpl="313" class="pill" style="background: var(--mut-bg); color: var(--text-subtle);">anchors</span><span data-dc-tpl="314" class="pill" style="background: var(--mut-bg); color: var(--text-subtle);">decisions</span><button data-dc-tpl="315" type="button" class="btn">Export bundle</button></div>
+          </div>
+          <div data-dc-tpl="316" class="srow"><div data-dc-tpl="317"><div data-dc-tpl="318" class="lbl">Import / restore from file</div><div data-dc-tpl="319" class="dsc">Bring a bundle in. Conflicting entries are kept side by side for review — nothing is overwritten silently.</div></div>
+            <button data-dc-tpl="320" type="button" class="btn"><svg data-dc-tpl="321" class="ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-dc-tpl="322" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path data-dc-tpl="323" d="M14 2v6h6"></path></svg>Choose file…</button>
+          </div>
+        </div>
+
+        
+        <div data-dc-tpl="324" class="card" style="border-color: rgba(239, 68, 68, 0.3);">
+          <div data-dc-tpl="325" class="shd" style="border-color: rgba(239, 68, 68, 0.2);">
+            <span data-dc-tpl="326" class="gico" style="background: var(--bad-bg); color: var(--bad-ink);"><svg data-dc-tpl="327" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-dc-tpl="328" d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path><path data-dc-tpl="329" d="M12 9v4M12 17h.01"></path></svg></span>
+            <div data-dc-tpl="330"><h3 data-dc-tpl="331">Data &amp; reset</h3><p data-dc-tpl="332" class="gsub">Irreversible. A backup is taken automatically before any of these run.</p></div>
+          </div>
+          <div data-dc-tpl="333" class="srow"><div data-dc-tpl="334"><div data-dc-tpl="335" class="lbl">Rebuild code anchors</div><div data-dc-tpl="336" class="dsc">Re-resolve every anchor from scratch. Clears stale/invalidated flags; review state resets to pending.</div></div><button data-dc-tpl="337" type="button" class="btn">Rebuild</button></div>
+          <div data-dc-tpl="338" class="srow"><div data-dc-tpl="339"><div data-dc-tpl="340" class="lbl">Clear unsaved drafts</div><div data-dc-tpl="341" class="dsc">Discard every draft that has not been saved as source across all files.</div></div><button data-dc-tpl="342" type="button" class="btn btn-danger">Clear drafts</button></div>
+          <div data-dc-tpl="343" class="srow"><div data-dc-tpl="344"><div data-dc-tpl="345" class="lbl">Reset project memory</div><div data-dc-tpl="346" class="dsc">Remove the plan, anchors and decisions. The repository code is untouched.</div></div><button data-dc-tpl="347" type="button" class="btn btn-danger">Reset…</button></div>
+        </div>
+
+        <p data-dc-tpl="348" style="margin: 0px; font-size: 11.5px; color: var(--text-subtle); line-height: 1.5;">Illustrative data for the F025 proposal. Backup covers BR26; export, import and restore cover BR27. Controls are a design proposal — field names are not final.</p>
+      </div>
+    </main>
+  </div></div></div></div>
+
+
+
+</body></html>

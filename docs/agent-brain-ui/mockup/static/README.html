@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en"><head><style>.sc-placeholder{background:color-mix(in srgb,currentColor 8%,transparent);border:1px solid color-mix(in srgb,currentColor 50%,transparent);border-radius:2px;box-sizing:border-box;overflow:hidden}@keyframes sc-shine{0%{background-position:100% 50%}100%{background-position:0% 50%}}html.sc-dc-streaming .sc-placeholder,html.sc-dc-streaming .sc-interp.sc-missing{position:relative;background:color-mix(in srgb,currentColor 5%,transparent);border-color:transparent}html.sc-dc-streaming .sc-placeholder::before,html.sc-dc-streaming .sc-interp.sc-missing::before{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(217,119,87,0) 25%,rgba(247,225,211,.95) 37%,rgba(217,119,87,0) 63%);background-size:400% 100%;animation:sc-shine 1.4s ease infinite}html.sc-dc-streaming .sc-placeholder:nth-child(n+9 of .sc-placeholder)::before,html.sc-dc-streaming .sc-interp.sc-missing:nth-child(n+9 of .sc-interp.sc-missing)::before{animation:none;background:color-mix(in srgb,currentColor 8%,transparent)}.sc-placeholder-error{padding:4px 8px;font:11px/1.4 ui-monospace,monospace;color:color-mix(in srgb,currentColor 70%,transparent);word-break:break-word}.sc-interp.sc-missing{display:inline-block;width:2em;height:1em;overflow:hidden;vertical-align:text-bottom;background:rgba(255,255,255,.3);border:1px solid rgba(0,0,0,.5);border-radius:2px;box-sizing:border-box;color:transparent;user-select:none}.sc-interp.sc-unresolved{font-family:ui-monospace,monospace;font-size:.85em;color:color-mix(in srgb,currentColor 50%,transparent);background:color-mix(in srgb,currentColor 10%,transparent);border-radius:3px;padding:0 3px}.sc-host.sc-has-error{position:relative}.sc-logic-error{position:absolute;top:8px;left:8px;z-index:2147483647;max-width:60ch;padding:6px 10px;background:#b00020;color:#fff;font:12px/1.4 ui-monospace,monospace;border-radius:4px;white-space:pre-wrap;pointer-events:none}@media print{@page{margin: 0.5cm;}figure,table{break-inside: avoid;}#dc-root,#dc-root > .sc-host{height: auto;}*,*::before,*::after{print-color-adjust: exact;-webkit-print-color-adjust: exact;backdrop-filter: none !important;-webkit-backdrop-filter: none !important;animation-delay: -99s !important;animation-duration: .001s !important;animation-iteration-count: 1 !important;animation-fill-mode: both !important;animation-play-state: running !important;transition-duration: 0s !important;}}</style>
+<meta charset="utf-8">
+<title>Agent Plan — Handoff</title>
+<style>x-dc{display:none!important}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com" data-dc-tpl="1"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" data-dc-tpl="2"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" data-dc-tpl="3"><style data-dc-tpl="4">
+  :root{
+    --bg-base:#f8fafc; --surface-elevated:#ffffff; --sidebar:#f1f5f9;
+    --border:rgba(148,163,184,0.22); --border-strong:rgba(148,163,184,0.34);
+    --text:#0f172a; --text-muted:#475569; --text-subtle:#64748b;
+    --accent:#6366f1; --accent-soft:rgba(99,102,241,0.12);
+    --feature:#8b5cf6; --phase:#06b6d4; --task:#10b981;
+    --pos-ink:#15803d; --warn-ink:#b45309; --mut-bg:rgba(148,163,184,0.16);
+    --pos-bg:rgba(34,197,94,0.14); --warn-bg:rgba(234,88,12,0.14);
+  }
+  .t-dark{
+    --bg-base:#0a1220; --surface-elevated:#111827; --sidebar:#0d1526;
+    --border:rgba(148,163,184,0.14); --border-strong:rgba(148,163,184,0.26);
+    --text:#f1f5f9; --text-muted:#94a3b8; --text-subtle:#7c8aa0;
+    --accent:#818cf8; --accent-soft:rgba(129,140,248,0.16);
+    --feature:#a78bfa; --phase:#22d3ee; --task:#34d399;
+    --pos-ink:#4ade80; --warn-ink:#fbbf24; --mut-bg:rgba(148,163,184,0.12);
+    --pos-bg:rgba(34,197,94,0.13); --warn-bg:rgba(234,88,12,0.15);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg-base);-webkit-font-smoothing:antialiased}
+  .doc{min-height:100vh;color:var(--text);background:var(--bg-base)}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  .eyebrow{font-size:10px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--text-subtle);margin:0}
+  .wrap{max-width:860px;margin:0 auto;padding:32px 24px 72px;display:flex;flex-direction:column;gap:22px}
+  h1{margin:0;font-size:26px;font-weight:700;line-height:1.15}
+  h2{margin:0 0 2px;font-size:16px;font-weight:700}
+  p{margin:0;font-size:13.5px;line-height:1.6;color:var(--text-muted)}
+  .lead{font-size:14.5px;color:var(--text-muted);line-height:1.6;max-width:680px}
+  .card{background:var(--surface-elevated);border:1px solid var(--border);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+  .sec-ico{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--accent-soft);color:var(--accent)}
+  .sechd{display:flex;align-items:center;gap:11px}
+  .pill{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:2px 8px;font-size:10.5px;font-weight:600;line-height:1.35;white-space:nowrap}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th{text-align:left;font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle);padding:6px 10px;border-bottom:1px solid var(--border)}
+  td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text-muted);vertical-align:top}
+  td b{color:var(--text);font-weight:600}
+  ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+  li{font-size:13px;line-height:1.5;color:var(--text-muted)}
+  li b{color:var(--text)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .axis{border:1px solid var(--border);border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;gap:3px}
+  .axis .k{font-size:12.5px;font-weight:700}
+  .axis .v{font-size:11.5px;color:var(--text-subtle);line-height:1.45}
+  .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);border-radius:10px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:none}
+  .tag{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:2px 8px;font-size:10.5px;font-weight:600}
+  code{font-family:"JetBrains Mono",monospace;font-size:12px;background:var(--mut-bg);border-radius:5px;padding:1px 5px}
+  a.link{color:var(--accent);text-decoration:none;font-weight:600}
+  @media (max-width:640px){ .two{grid-template-columns:1fr} .wrap{padding:24px 16px 56px} }
+</style><meta name="generator" content="scripts/export-mockup-static.mjs">
+</head>
+<body>
+<div id="dc-root"><div class="sc-host" data-sc-name="README"><div data-dc-tpl="5" class="doc t-dark">
+  <div data-dc-tpl="6" class="wrap">
+    <div data-dc-tpl="7" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div data-dc-tpl="8" style="display: flex; flex-direction: column; gap: 8px; min-width: 0px;">
+        <span data-dc-tpl="9" class="pill" style="background: var(--accent-soft); color: var(--accent); align-self: flex-start;">F025 · Web UI reorganization</span>
+        <h1 data-dc-tpl="10">Design handoff</h1>
+        <p data-dc-tpl="11" class="lead">A clickable mockup + design system for the Agent Plan web UI, to hand to the engineer/agent who will build the real thing. It shows <b data-dc-tpl="12">layout, flows and the concepts the UI must encode</b> — not production code. All data is illustrative.</p>
+      </div>
+      <button data-dc-tpl="13" type="button" class="btn" aria-label="Toggle theme" style="flex-shrink: 0;">
+        <svg data-dc-tpl="15" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle data-dc-tpl="16" cx="12" cy="12" r="4"></circle><path data-dc-tpl="17" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"></path></svg>Light
+        
+      </button>
+    </div>
+
+    
+    <div data-dc-tpl="21" class="card">
+      <div data-dc-tpl="22" class="sechd"><span data-dc-tpl="23" class="sec-ico"><svg data-dc-tpl="24" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect data-dc-tpl="25" x="3" y="3" width="7" height="7" rx="1"></rect><rect data-dc-tpl="26" x="14" y="3" width="7" height="7" rx="1"></rect><rect data-dc-tpl="27" x="14" y="14" width="7" height="7" rx="1"></rect><rect data-dc-tpl="28" x="3" y="14" width="7" height="7" rx="1"></rect></svg></span><h2 data-dc-tpl="29">The screens</h2></div>
+      <p data-dc-tpl="30">Nine artboards, grouped by the left-sidebar areas. Start at <b data-dc-tpl="31">Planner</b> (the launch board); every board links to the others through the sidebar.</p>
+      <table data-dc-tpl="32">
+        <thead data-dc-tpl="33"><tr data-dc-tpl="34"><th data-dc-tpl="35">Area</th><th data-dc-tpl="36">Screen</th><th data-dc-tpl="37">Purpose</th></tr></thead>
+        <tbody data-dc-tpl="38">
+          <tr data-dc-tpl="39"><td data-dc-tpl="40" rowspan="4"><b data-dc-tpl="41">Work</b></td><td data-dc-tpl="42"><b data-dc-tpl="43">Resume</b></td><td data-dc-tpl="44">Orientation on return: suggested next, what changed, resume command.</td></tr>
+          <tr data-dc-tpl="45"><td data-dc-tpl="46"><b data-dc-tpl="47">Planner</b></td><td data-dc-tpl="48">The dashboard: features → phases → tasks, faceted search, analytics, focus card. Sub-items: Requirements, Ideas, Handoff, Rooms (Heca-linked rooms and their group chat).</td></tr>
+          <tr data-dc-tpl="49"><td data-dc-tpl="50"><b data-dc-tpl="51">Agents &amp; targets</b></td><td data-dc-tpl="52">Who is working, where, with what result — work status and integration status kept separate.</td></tr>
+          <tr data-dc-tpl="53"><td data-dc-tpl="54"><b data-dc-tpl="55">Task detail</b></td><td data-dc-tpl="56">One task: context, executions, code anchors, draft/saved/history.</td></tr>
+          <tr data-dc-tpl="57"><td data-dc-tpl="58" rowspan="3"><b data-dc-tpl="59">Context</b></td><td data-dc-tpl="60"><b data-dc-tpl="61">Map</b></td><td data-dc-tpl="62">Relations between plan and code; verified vs uncertain.</td></tr>
+          <tr data-dc-tpl="63"><td data-dc-tpl="64"><b data-dc-tpl="65">Code</b></td><td data-dc-tpl="66">Editor with the four context needs; saved source vs draft vs history; keep-both on conflict.</td></tr>
+          <tr data-dc-tpl="67"><td data-dc-tpl="68"><b data-dc-tpl="69">Checks</b></td><td data-dc-tpl="70">Trust signals: context, conformance, coherence, verifications; measured context cost; pending reviews.</td></tr>
+          <tr data-dc-tpl="71"><td data-dc-tpl="72"><b data-dc-tpl="73">Project</b></td><td data-dc-tpl="74"><b data-dc-tpl="75">Settings</b></td><td data-dc-tpl="76">Project config, context delivery, backup (BR26), export/import/restore (BR27).</td></tr>
+          <tr data-dc-tpl="77"><td data-dc-tpl="78"><b data-dc-tpl="79">Proposals</b></td><td data-dc-tpl="80"><b data-dc-tpl="81">To evaluate</b></td><td data-dc-tpl="82">Design ideas not yet decided — accept, try behind a flag, or defer.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    
+    <div data-dc-tpl="83" class="card">
+      <div data-dc-tpl="84" class="sechd"><span data-dc-tpl="85" class="sec-ico"><svg data-dc-tpl="86" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect data-dc-tpl="87" x="3" y="3" width="18" height="18" rx="2"></rect><path data-dc-tpl="88" d="M9 3v18"></path></svg></span><h2 data-dc-tpl="89">Shell &amp; interaction conventions</h2></div>
+      <ul data-dc-tpl="90">
+        <li data-dc-tpl="91"><b data-dc-tpl="92">Left sidebar</b> grouped Work / Context / Proposals, with Settings pinned at the bottom. Same on every screen.</li>
+        <li data-dc-tpl="93"><b data-dc-tpl="94">Collapsible:</b> a header toggle collapses the sidebar to an <b data-dc-tpl="95">icon rail</b> on desktop; below 1180px it becomes an <b data-dc-tpl="96">off-canvas drawer</b> with a scrim. Sub-items show in the expanded sidebar / drawer, not in the rail.</li>
+        <li data-dc-tpl="97"><b data-dc-tpl="98">App-shell layout:</b> fixed-height frame (strip + header fixed, content scrolls), so the sidebar stays full-height and Settings is always reachable.</li>
+        <li data-dc-tpl="99"><b data-dc-tpl="100">Theme:</b> light and dark, driven by CSS variables; dark is the demo default. Every color is a token — see the design system.</li>
+        <li data-dc-tpl="101"><b data-dc-tpl="102">Few actions per spot</b>, single-select filters, modals keep their title and close affordance fixed while the body scrolls.</li>
+      </ul>
+    </div>
+
+    
+    <div data-dc-tpl="103" class="card">
+      <div data-dc-tpl="104" class="sechd"><span data-dc-tpl="105" class="sec-ico"><svg data-dc-tpl="106" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-dc-tpl="107" d="M12 3a9 9 0 1 0 9 9"></path><path data-dc-tpl="108" d="M12 3v9l6 3"></path></svg></span><h2 data-dc-tpl="109">Concepts the UI must keep distinct</h2></div>
+      <p data-dc-tpl="110">These come from F025. The UI's job is to never collapse two of these into one green light.</p>
+      <div data-dc-tpl="111" class="two">
+        <div data-dc-tpl="112" class="axis"><span data-dc-tpl="113" class="k">Work status ≠ Integration status</span><span data-dc-tpl="114" class="v">Progress on the task vs. whether it reached the target branch.</span></div>
+        <div data-dc-tpl="115" class="axis"><span data-dc-tpl="116" class="k">Workspace ≠ Integration target</span><span data-dc-tpl="117" class="v">The <code data-dc-tpl="118">.planner/</code> worktree vs. the branch work integrates into.</span></div>
+        <div data-dc-tpl="119" class="axis"><span data-dc-tpl="120" class="k">Rules read ≠ Code conforms</span><span data-dc-tpl="121" class="v">Conventions were loaded vs. the code actually follows them.</span></div>
+        <div data-dc-tpl="122" class="axis"><span data-dc-tpl="123" class="k">Test passed ≠ Still relevant</span><span data-dc-tpl="124" class="v">A check is green vs. it still covers the current code.</span></div>
+        <div data-dc-tpl="125" class="axis"><span data-dc-tpl="126" class="k">Resolved ≠ Reviewed</span><span data-dc-tpl="127" class="v">An anchor points at code vs. a human confirmed it (pending / invalidated / stale).</span></div>
+        <div data-dc-tpl="128" class="axis"><span data-dc-tpl="129" class="k">Verified ≠ Uncertain</span><span data-dc-tpl="130" class="v">Relations confirmed by resolution vs. only inferred.</span></div>
+        <div data-dc-tpl="131" class="axis"><span data-dc-tpl="132" class="k">Measured ≠ Estimated</span><span data-dc-tpl="133" class="v">Context cost is measured after delivery, not guessed up front.</span></div>
+        <div data-dc-tpl="134" class="axis"><span data-dc-tpl="135" class="k">Saved ≠ Draft ≠ History</span><span data-dc-tpl="136" class="v">Three distinct states; agent edits during yours are kept side by side.</span></div>
+      </div>
+    </div>
+
+    
+    <div data-dc-tpl="137" class="card">
+      <div data-dc-tpl="138" class="sechd"><span data-dc-tpl="139" class="sec-ico"><svg data-dc-tpl="140" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle data-dc-tpl="141" cx="12" cy="8" r="4"></circle><path data-dc-tpl="142" d="M4 21v-1a6 6 0 0 1 12 0v1"></path></svg></span><h2 data-dc-tpl="143">Referring to an agent</h2></div>
+      <p data-dc-tpl="144">Wherever an agent appears, show <b data-dc-tpl="145">AI vendor icon + model + session</b>, e.g.:</p>
+      <div data-dc-tpl="146" style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <span data-dc-tpl="147" class="tag" style="background: rgba(217, 119, 87, 0.16); color: var(--text);"><svg data-dc-tpl="148" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path data-dc-tpl="149" d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"></path></svg>Opus 5.5 · dev-a</span>
+        <span data-dc-tpl="150" class="tag" style="background: rgba(16, 163, 127, 0.16); color: var(--text);"><svg data-dc-tpl="151" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2" aria-hidden="true"><circle data-dc-tpl="152" cx="12" cy="12" r="9"></circle></svg>GPT-5.6 · dev-b</span>
+        <span data-dc-tpl="153" class="tag" style="background: rgba(66, 133, 244, 0.16); color: var(--text);"><svg data-dc-tpl="154" width="13" height="13" viewBox="0 0 24 24" fill="#4285f4" stroke="none" aria-hidden="true"><path data-dc-tpl="155" d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"></path></svg>Gemini 3 Pro · dev-c</span>
+      </div>
+    </div>
+
+    
+    <div data-dc-tpl="156" class="card">
+      <div data-dc-tpl="157" class="sechd"><span data-dc-tpl="158" class="sec-ico"><svg data-dc-tpl="159" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-dc-tpl="160" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path data-dc-tpl="161" d="m9 12 2 2 4-4"></path></svg></span><h2 data-dc-tpl="162">What's grounded vs. proposed</h2></div>
+      <ul data-dc-tpl="163">
+        <li data-dc-tpl="164"><span data-dc-tpl="165" class="pill" style="background: var(--pos-bg); color: var(--pos-ink);">From F025</span> &nbsp;The capabilities and requirements (BR22–29): the two-axis concepts, context cost, anchors/reviews, backup &amp; export.</li>
+        <li data-dc-tpl="166"><span data-dc-tpl="167" class="pill" style="background: var(--accent-soft); color: var(--accent);">Design proposal</span> &nbsp;The arrangement (sidebar grouping, the specific screens), field names, and everything under <b data-dc-tpl="168">To evaluate</b>.</li>
+        <li data-dc-tpl="169"><span data-dc-tpl="170" class="pill" style="background: var(--mut-bg); color: var(--text-subtle);">Illustrative</span> &nbsp;All numbers, names, tasks, agents and sessions. Replace with real data.</li>
+      </ul>
+    </div>
+
+    
+    <div data-dc-tpl="171" class="card">
+      <div data-dc-tpl="172" class="sechd"><span data-dc-tpl="173" class="sec-ico"><svg data-dc-tpl="174" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-dc-tpl="175" d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg></span><h2 data-dc-tpl="176">Implementation notes</h2></div>
+      <ul data-dc-tpl="177">
+        <li data-dc-tpl="178">Build with your own component library and <b data-dc-tpl="179">design tokens</b> — the companion <b data-dc-tpl="180">Agent Plan design system</b> artifact holds the token values (<code data-dc-tpl="181">tokens.json</code>) and brand book; don't port this mockup's markup.</li>
+        <li data-dc-tpl="182">Each board here is a standalone HTML artboard (no shared partials — a canvas limitation), so header/sidebar are duplicated on purpose. In the real app they become one <code data-dc-tpl="183">Shell</code> component.</li>
+        <li data-dc-tpl="184">Theme is CSS variables with a <code data-dc-tpl="185">.t-dark</code> class on the root; mirror that split in your token layer.</li>
+        <li data-dc-tpl="186">The existing <code data-dc-tpl="187">plan-web-ui</code> package already has the faceted search, status rollups and dashboard analytics referenced here — reuse them.</li>
+      </ul>
+    </div>
+
+    <p data-dc-tpl="188" style="font-size: 12px; color: var(--text-subtle);">Open any screen from this canvas, or jump straight to the <a data-dc-tpl="189" class="link" href="Main.html">Planner</a>.</p>
+  </div></div></div></div>
+
+
+
+</body></html>

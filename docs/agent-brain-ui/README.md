@@ -26,7 +26,7 @@ build it. The target is exactly the interactive mockup (see `ARTIFACT.md`).
 
 | Concern | Canonical source | Who reads it |
 |---|---|---|
-| Look of the new UI (screens, layout, flows) | the **mockup** — `mockup/` + the artifact in `ARTIFACT.md` | everyone |
+| Look of the new UI (screens, layout, flows) | the **mockup** — `mockup/` (source), `mockup/static/` (rendered, opens from disk) + the artifact in `ARTIFACT.md` | everyone |
 | Tokens (colour, type, spacing, radius, shadow) | `tokens.md` + `design-tokens.json` + the Design System artifact | implementers (JSON) / designers (artifact) |
 | Components (contracts, props, hierarchy) | `components.md` | implementers |
 
