@@ -106,7 +106,11 @@ export function openNodeSqliteDriver(options: NodeSqliteDriverOptions): Persiste
       }
       try {
         const outcome = fn();
-        db.exec("COMMIT");
+        try {
+          db.exec("COMMIT");
+        } catch (error) {
+          throw persistenceErrorFrom(error, path);
+        }
         return outcome;
       } catch (error) {
         try {
@@ -115,8 +119,7 @@ export function openNodeSqliteDriver(options: NodeSqliteDriverOptions): Persiste
           // A failed rollback leaves the transaction implicitly aborted by
           // SQLite; the original error is the meaningful failure.
         }
-        if (error instanceof PersistenceError) throw error;
-        throw persistenceErrorFrom(error, path);
+        throw error;
       } finally {
         inExclusive = false;
       }

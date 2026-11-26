@@ -1,5 +1,7 @@
 import type { PlanStore } from "./plan-store.js";
 import type { GuardStateInput } from "./guard-decision.js";
+import type { TaskListSummary } from "./list-flow.js";
+import { registeredWorkspaceClient } from "./registered-client.js";
 
 export interface NoTaskGuardState extends GuardStateInput {
   inProgressTaskIds: string[];
@@ -41,5 +43,17 @@ export async function loadNoTaskGuardState(st: PlanStore): Promise<NoTaskGuardSt
     inProgressTaskIds,
     guardBypassed,
     ...(focus ? { focusTask: { id: focus.task.id, title: focus.task.title } } : {}),
+  };
+}
+
+export async function loadRegisteredNoTaskGuardState(cwd: string): Promise<NoTaskGuardState> {
+  const { client, prefix } = await registeredWorkspaceClient(cwd);
+  const { tasks } = await client.request<{ tasks: TaskListSummary[] }>("GET", `${prefix}/tasks`);
+  const inProgress = tasks.filter(({ status }) => status === "in-progress");
+  const focus = inProgress[0] ?? tasks.find(({ status }) => !CLOSED_STATUSES.has(status));
+  return {
+    hasPlannerDir: true, totalTasks: tasks.length, hasInProgressTask: inProgress.length > 0,
+    inProgressTaskIds: inProgress.map(({ id }) => id), guardBypassed: false,
+    ...(focus ? { focusTask: { id: focus.id, title: focus.title } } : {}),
   };
 }

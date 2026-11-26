@@ -99,7 +99,7 @@ test("planner-task-start does not advise when the target phase is already the hi
     await primeHigherPhaseReads(session, "T902");
     const started = await callTool(session, "planner-task-start", { task: "T902" });
     const structured = toolStructured(started);
-    assert.equal(structured.started, true);
+    assert.equal(structured.started, true, toolText(started));
     assert.equal(structured.higherPriorityOpenPhase, null, "already the highest-priority open phase — nothing to advise");
     assert.doesNotMatch(toolText(started), /Phase-order advisory/);
   } finally {

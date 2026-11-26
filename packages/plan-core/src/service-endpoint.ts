@@ -16,10 +16,12 @@
  * corrupted advertisement can never block a fresh boot.
  */
 
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ServiceEndpointRecord } from "./project-descriptor.js";
+import { withPlanServiceLock } from "./write-coordination.js";
 
 export type { ServiceEndpointRecord } from "./project-descriptor.js";
 
@@ -29,6 +31,11 @@ export type { ServiceEndpointRecord } from "./project-descriptor.js";
  * contract's explicit version-transition rule (domain-contract.md §0).
  */
 export const SERVICE_PROTOCOL_VERSION = "1";
+
+export function compatibleServiceProtocols(version = SERVICE_PROTOCOL_VERSION): readonly string[] {
+  const current = Number(version);
+  return Number.isSafeInteger(current) && current > 1 ? [version, String(current - 1)] : [version];
+}
 
 /** Directory holding the user-scoped runtime records. */
 export const SERVICE_RUNTIME_DIR_NAME = ".agent-plan";
@@ -53,16 +60,13 @@ function isServiceEndpointRecord(value: unknown): value is ServiceEndpointRecord
   if (value === null || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
   return typeof record.protocolVersion === "string" && typeof record.bootId === "string"
-    && record.host === "127.0.0.1" && typeof record.port === "number";
+    && (record.runtimeVersion === undefined || typeof record.runtimeVersion === "string")
+    && (record.authority === undefined || record.authority === "registered-projects")
+    && record.host === "127.0.0.1" && typeof record.port === "number"
+    && Number.isInteger(record.port) && record.port > 0 && record.port <= 65_535;
 }
 
-/**
- * The advertised record for this user, or null when none exists or the
- * file is stale/structurally invalid (a corrupt record is removed, never
- * served — an unreadable advertisement is not a service).
- */
-export async function readServiceEndpointRecord(home: string = homedir()): Promise<ServiceEndpointRecord | null> {
-  const path = serviceEndpointRecordPath(home);
+async function inspectServiceEndpointRecord(path: string): Promise<ServiceEndpointRecord | "invalid" | null> {
   let raw: string;
   try {
     raw = await readFile(path, "utf-8");
@@ -73,10 +77,22 @@ export async function readServiceEndpointRecord(home: string = homedir()): Promi
     const parsed: unknown = JSON.parse(raw);
     if (isServiceEndpointRecord(parsed)) return parsed;
   } catch {
-    // fall through to removal
+    // A malformed record follows the same cleanup path as an invalid shape.
   }
-  await rm(path, { force: true }).catch(() => {});
-  return null;
+  return "invalid";
+}
+
+/** Read the advertised boot, removing a corrupt record under the publication lock. */
+export async function readServiceEndpointRecord(home: string = homedir()): Promise<ServiceEndpointRecord | null> {
+  const path = serviceEndpointRecordPath(home);
+  const recorded = await inspectServiceEndpointRecord(path);
+  if (recorded !== "invalid") return recorded;
+  return withPlanServiceLock(serviceRuntimeDir(home), "record", async () => {
+    const current = await inspectServiceEndpointRecord(path);
+    if (current !== "invalid") return current;
+    await rm(path, { force: true });
+    return null;
+  }).catch(() => null);
 }
 
 /**
@@ -88,11 +104,18 @@ export async function writeServiceEndpointRecord(
   home: string = homedir(),
 ): Promise<ServiceEndpointRecord> {
   const path = serviceEndpointRecordPath(home);
-  await mkdir(serviceRuntimeDir(home), { recursive: true });
-  const temporary = `${path}.tmp-${process.pid}-${Date.now()}`;
-  await writeFile(temporary, `${JSON.stringify(record, null, 2)}\n`, "utf-8");
-  await rename(temporary, path);
-  return record;
+  const runtimeDir = serviceRuntimeDir(home);
+  await mkdir(runtimeDir, { recursive: true, mode: 0o700 });
+  return withPlanServiceLock(runtimeDir, "record", async () => {
+    const temporary = `${path}.tmp-${randomUUID()}`;
+    try {
+      await writeFile(temporary, `${JSON.stringify(record, null, 2)}\n`, { encoding: "utf-8", mode: 0o600, flag: "wx" });
+      await rename(temporary, path);
+      return record;
+    } finally {
+      await rm(temporary, { force: true }).catch(() => {});
+    }
+  });
 }
 
 /**
@@ -105,10 +128,14 @@ export async function removeServiceEndpointRecord(
   home: string = homedir(),
 ): Promise<void> {
   try {
-    const record = await readServiceEndpointRecord(home);
-    if (record && record.bootId === owner.bootId && record.host === owner.host && record.port === owner.port) {
-      await rm(serviceEndpointRecordPath(home), { force: true });
-    }
+    const path = serviceEndpointRecordPath(home);
+    if (!await inspectServiceEndpointRecord(path)) return;
+    await withPlanServiceLock(serviceRuntimeDir(home), "record", async () => {
+      const record = await inspectServiceEndpointRecord(path);
+      if (record === "invalid" || (record && record.bootId === owner.bootId && record.host === owner.host && record.port === owner.port)) {
+        await rm(path, { force: true });
+      }
+    });
   } catch {
     // The record is an advertisement; failing to clean it must not throw.
   }
@@ -133,19 +160,28 @@ export async function verifyLiveServiceEndpoint(
   record: ServiceEndpointRecord,
   options: { acceptedProtocolVersions: readonly string[] },
 ): Promise<ServiceEndpointVerificationResult> {
-  let body: { protocolVersion?: unknown; bootId?: unknown };
+  let body: { protocolVersion?: unknown; bootId?: unknown; authority?: unknown; runtimeVersion?: unknown; acceptedProtocolVersions?: unknown };
   try {
     const response = await fetch(`http://127.0.0.1:${record.port}/health`, {
+      redirect: "error",
       signal: AbortSignal.timeout(ENDPOINT_HEALTH_TIMEOUT_MS),
     });
     if (!response.ok) return { verified: false, reason: "unreachable" };
-    body = (await response.json()) as { protocolVersion?: unknown; bootId?: unknown };
+    body = (await response.json()) as typeof body;
   } catch {
     return { verified: false, reason: "unreachable" };
   }
-  if (typeof body.protocolVersion !== "string" || !options.acceptedProtocolVersions.includes(body.protocolVersion)) {
+  if (typeof body.protocolVersion !== "string") return { verified: false, reason: "protocol-incompatible" };
+  const advertised: unknown[] = Array.isArray(body.acceptedProtocolVersions) ? body.acceptedProtocolVersions : [];
+  const serverProtocols = compatibleServiceProtocols(body.protocolVersion);
+  if (!options.acceptedProtocolVersions.includes(body.protocolVersion)
+    && !options.acceptedProtocolVersions.some((version) => advertised.includes(version) && serverProtocols.includes(version))) {
     return { verified: false, reason: "protocol-incompatible" };
   }
-  if (body.bootId !== record.bootId) return { verified: false, reason: "boot-mismatch" };
+  if (body.bootId !== record.bootId || body.protocolVersion !== record.protocolVersion
+    || (record.authority && body.authority !== record.authority)
+    || (record.runtimeVersion && body.runtimeVersion !== record.runtimeVersion)) {
+    return { verified: false, reason: "boot-mismatch" };
+  }
   return { verified: true };
 }

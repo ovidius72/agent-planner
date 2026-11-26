@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Form, Link, redirect, useActionData, useLoaderData, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router-dom";
 import { FormattedText } from "../components/ui/formatted-text";
-import { getPlannerDocument, savePlannerDocument } from "../lib/api";
+import { getPlannerDocument, savePlannerDocument, type PlannerDocument } from "../lib/api";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -21,25 +21,37 @@ export async function action({ request }: ActionFunctionArgs) {
   if (!confirmed) return { error: "Saving requires explicit confirmation.", path };
   if (!content.trim()) return { error: "Document content must be non-empty Markdown.", path };
   try {
-    await savePlannerDocument(path, content);
+    const id = String(form.get("documentId") ?? "");
+    const revision = Number(form.get("documentRevision"));
+    if (id) await savePlannerDocument(path, content, { id, revision });
+    else await savePlannerDocument(path, content);
   } catch (error) {
+    if (error instanceof Response) {
+      const body = await error.json().catch(() => undefined) as { error?: { message?: string } } | undefined;
+      return { error: body?.error?.message ?? error.statusText ?? "Document save failed.", path };
+    }
     return { error: error instanceof Error ? error.message : String(error), path };
   }
   return redirect(`/docs/view?path=${encodeURIComponent(path)}`);
 }
 
 export function DocViewerRoute() {
-  const { doc } = useLoaderData() as { doc: { path: string; content: string } };
+  const { doc } = useLoaderData() as { doc: PlannerDocument };
   const actionData = useActionData() as { error?: string } | undefined;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(doc.content);
+  const [version, setVersion] = useState<{ id: string; revision: number }>();
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <Link to="/handoff" className="text-sm text-[var(--accent)] underline-offset-2 hover:underline">← Handoffs</Link>
         <h1 className="text-base font-bold text-[var(--text)]">Planner document</h1>
         <code className="rounded border border-[var(--border)] px-2 py-0.5 font-mono text-xs">{doc.path}</code>
-        <button type="button" className="rounded border border-[var(--border)] px-2 py-1 text-sm" onClick={() => { setDraft(doc.content); setEditing((value) => !value); }}>
+        <button type="button" className="rounded border border-[var(--border)] px-2 py-1 text-sm" onClick={() => {
+          setDraft(doc.content);
+          setVersion(doc.id && doc.revision ? { id: doc.id, revision: doc.revision } : undefined);
+          setEditing((value) => !value);
+        }}>
           {editing ? "Preview" : "Edit"}
         </button>
       </div>
@@ -51,6 +63,10 @@ export function DocViewerRoute() {
       ) : (
         <Form method="put" className="grid gap-3">
           <input type="hidden" name="path" value={doc.path} />
+          {version && <>
+            <input type="hidden" name="documentId" value={version.id} />
+            <input type="hidden" name="documentRevision" value={version.revision} />
+          </>}
           <label className="grid gap-2 text-sm">
             <span className="font-semibold">Markdown source (dependency-free textarea baseline)</span>
             <textarea name="content" value={draft} onChange={(event) => setDraft(event.target.value)} rows={24} className="rounded-lg border border-[var(--border)] p-3 font-mono text-sm" />

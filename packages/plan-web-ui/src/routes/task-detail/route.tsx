@@ -1,6 +1,6 @@
 import { ArrowLeft } from "lucide-react";
-import { useCallback, useRef } from "react";
-import { Form, Link, Outlet, useFetcher, useLoaderData, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useRef } from "react";
+import { Form, Link, Outlet, useFetcher, useLoaderData, useNavigate, useRevalidator } from "react-router-dom";
 import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
 import { DetailMetricsRow } from "../../components/detail/detail-metrics-row";
 import { EntityDetailIdentity } from "../../components/detail/entity-detail-identity";
@@ -65,6 +65,14 @@ function ChecklistItemToggle({
 export function TaskDetailRoute() {
   const { feature, phase, task, pendingResume } = useLoaderData() as { feature: Feature; phase: Phase; task: Task; pendingResume: boolean };
   const canStart = canStartTask(task.status);
+  const canRelease = task.executionState === "idle" || task.executionState === "abandoned";
+  const isActive = task.executionState === "active";
+  const { revalidate } = useRevalidator();
+  useEffect(() => {
+    if (!isActive) return;
+    const interval = window.setInterval(() => revalidate(), 30_000);
+    return () => window.clearInterval(interval);
+  }, [isActive, revalidate]);
   const taskDecisions = task.decisions ?? [];
   const acceptedDecisions = task.acceptedDecisions ?? [];
   const checklist = task.checklist ?? [];
@@ -103,6 +111,7 @@ export function TaskDetailRoute() {
           shortId={task.shortId}
         >
           <StatusBadge status={task.status} />
+          {canRelease ? <span className="text-sm text-muted">{task.executionState === "idle" ? "Owner idle" : "Owner session ended"}</span> : null}
         </DetailEntityBar>
         </div>
         <EntityDetailIdentity kind="task" title={task.title} reference={`T${String(task.number).padStart(3, "0")}`} />
@@ -117,6 +126,13 @@ export function TaskDetailRoute() {
               if (!window.confirm(`Reopen task “${task.title}”? Its completion history will be retained.`)) event.preventDefault();
             }}>
               <Button type="submit" variant="primary">Reopen task</Button>
+            </Form>
+          ) : null}
+          {canRelease ? (
+            <Form method="post" action={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}/release`} className="inline-flex" onSubmit={(event) => {
+              if (!window.confirm(`Release the execution claim for “${task.title}”?`)) event.preventDefault();
+            }}>
+              <Button type="submit">Release task</Button>
             </Form>
           ) : null}
           <Link to="edit"><Button type="button" shortcut="edit">Edit task</Button></Link>

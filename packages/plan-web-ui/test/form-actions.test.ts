@@ -87,7 +87,7 @@ describe("entity form actions", () => {
     await expectResponseError(() => createRequirement({ request: formRequest({ title: " " }) }), 400, "Missing field: title");
 
     const fetchMock = installFetchMock(async (path, init) => {
-      expect(path).toBe("/api/requirements");
+      expect(path).toBe("/api/v2/requirements");
       const body = await requestJson(init);
       expect(body).toMatchObject({
         title: "Outcome",
@@ -98,7 +98,7 @@ describe("entity form actions", () => {
       expect(body).not.toHaveProperty("id");
       expect(body).not.toHaveProperty("createdAt");
       expect(body).not.toHaveProperty("updatedAt");
-      return jsonResponse(makeRequirement());
+      return jsonResponse({ apiVersion: "2", data: { requirement: makeRequirement() } });
     });
     const result = await createRequirement({ request: formRequest({ title: " Outcome ", linkedPhaseIds: [" phase-1 ", "", "phase-2"] }) });
     expect((result as Response).headers.get("Location")).toBe("/requirements");
@@ -223,17 +223,16 @@ describe("entity form actions", () => {
     const requirement = makeRequirement({ macroTasks: [{ id: "macro-1", title: "Keep", description: "", status: "planned", createdAt: "", updatedAt: "" }] });
     let updatePayload: Record<string, unknown> | undefined;
     installFetchMock(async (path, init) => {
-      if (path === "/api/requirements" && !init.method) return jsonResponse({ requirements: [requirement] });
-      if (path === "/api/requirements/requirement-1" && init.method === "PUT") {
+      if (path === "/api/v2/requirements" && !init.method) return jsonResponse({ apiVersion: "2", data: { requirements: [requirement] } });
+      if (path === "/api/v2/requirements/requirement-1" && init.method === "PUT") {
         updatePayload = await requestJson(init);
-        return jsonResponse(requirement);
+        return jsonResponse({ apiVersion: "2", data: { requirement } });
       }
       throw new Error(`Unexpected request ${path}`);
     });
 
     await editRequirement({ request: formRequest({ title: "Changed", description: "", linkedPhaseIds: ["phase-2"] }), params });
     expect(updatePayload).toMatchObject({
-      id: "requirement-1",
       expectedUpdatedAt: requirement.updatedAt,
       title: "Changed",
       linkedPhaseIds: ["phase-2"],
@@ -244,8 +243,8 @@ describe("entity form actions", () => {
     expect(updatePayload).not.toHaveProperty("createdAt");
 
     installFetchMock((path) => {
-      expect(path).toBe("/api/requirements");
-      return jsonResponse({ requirements: [] });
+      expect(path).toBe("/api/v2/requirements");
+      return jsonResponse({ apiVersion: "2", data: { requirements: [] } });
     });
     await expectResponseError(() => editRequirement({ request: formRequest({ title: "Missing" }), params }), 404, "Requirement not found: requirement-1");
   });

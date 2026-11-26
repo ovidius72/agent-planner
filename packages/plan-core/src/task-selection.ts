@@ -240,10 +240,10 @@ function startRefusalReason(status: string): string {
  * invariants remain mandatory.
  */
 export function checkExplicitTaskStart(
-  features: Feature[],
-  phases: Phase[],
+  features: Array<Pick<Feature, "id"> & { status: string }>,
+  phases: Array<Pick<Phase, "featureId"> & { status: string; tasks: Array<Pick<Task, "id" | "dependsOn"> & { status: string }> }>,
   taskId: string,
-  deviations: WorkDeviation[] = [],
+  deviations: Array<Pick<WorkDeviation, "state" | "temporaryTaskId">> = [],
 ): ExplicitTaskStartEligibility {
   const featureById = new Map(features.map((feature) => [feature.id, feature]));
   const candidates = phases.flatMap((phase) => phase.tasks.map((task) => ({ feature: phase.featureId ? featureById.get(phase.featureId) : undefined, phase, task })));

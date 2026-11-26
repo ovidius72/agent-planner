@@ -108,7 +108,7 @@ describe("handoff and requirement routes", () => {
       if (path === "/api/features/feature-1") return jsonResponse(feature);
       if (path === "/api/features") return jsonResponse([feature]);
       if (path === "/api/phases/phase-1") return jsonResponse(phase);
-      if (path === "/api/requirements") return jsonResponse({ requirements: [requirement] });
+      if (path === "/api/v2/requirements") return jsonResponse({ apiVersion: "2", data: { requirements: [requirement] } });
       throw new Error(`Unexpected request ${path}`);
     });
 

@@ -26,7 +26,7 @@ test("serve --reuse prints the running server's address and starts nothing", asy
   assert.equal(reused.root, running.root);
   assert.equal(again.stdout.trim().split("\n").length, 1, "--json prints exactly one line");
 
-  const text = runCli(["serve", "--reuse"], { cwd, timeout: 10000 });
+  const text = runCli(["serve"], { cwd, timeout: 10000 });
   assert.match(text.stdout, /already running at http:\/\/127\.0\.0\.1:\d+/);
   first.child.kill("SIGTERM");
   await first.exited;

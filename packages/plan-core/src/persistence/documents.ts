@@ -51,15 +51,19 @@ export function createDocument(
   driver: PersistenceDriver,
   input: { projectId: string; id: string; folder: string; name: string; content: string; metadata?: unknown },
 ): DocumentRecord {
+  return driver.runExclusive(() => createDocumentInTransaction(driver, input));
+}
+
+export function createDocumentInTransaction(
+  driver: PersistenceDriver,
+  input: { projectId: string; id: string; folder: string; name: string; content: string; metadata?: unknown },
+): DocumentRecord {
   const at = new Date().toISOString();
-  driver.runExclusive(() => {
-    driver
-      .prepare("INSERT INTO documents (id, project_id, folder, name, revision, content, content_hash, metadata, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
-      .run(input.id, input.projectId, input.folder, input.name, 1, input.content, contentHashOf(input.content), JSON.stringify(input.metadata ?? {}), at, at);
-    driver
-      .prepare("INSERT INTO document_revisions (document_id, revision, content, content_hash, saved_at) VALUES (?,?,?,?,?)")
-      .run(input.id, 1, input.content, contentHashOf(input.content), at);
-  });
+  const hash = contentHashOf(input.content);
+  driver.prepare("INSERT INTO documents (id, project_id, folder, name, revision, content, content_hash, metadata, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
+    .run(input.id, input.projectId, input.folder, input.name, 1, input.content, hash, JSON.stringify(input.metadata ?? {}), at, at);
+  driver.prepare("INSERT INTO document_revisions (document_id, revision, content, content_hash, saved_at) VALUES (?,?,?,?,?)")
+    .run(input.id, 1, input.content, hash, at);
   return getDocument(driver, input.id)!;
 }
 
@@ -68,25 +72,47 @@ export function updateDocument(
   documentId: string,
   input: { content: string; metadata?: unknown },
 ): DocumentRecord {
+  return driver.runExclusive(() => updateDocumentInTransaction(driver, documentId, { ...input, metadata: input.metadata ?? {} }));
+}
+
+/** Write a revision as part of a caller-owned command transaction. */
+export function updateDocumentInTransaction(
+  driver: PersistenceDriver,
+  documentId: string,
+  input: { content: string; metadata?: unknown },
+): DocumentRecord {
+  const current = getDocument(driver, documentId);
+  if (!current) throw new Error(`Unknown document ${documentId}`);
   const at = new Date().toISOString();
   const hash = contentHashOf(input.content);
-  driver.runExclusive(() => {
-    const row = driver.prepare("SELECT revision FROM documents WHERE id = ?").get(documentId);
-    if (row === undefined) throw new Error(`Unknown document ${documentId}`);
-    const nextRevision = Number(row.revision) + 1;
-    driver
-      .prepare("UPDATE documents SET revision = ?, content = ?, content_hash = ?, metadata = ?, updated_at = ? WHERE id = ?")
-      .run(nextRevision, input.content, hash, JSON.stringify(input.metadata ?? {}), at, documentId);
-    driver
-      .prepare("INSERT INTO document_revisions (document_id, revision, content, content_hash, saved_at) VALUES (?,?,?,?,?)")
-      .run(documentId, nextRevision, input.content, hash, at);
-  });
+  const nextRevision = current.revision + 1;
+  driver
+    .prepare("UPDATE documents SET revision = ?, content = ?, content_hash = ?, metadata = ?, updated_at = ? WHERE id = ?")
+    .run(nextRevision, input.content, hash, JSON.stringify(input.metadata ?? current.metadata), at, documentId);
+  driver
+    .prepare("INSERT INTO document_revisions (document_id, revision, content, content_hash, saved_at) VALUES (?,?,?,?,?)")
+    .run(documentId, nextRevision, input.content, hash, at);
   return getDocument(driver, documentId)!;
 }
 
 export function getDocument(driver: PersistenceDriver, documentId: string): DocumentRecord | undefined {
   const row = driver.prepare("SELECT * FROM documents WHERE id = ?").get(documentId);
   return row === undefined ? undefined : rowToDocument(row);
+}
+
+export function getDocumentByPath(driver: PersistenceDriver, projectId: string, folder: string, name: string): DocumentRecord | undefined {
+  const row = driver.prepare("SELECT * FROM documents WHERE project_id = ? AND folder = ? AND name = ?").get(projectId, folder, name);
+  return row === undefined ? undefined : rowToDocument(row);
+}
+
+export function registeredPlannerDocumentPath(path: string): { folder: string; name: string } | undefined {
+  if (path.length > 2048) return undefined;
+  const relative = /^\.planner\/docs\/(.+\.md)$/i.exec(path)?.[1];
+  if (!relative) return undefined;
+  const parts = relative.split("/");
+  if (parts.some((part) => !part || part === "." || part === ".." || part.includes("\\"))) return undefined;
+  const name = parts.pop();
+  return name ? { folder: parts.join("/"), name } : undefined;
 }
 
 export function listFolder(driver: PersistenceDriver, projectId: string, folder: string): DocumentRecord[] {

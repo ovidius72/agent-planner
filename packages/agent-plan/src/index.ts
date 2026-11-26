@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { PlanStore, ExportService, loadCanonicalPlannerSkill, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, classifyGuardedTool, loadNoTaskGuardState, noTaskWarning, type GuardEventInput } from "@agent-plan/core";
+import { PlanStore, PlannerApiClient, resolveLegacyPlannerRoot, resolvePlannerWorkspace, resolveRegisteredWorkspace, type exportPlannerReport, loadCanonicalPlannerSkill, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, classifyGuardedTool, loadNoTaskGuardState, noTaskWarning, type GuardEventInput } from "@agent-plan/core";
 import { startStdioServer } from "@agent-plan/mcp";
+import { loadRegisteredNoTaskGuardState, readServiceEndpointRecord, registeredWorkspaceClient } from "@agent-plan/core";
 import { basename, dirname, join, resolve } from "node:path";
 import { existsSync, realpathSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -17,7 +18,6 @@ interface CliFlags {
   full: boolean;
   version: boolean;
   json: boolean;
-  reuse: boolean;
   root?: string;
   port?: string;
   host?: string;
@@ -45,8 +45,8 @@ function usage(): string {
     "  agent-plan setup codex      [--user|--project] [--force] [--local]",
     "  agent-plan setup opencode   [--user|--project] [--force] [--local]",
     "  agent-plan export [--full]",
-    "  agent-plan serve [--root <.planner dir>] [--port <n>] [--host <h>] [--reuse] [--json]",
-    "  agent-plan stop [--root <.planner dir>] [--json]",
+    "  agent-plan serve [--root <.planner dir> | --user] [--port <n>] [--host <h>] [--reuse] [--json]",
+    "  agent-plan stop [--root <.planner dir> | --user] [--json]",
     "",
     "Commands:",
     "  version                     Print loaded package provenance and compatibility capabilities.",
@@ -68,7 +68,7 @@ function usage(): string {
     "  --json                      Print one machine-readable JSON line instead of text (serve, init).",
     "  --description <text>        Project description to set when init creates a new planner.",
     "  --goal <text>               Project goal to set when init creates a new planner.",
-    "  --reuse                     serve: if a server is already running for the folder, print its address and exit instead of starting another.",
+    "  --reuse                     Compatibility option. serve always reuses a compatible running service.",
     "  --root <dir>                Planner folder to serve or stop (default ./.planner).",
     "  --port <n>, --host <h>      Server port (default 3030) and bind host (default 127.0.0.1).",
     "  --project                   Install MCP and /planner command in the current project (default).",
@@ -93,7 +93,7 @@ function cliRuntimeDiagnosticsText(): string {
 }
 
 function parseFlags(args: string[]): { positional: string[]; flags: CliFlags } {
-  const flags: CliFlags = { yes: false, force: false, local: false, user: false, full: false, version: false, json: false, reuse: false };
+  const flags: CliFlags = { yes: false, force: false, local: false, user: false, full: false, version: false, json: false };
   const positional: string[] = [];
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
@@ -105,7 +105,7 @@ function parseFlags(args: string[]): { positional: string[]; flags: CliFlags } {
     else if (arg === "--project") flags.user = false;
     else if (arg === "--full") flags.full = true;
     else if (arg === "--json") flags.json = true;
-    else if (arg === "--reuse") flags.reuse = true;
+    else if (arg === "--reuse") continue;
     else if (arg.startsWith("--") && isValueFlag(arg.split("=")[0]!.slice(2))) {
       const [rawName, inlineValue] = arg.split(/=(.*)/s);
       const name = rawName!.slice(2) as ValueFlag;
@@ -135,6 +135,11 @@ async function prompt(question: string): Promise<string> {
 }
 
 async function initPlanner(projectNameArg: string | undefined, flags: CliFlags): Promise<void> {
+  const workspace = await resolvePlannerWorkspace(projectCwd());
+  if (workspace.kind === "descriptor-error") throw workspace.error;
+  if (workspace.kind === "descriptor") {
+    throw new Error("This workspace already has a registered project descriptor. Resolve it with agent-plan serve.");
+  }
   const root = plannerRoot();
   const st = new PlanStore(root);
   st.enableAutoSync(true);
@@ -707,7 +712,11 @@ async function guardPreToolUse(): Promise<void> {
 
   let state;
   try {
-    state = await loadNoTaskGuardState(new PlanStore(root));
+    const workspace = await resolvePlannerWorkspace(cwd);
+    if (workspace.kind === "descriptor-error") return;
+    state = workspace.kind === "descriptor"
+      ? await loadRegisteredNoTaskGuardState(cwd)
+      : await loadNoTaskGuardState(new PlanStore(root));
   } catch {
     return;
   }
@@ -752,25 +761,49 @@ function printServerInfo(info: ServerInfo, reused: boolean, flags: CliFlags): vo
 }
 
 async function serveCommand(flags: CliFlags): Promise<void> {
-  const root = resolve(flags.root ?? plannerRoot());
   const port = parsePort(flags.port);
   const host = flags.host ?? "127.0.0.1";
   if (host !== "127.0.0.1") {
     throw new Error(`--host ${host} is not supported: the server binds the loopback interface only (T490, no LAN mode).`);
   }
-  if (!(await new PlanStore(root).exists())) {
-    throw new Error(`No .planner/ found at ${root}. Run agent-plan init first.`);
-  }
-  // Loaded only here so the other commands do not pay for the web server.
-  const { serve, readLiveServerRecord } = await import("@agent-plan/server");
-  if (flags.reuse) {
-    const running = await readLiveServerRecord(root);
-    if (running) {
-      printServerInfo({ url: running.url, localUrl: running.localUrl, lanUrl: running.lanUrl, host: running.host, port: running.port, root }, true, flags);
-      return;
+  const cwd = projectCwd();
+  const explicitRoot = flags.root ?? process.env.AGENT_PLAN_ROOT;
+  if (flags.user && flags.root) throw new Error("--user and --root select different planner authorities.");
+  const workspace = !flags.user && !explicitRoot?.trim() ? await resolvePlannerWorkspace(cwd) : undefined;
+  if (workspace?.kind === "descriptor-error") throw workspace.error;
+  if (flags.user || workspace?.kind === "descriptor") {
+    const { ensureRegisteredPlannerRuntime } = await import("@agent-plan/server");
+    const previous = await readServiceEndpointRecord();
+    const record = await ensureRegisteredPlannerRuntime(homedir(), flags.port === undefined ? undefined : port);
+    const url = `http://${record.host}:${record.port}`;
+    const reused = previous?.bootId === record.bootId;
+    let scope: { projectId: string; workspaceId: string } | undefined;
+    if (workspace?.kind === "descriptor") {
+      scope = await resolveRegisteredWorkspace(new PlannerApiClient({ baseUrl: url }), cwd);
     }
+    const boardUrl = scope ? `${url}/board/${scope.projectId}/${scope.workspaceId}` : undefined;
+    if (flags.json) console.log(JSON.stringify({ url, ...record, reused, ...scope, boardUrl }));
+    else {
+      console.log(`Agent Plan registered project service at ${url}`);
+      if (boardUrl) console.log(`Dashboard: ${boardUrl}`);
+    }
+    return;
   }
-  const handle = await serve({ port, planRoot: root, host, quiet: true, serverKind: "standalone" });
+  const root = workspace?.kind === "legacy" ? workspace.planRoot : await resolveLegacyPlannerRoot(cwd, explicitRoot);
+  // Loaded only here so the other commands do not pay for the web server.
+  const { connectLocalPlannerService, LocalPlannerServiceError } = await import("@agent-plan/server");
+  const connection = await connectLocalPlannerService({ port, planRoot: root, host, quiet: true, serverKind: "standalone" }).catch((error: unknown) => {
+    if (error instanceof LocalPlannerServiceError && error.code === "PLAN_NOT_FOUND") {
+      throw new Error(`No .planner/ found at ${root}. Run agent-plan init first.`);
+    }
+    throw error;
+  });
+  if (connection.reused) {
+    const { record } = connection;
+    printServerInfo({ url: record.url, localUrl: record.localUrl, lanUrl: record.lanUrl, host: record.host, port: record.port, root }, true, flags);
+    return;
+  }
+  const { handle } = connection;
   const actualPort = new URL(handle.localUrl).port ? Number(new URL(handle.localUrl).port) : port;
   printServerInfo({ url: handle.url, localUrl: handle.localUrl, lanUrl: handle.lanUrl ?? null, host: handle.bindHost, port: actualPort, root }, false, flags);
   const stop = () => {
@@ -791,13 +824,21 @@ function processIsRunning(pid: number): boolean {
 
 /** Stop the server that `agent-plan serve` started for this folder. Never signals a server embedded in another program. */
 async function stopCommand(flags: CliFlags): Promise<void> {
-  const root = resolve(flags.root ?? plannerRoot());
+  if (flags.user) {
+    if (flags.root) throw new Error("--user and --root select different planner authorities.");
+    const { stopRegisteredPlannerRuntime } = await import("@agent-plan/server");
+    const stopped = await stopRegisteredPlannerRuntime();
+    if (flags.json) console.log(JSON.stringify({ stopped }));
+    else console.log(stopped ? "Registered planner runtime stopped." : "No registered planner runtime is running.");
+    return;
+  }
+  const root = await resolveLegacyPlannerRoot(projectCwd(), flags.root ?? process.env.AGENT_PLAN_ROOT);
   const report = (result: Record<string, unknown>, text: string, exitCode = 0) => {
     if (flags.json) console.log(JSON.stringify({ root, ...result }));
     else console.log(text);
     if (exitCode !== 0) process.exitCode = exitCode;
   };
-  const { readLiveServerRecord } = await import("@agent-plan/server");
+  const { readLiveServerRecord, verifyPlannerServerRecord } = await import("@agent-plan/server");
   const running = await readLiveServerRecord(root);
   if (!running) {
     report({ stopped: false, reason: "not-running" }, `No planner server is running for ${root}.`);
@@ -811,6 +852,7 @@ async function stopCommand(flags: CliFlags): Promise<void> {
     );
     return;
   }
+  await verifyPlannerServerRecord(running);
   process.kill(running.pid, "SIGTERM");
   const deadline = Date.now() + 5000;
   while (processIsRunning(running.pid) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 50));
@@ -853,21 +895,25 @@ async function main(): Promise<void> {
 
   if (command === "export") {
     const isFull = flags.full || positional.includes("--full");
-    const root = plannerRoot();
-    const st = new PlanStore(root);
-    if (!(await st.exists())) {
-      console.error("No .planner/ found. Run agent-plan init first.");
-      process.exit(1);
+    const cwd = projectCwd();
+    const explicitRoot = flags.root ?? process.env.AGENT_PLAN_ROOT;
+    if (!explicitRoot?.trim() && (await resolvePlannerWorkspace(cwd)).kind === "descriptor") {
+      const { client, prefix } = await registeredWorkspaceClient(cwd);
+      const { markdown } = await client.request<{ markdown: string }>("GET", `${prefix}/project/export?full=${isFull}`);
+      console.log(markdown);
+      return;
     }
-    const plan = await st.loadAll();
-    const exportService = new ExportService();
-    const markdown = exportService.exportToMarkdown(plan, isFull);
-
-    const fs = await import("node:fs/promises");
-    await fs.writeFile(join(root, "EXPORT.md"), markdown, "utf-8");
-
-    console.log(markdown);
-    console.log(`\nExport saved to ${join(root, "EXPORT.md")}`);
+    const root = await resolveLegacyPlannerRoot(cwd, explicitRoot);
+    const { connectLocalPlannerService } = await import("@agent-plan/server");
+    const service = await connectLocalPlannerService({ planRoot: root, port: 0, quiet: true, staticDir: "" });
+    try {
+      const client = new PlannerApiClient({ baseUrl: service.localUrl });
+      const { markdown, filePath } = await client.request<Awaited<ReturnType<typeof exportPlannerReport>>>("POST", "/project/export", { full: isFull });
+      console.log(markdown);
+      console.log(`\nExport saved to ${filePath}`);
+    } finally {
+      if (!service.reused) await service.handle.close();
+    }
     return;
   }
 

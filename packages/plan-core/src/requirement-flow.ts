@@ -109,6 +109,7 @@ export async function createRequirementFlow(store: PlanStore, input: Requirement
 }
 
 export interface RequirementUpdateFlowInput {
+  expectedUpdatedAt?: string | undefined;
   title?: string | undefined;
   description?: string | undefined;
   linkedPhaseIds?: string[] | undefined;
@@ -122,42 +123,42 @@ export interface RequirementUpdateOutcome {
 
 /** Update title/description/links/macro-tasks; planner keeps ids and timestamps. */
 export async function updateRequirementFlow(store: PlanStore, requirementId: string, input: RequirementUpdateFlowInput): Promise<RequirementUpdateOutcome> {
-  const requirements = await store.loadRequirements();
-  const current = requirements.requirements.find((requirement) => requirement.id === requirementId);
-  if (!current) {
-    throw new RequirementFlowRefusal("REQUIREMENT_NOT_FOUND", `Requirement not found: ${requirementId}`);
-  }
-  const updatedFields = [
-    ...(input.title !== undefined ? ["title"] : []),
-    ...(input.description !== undefined ? ["description"] : []),
-    ...(input.linkedPhaseIds !== undefined ? ["linkedPhaseIds"] : []),
-    ...(input.macroTasks !== undefined ? ["macroTasks"] : []),
-  ];
-  const linkedPhaseIds = input.linkedPhaseIds === undefined ? current.linkedPhaseIds : await resolveRequirementPhaseLinks(store, input.linkedPhaseIds);
-  const now = nowISO();
-  let next: Requirement;
-  try {
-    next = await store.updateRequirement(current.id, (canonical) => ({
-      ...canonical,
-      ...(input.title !== undefined ? { title: input.title.trim() } : {}),
-      ...(input.description !== undefined ? { description: input.description.trim() } : {}),
-      ...(input.linkedPhaseIds !== undefined ? { linkedPhaseIds } : {}),
-      ...(input.macroTasks !== undefined ? { macroTasks: reconcileRequirementMacroTasks(canonical.macroTasks, input.macroTasks.map((task) => ({
-        ...(task.id !== undefined ? { id: task.id } : {}),
-        title: task.title,
-        ...(task.description !== undefined ? { description: task.description } : {}),
-        status: task.status,
-      })), now) } : {}),
-      updatedAt: now,
-    }));
-  } catch (error) {
-    throw new RequirementFlowRefusal(
-      "REQUIREMENT_MACRO_TASK_INVALID",
-      error instanceof RequirementMacroTaskError ? error.message : "Invalid macro tasks.",
-    );
-  }
-  await store.writeGenerated();
-  return { requirement: next, updatedFields };
+  return store.runBatch(async () => {
+    const requirements = await store.loadRequirements();
+    const current = requirements.requirements.find((requirement) => requirement.id === requirementId);
+    if (!current) {
+      throw new RequirementFlowRefusal("REQUIREMENT_NOT_FOUND", `Requirement not found: ${requirementId}`);
+    }
+    const updatedFields = [
+      ...(input.title !== undefined ? ["title"] : []),
+      ...(input.description !== undefined ? ["description"] : []),
+      ...(input.linkedPhaseIds !== undefined ? ["linkedPhaseIds"] : []),
+      ...(input.macroTasks !== undefined ? ["macroTasks"] : []),
+    ];
+    const linkedPhaseIds = input.linkedPhaseIds === undefined ? current.linkedPhaseIds : await resolveRequirementPhaseLinks(store, input.linkedPhaseIds);
+    const now = nowISO();
+    let next: Requirement;
+    try {
+      next = await store.updateRequirement(current.id, (canonical) => ({
+        ...canonical,
+        ...(input.title !== undefined ? { title: input.title.trim() } : {}),
+        ...(input.description !== undefined ? { description: input.description.trim() } : {}),
+        ...(input.linkedPhaseIds !== undefined ? { linkedPhaseIds } : {}),
+        ...(input.macroTasks !== undefined ? { macroTasks: reconcileRequirementMacroTasks(canonical.macroTasks, input.macroTasks.map((task) => ({
+          ...(task.id !== undefined ? { id: task.id } : {}),
+          title: task.title,
+          ...(task.description !== undefined ? { description: task.description } : {}),
+          status: task.status,
+        })), now) } : {}),
+        updatedAt: now,
+      }), input.expectedUpdatedAt === undefined ? {} : { expectedUpdatedAt: input.expectedUpdatedAt });
+    } catch (error) {
+      if (!(error instanceof RequirementMacroTaskError)) throw error;
+      throw new RequirementFlowRefusal("REQUIREMENT_MACRO_TASK_INVALID", error.message);
+    }
+    await store.writeGenerated();
+    return { requirement: next, updatedFields };
+  });
 }
 
 /** Permanently delete a top-level requirement. Returns false when absent. */

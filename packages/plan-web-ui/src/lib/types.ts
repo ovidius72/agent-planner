@@ -139,6 +139,7 @@ export interface Task {
   shortName: string;
   title: string;
   status: TaskStatus;
+  executionState?: "active" | "idle" | "abandoned" | "unverified" | undefined;
   description: string;
   descriptionRef?: string;
   descriptionUpdatedAt: string;

@@ -1,3 +1,6 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { PlanStore } from "./plan-store.js";
 import type { Feature, Phase, PlanWorkspace, Task } from "./schema.js";
 import { statusBadge, statusIcon } from "./render-utils.js";
 
@@ -30,7 +33,7 @@ function taskLabel(task: Task): string {
 }
 
 export class ExportService {
-  exportToMarkdown(plan: PlanWorkspace, full = false): string {
+  exportToMarkdown(plan: Pick<PlanWorkspace, "project" | "features" | "phases">, full = false): string {
     const { project, features, phases } = plan;
     const lines: string[] = [];
 
@@ -140,4 +143,14 @@ export class ExportService {
     if (progress > 25) return `Il progetto è in fase di implementazione attiva (${progress}%).`;
     return `Il progetto è nelle fasi iniziali di setup e pianificazione (${progress}%).`;
   }
+}
+
+/** Generate the planner's report under the authority's root lock. */
+export async function exportPlannerReport(store: PlanStore, full: boolean) {
+  return store.runBatch(async () => {
+    const markdown = new ExportService().exportToMarkdown(await store.loadAll(), full);
+    const filePath = join(store.root, "EXPORT.md");
+    await writeFile(filePath, markdown, "utf-8");
+    return { markdown, filePath };
+  });
 }

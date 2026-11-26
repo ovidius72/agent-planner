@@ -621,24 +621,26 @@ For programs, `--description` and `--goal` set the project fields when the plann
 
 ### `agent-plan serve`
 
-Starts the planner web server for a `.planner/` folder and prints its address. It runs until stopped (Ctrl-C or SIGTERM).
+Starts or reuses the planner web server for a `.planner/` folder and prints its address. A new server runs until stopped (Ctrl-C or SIGTERM).
 
 ```bash
 agent-plan serve                       # ./.planner on 127.0.0.1:3030
 agent-plan serve --port 0 --json       # any free port; one JSON line on stdout
-agent-plan serve --root /path/to/.planner --host 0.0.0.0
+agent-plan serve --root /path/to/.planner --host 127.0.0.1
 ```
 
 `--json` prints `{"url","localUrl","lanUrl","host","port","root","reused"}` (with the real port when `--port 0`). A missing `.planner/` or an invalid port exits with code 1 and a message on stderr.
 
-While a server runs it writes `.planner/.local/server.json` (pid, address, root, start time, version, `kind`) and removes it when it stops. The file is git-ignored, and a record whose process is gone or whose address no longer answers `/health` is ignored. Every server writes it, whether it was started by `agent-plan serve`, by `planner-web` / `planner-load`, or by the Pi adapter. When two servers run for one folder, the first keeps the record.
+While a server runs it writes `.planner/.local/server.json` (pid, address, root, start time, version, `kind`) and removes it when it stops. The file is git-ignored, and a record whose process is gone or whose address no longer answers `/health` is ignored. Every server writes it, whether it was started by `agent-plan serve`, by `planner-web` / `planner-load`, or by the Pi adapter. The startup lock coordinates concurrent launches. The client verifies the boot identity and protocol before reusing the advertised endpoint.
 
 ```bash
 agent-plan serve --reuse --json   # a server is already running for this folder: print its address (reused: true) and exit
 agent-plan stop                   # stop the server that `agent-plan serve` started for this folder
 ```
 
-`serve --reuse` starts a server only when none is running. `stop` only stops a server started by `agent-plan serve` (`kind: "standalone"`). A server running inside another program (an agent's MCP server, the Pi adapter) is `kind: "embedded"`: `stop` refuses (exit 1) because signalling it would end that program; stop it from there (`planner-web` stop, `/planner stop`). `stop` exits 0 when nothing is running.
+`serve` reuses a compatible running server by default. The `--reuse` flag remains accepted for existing scripts. `stop` only stops a server started by `agent-plan serve` (`kind: "standalone"`). A server running inside another program (an agent's MCP server, the Pi adapter) is `kind: "embedded"`: `stop` refuses (exit 1) because signalling it would end that program; stop it from there (`planner-web` stop, `/planner stop`). `stop` exits 0 when nothing is running.
+
+`agent-plan serve --user --json` starts or discovers the user-scoped SQLite service for pre-registered projects. It can run from any working directory. The launching process handles Ctrl-C and SIGTERM. The registered service currently exposes project metadata, document reads and updates, search, snapshots, and event replay.
 
 ### `agent-plan export`
 

@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import planPiExtension from "../dist/index.js";
+import { readLiveServerRecord } from "../../plan-server/dist/index.js";
 import { PlanStore, FeatureSchema, PhaseSchema, createFeatureId, createPhaseId, createTaskId } from "../../plan-core/dist/index.js";
 
 const dirs = [];
@@ -655,11 +656,17 @@ describe("pi-adapter strict ref validation", () => {
   });
 });
 
-test("Idea tools keep promotion confirmation-safe and return composite refs", async () => {
+test("Idea tools use the shared service and keep promotion confirmation-safe", async (t) => {
   const { root, st, featureA } = await setup();
+  t.after(() => tools.get("planner-stop").execute("id", {}, undefined, undefined, makeCtx(root)));
   const created = await tools.get("idea_create").execute("id", { title: "Idea transport", description: "Discuss this idea before promotion." }, undefined, undefined, makeCtx(root));
   assert.equal(created.details.created, true);
   assert.match(toolText(created), /I001/);
+  const endpoint = await readLiveServerRecord(st.root);
+  assert.ok(endpoint, "Pi registers a discoverable service before applying the mutation");
+  const response = await fetch(`${endpoint.localUrl}/api/v2/ideas/I001`);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.idea.id, created.details.idea.id);
 
   const before = await st.loadIdeas();
   const denied = await tools.get("idea_promotion_finalize").execute("id", {
@@ -679,6 +686,9 @@ test("Idea tools keep promotion confirmation-safe and return composite refs", as
   assert.equal(promoted.details.promoted, true);
   assert.equal(promoted.details.targetRef, "F001");
   assert.equal((await st.loadIdeas()).ideas[0].promotion.targetId, featureA.id);
+  const alreadyPromoted = await tools.get("idea_promotion_begin").execute("id", { idea: "I001", targetType: "phase" }, undefined, undefined, makeCtx(root));
+  assert.equal(alreadyPromoted.details.errorCode, "ALREADY_PROMOTED");
+  assert.equal(alreadyPromoted.details.idea.id, created.details.idea.id);
 
   const phaseIdea = await tools.get("idea_create").execute("id", { title: "Phase idea" }, undefined, undefined, makeCtx(root));
   const taskIdea = await tools.get("idea_create").execute("id", { title: "Task idea" }, undefined, undefined, makeCtx(root));

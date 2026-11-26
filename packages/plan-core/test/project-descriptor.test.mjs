@@ -23,6 +23,7 @@ import {
   cloneKeyFor,
   readProjectDescriptor,
   resolvePlannerWorkspace,
+  resolveLegacyPlannerRoot,
   serializeProjectDescriptor,
   writeProjectDescriptor,
   ProjectDescriptorError,
@@ -196,4 +197,15 @@ test("descriptor writes are atomic and round-trip through the strict schema", as
   assert.equal(content, serializeProjectDescriptor(reread));
   const { readdir } = await import("node:fs/promises");
   assert.equal((await readdir(root)).some((name) => name.includes(".tmp-")), false, "no temp file residue");
+});
+
+test("legacy clients discover parent planners and refuse to replace a descriptor-bound authority", async () => {
+  const root = await tempRoot("legacy-client");
+  const plan = join(root, ".planner");
+  const cwd = join(root, "packages", "nested");
+  await mkdir(plan);
+  await mkdir(cwd, { recursive: true });
+  assert.equal(await resolveLegacyPlannerRoot(cwd), plan);
+  await writeProjectDescriptor(root, { schemaVersion: 1, projectId: "descriptor-project" });
+  await assert.rejects(() => resolveLegacyPlannerRoot(cwd), { code: "PROJECT_AUTHORITY_UNAVAILABLE" });
 });

@@ -23,10 +23,10 @@
  * Placed in plan-core per AGENTS.md rule 4: both adapters render the
  * identical listing and advisory from here.
  */
-import type { Feature, Phase, Task, TaskStatus } from "./schema.js";
+import type { Feature, Phase } from "./schema.js";
 import { featureNumberOfPhase, formatPhaseRef } from "./naming.js";
 
-const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = ["done", "canceled", "rejected"];
+const TERMINAL_TASK_STATUSES: readonly string[] = ["done", "canceled", "rejected"];
 const HARD_UNAVAILABLE_STATUSES = new Set(["blocked", "deferred", "canceled", "rejected"]);
 
 /** Bound on how many phases the human-readable listing names before folding
@@ -55,7 +55,11 @@ export interface OpenPhaseWork {
   readyTaskCount: number;
 }
 
-function isReadyTask(task: Task, statusById: Map<string, TaskStatus>): boolean {
+type OpenWorkTask = { id: string; status: string; dependsOn: readonly string[] };
+type OpenWorkPhase = Pick<Phase, "id" | "number" | "title" | "priority" | "featureId"> & { status: string; tasks: OpenWorkTask[] };
+type OpenWorkFeature = Pick<Feature, "id" | "number"> & { status: string };
+
+function isReadyTask(task: OpenWorkTask, statusById: Map<string, string>): boolean {
   if (task.status !== "planned") return false;
   return task.dependsOn.every((id) => statusById.get(id) === "done");
 }
@@ -66,8 +70,8 @@ function isReadyTask(task: Task, statusById: Map<string, TaskStatus>): boolean {
  * `ready` filter plus its feature-level hard-unavailable check (a phase is
  * never itself hard-unavailable here — it is already status in-progress).
  */
-export function listOpenPhaseWork(phases: Phase[], features: Feature[]): OpenPhaseWork[] {
-  const statusById = new Map<string, TaskStatus>();
+export function listOpenPhaseWork(phases: OpenWorkPhase[], features: OpenWorkFeature[]): OpenPhaseWork[] {
+  const statusById = new Map<string, string>();
   for (const phase of phases) {
     for (const task of phase.tasks ?? []) statusById.set(task.id, task.status);
   }

@@ -42,7 +42,7 @@ async function packArtifacts(packDir) {
 function smokeProgram() {
   return `
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -53,6 +53,35 @@ import piAdapter from "@agent-plan/pi-adapter";
 assert.equal(typeof PlanStore, "function");
 assert.equal(typeof serverPackage.serve, "function");
 assert.equal(typeof piAdapter, "function");
+const runtimeHome = join(process.cwd(), "runtime-home");
+await mkdir(runtimeHome);
+try {
+  const first = await serverPackage.ensureRegisteredPlannerRuntime(runtimeHome);
+  const versionDir = join(runtimeHome, ".agent-plan", "runtime", first.runtimeVersion);
+  const serverManifest = ["node_modules", "@agent-plan", "server", "package.json"];
+  const manifest = JSON.parse(await readFile(join(versionDir, ...serverManifest), "utf8"));
+  assert.equal(manifest.version, first.runtimeVersion);
+  assert.equal(manifest.plannerServiceProtocol, first.protocolVersion);
+  const newerVersion = String(Number(first.runtimeVersion.split(".")[0]) + 1) + ".0.0";
+  const newerDir = join(runtimeHome, ".agent-plan", "runtime", newerVersion);
+  await cp(versionDir, newerDir, { recursive: true });
+  await writeFile(join(newerDir, ...serverManifest), JSON.stringify({ ...manifest, version: newerVersion }));
+  const second = await serverPackage.ensureRegisteredPlannerRuntime(runtimeHome);
+  assert.equal(second.runtimeVersion, newerVersion);
+  assert.notEqual(second.bootId, first.bootId);
+  assert.equal(second.port, first.port);
+  const invalidVersion = String(Number(newerVersion.split(".")[0]) + 1) + ".0.0";
+  const invalidDir = join(runtimeHome, ".agent-plan", "runtime", invalidVersion);
+  await cp(versionDir, invalidDir, { recursive: true });
+  await writeFile(join(invalidDir, ...serverManifest), JSON.stringify({ ...manifest, version: invalidVersion }));
+  const installedServer = join(invalidDir, "node_modules", "@agent-plan", "server");
+  await writeFile(join(installedServer, "dist", "registered-runtime.js"), 'throw new Error("Broken runtime fixture");');
+  await assert.rejects(() => serverPackage.ensureRegisteredPlannerRuntime(runtimeHome), { code: "REGISTERED_RUNTIME_CANDIDATE_UNVERIFIED" });
+  const health = await fetch("http://" + second.host + ":" + second.port + "/health");
+  assert.equal((await health.json()).bootId, second.bootId);
+} finally {
+  await serverPackage.stopRegisteredPlannerRuntime(runtimeHome);
+}
 const piTools = new Map();
 const piCommands = new Map();
 const piHooks = new Map();

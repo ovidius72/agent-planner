@@ -46,14 +46,17 @@ export function serverRecordPath(planRoot: string): string {
 function isServerRecord(value: unknown): value is ServerRecord {
   if (value === null || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
-  return typeof record.pid === "number" && typeof record.localUrl === "string" && typeof record.root === "string"
+  return typeof record.pid === "number" && Number.isSafeInteger(record.pid) && record.pid > 0
+    && typeof record.port === "number" && Number.isInteger(record.port) && record.port > 0 && record.port <= 65_535
+    && typeof record.root === "string" && record.root.length > 0
+    && (record.localUrl === `http://127.0.0.1:${record.port}` || record.localUrl === `http://localhost:${record.port}`)
     && (record.kind === "standalone" || record.kind === "embedded");
 }
 
 async function readRecordFile(planRoot: string): Promise<ServerRecord | null> {
   try {
     const parsed: unknown = JSON.parse(await readFile(serverRecordPath(planRoot), "utf-8"));
-    return isServerRecord(parsed) ? parsed : null;
+    return isServerRecord(parsed) && resolve(parsed.root) === resolve(planRoot) ? parsed : null;
   } catch {
     return null;
   }
@@ -71,10 +74,13 @@ function processExists(pid: number): boolean {
 
 async function answersHealth(record: ServerRecord): Promise<boolean> {
   try {
-    const response = await fetch(`${record.localUrl.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) });
+    const response = await fetch(`${record.localUrl}/health`, {
+      redirect: "error",
+      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+    });
     if (!response.ok) return false;
-    const body = (await response.json()) as { root?: unknown };
-    return typeof body.root === "string" && resolve(body.root) === resolve(record.root);
+    const body = (await response.json()) as { root?: unknown; pid?: unknown };
+    return body.pid === record.pid && typeof body.root === "string" && resolve(body.root) === resolve(record.root);
   } catch {
     return false;
   }

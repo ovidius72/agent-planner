@@ -14,7 +14,7 @@ import {
   formatPhaseRef,
   taskCompositeRef,
 } from "./naming.js";
-import type { Idea, PlanStore } from "./index.js";
+import type { Feature, Idea, Phase, PlanStore } from "./index.js";
 
 export type IdeaTargetType = "feature" | "phase" | "task";
 
@@ -167,7 +167,10 @@ export interface IdeaPromotionBeginSuccess {
  * has to create the agreed target through the normal create operations.
  */
 export async function beginIdeaPromotionFlow(
-  store: PlanStore,
+  store: Pick<PlanStore, "loadIdeas" | "ideaDiscussionSkill"> & {
+    loadFeatures(): Promise<{ features: Array<Pick<Feature, "id" | "number" | "name">> }>;
+    loadAllPhases(): Promise<Array<Pick<Phase, "featureId" | "number" | "title">>>;
+  },
   ref: string,
   targetType: IdeaTargetType,
 ): Promise<IdeaPromotionBeginSuccess | IdeaRefusal> {

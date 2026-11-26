@@ -1,5 +1,5 @@
 import type { ProjectContextReply } from "./project-context.js";
-import type { PlanWorkspace } from "./schema.js";
+import type { AcceptedDecision, PlanWorkspace } from "./schema.js";
 import { featureNumberOfPhase, formatFeatureRef, formatPhaseRef } from "./naming.js";
 import { buildBoundedAcceptedDecisionContext } from "./task-context.js";
 
@@ -88,9 +88,15 @@ export function buildPlannerLoadReply(input: PlannerLoadReplyInput): PlannerLoad
 /** Accepted Decisions owned by features, phases and tasks, bounded for a
  * load reply. Project decisions are left out: the project context already
  * carries them. */
-export function buildScopedDecisionContext(plan: PlanWorkspace): { content: string; total: number; truncated: boolean } {
+type DecisionOwner = { id: string; number: number; acceptedDecisions: AcceptedDecision[] };
+type ScopedDecisionSource = {
+  features: { features: DecisionOwner[] };
+  phases: Array<DecisionOwner & { featureId?: PlanWorkspace["phases"][number]["featureId"]; tasks: DecisionOwner[] }>;
+};
+
+export function buildScopedDecisionContext(plan: ScopedDecisionSource): { content: string; total: number; truncated: boolean } {
   const features = plan.features.features;
-  const phaseRef = (phase: PlanWorkspace["phases"][number]) => formatPhaseRef(phase.number, featureNumberOfPhase(phase, features));
+  const phaseRef = (phase: ScopedDecisionSource["phases"][number]) => formatPhaseRef(phase.number, featureNumberOfPhase(phase, features));
   const { content, total, truncated } = buildBoundedAcceptedDecisionContext([
     ...features.map((feature) => ({ scope: `feature ${formatFeatureRef(feature.number)}`, decisions: feature.acceptedDecisions })),
     ...plan.phases.map((phase) => ({ scope: `phase ${phaseRef(phase)}`, decisions: phase.acceptedDecisions })),

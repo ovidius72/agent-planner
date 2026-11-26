@@ -24,7 +24,8 @@ export const MAX_REGISTERED_SESSIONS = 200;
 export type SessionFlowRefusalCode =
   | "SESSION_CLIENT_KIND_REQUIRED"
   | "SESSION_NOT_FOUND"
-  | "SESSION_ENDED";
+  | "SESSION_ENDED"
+  | "SESSION_SCOPE_MISMATCH";
 
 export class SessionFlowRefusal extends Error {
   readonly code: SessionFlowRefusalCode;
@@ -69,7 +70,7 @@ function pruned(records: readonly PlannerSessionRecord[]): PlannerSessionRecord[
 }
 
 /** Register one caller and issue its planner session id. */
-export async function registerPlannerSession(store: PlanStore, input: SessionRegistrationInput): Promise<SessionRegistrationOutcome> {
+export async function registerPlannerSession(store: PlanStore, input: SessionRegistrationInput, principalId = ""): Promise<SessionRegistrationOutcome> {
   const clientKind = input.clientKind?.trim() ?? "";
   if (!clientKind) {
     throw new SessionFlowRefusal("SESSION_CLIENT_KIND_REQUIRED", "clientKind is required to register a planner session.");
@@ -81,6 +82,7 @@ export async function registerPlannerSession(store: PlanStore, input: SessionReg
     const session: PlannerSessionRecord = {
       sessionId: randomUUID(),
       projectId: manifest.projectId,
+      principalId,
       clientKind,
       clientVersion: input.clientVersion?.trim() ?? "",
       agentId,
@@ -99,14 +101,24 @@ export async function registerPlannerSession(store: PlanStore, input: SessionReg
   });
 }
 
+async function requireSessionScope(store: PlanStore, session: PlannerSessionRecord, principalId: string | undefined): Promise<void> {
+  if (principalId === undefined) return;
+  const manifest = await store.loadManifest();
+  // Registrations from before the principal field belonged to the legacy loopback agent.
+  if (session.projectId !== manifest.projectId || (session.principalId || "loopback:agent") !== principalId) {
+    throw new SessionFlowRefusal("SESSION_SCOPE_MISMATCH", "The planner session is outside the current principal or project scope.");
+  }
+}
+
 /** Resolve one live session; unknown or ended ids are refused. */
-export async function resolvePlannerSession(store: PlanStore, sessionId: string): Promise<PlannerSessionRecord> {
+export async function resolvePlannerSession(store: PlanStore, sessionId: string, principalId?: string): Promise<PlannerSessionRecord> {
   const normalized = sessionId.trim();
   const records = await store.loadPlannerSessions();
   const session = records.find((record) => record.sessionId === normalized);
   if (!session) {
     throw new SessionFlowRefusal("SESSION_NOT_FOUND", `Planner session not found: ${normalized}`, { sessionId: normalized });
   }
+  await requireSessionScope(store, session, principalId);
   if (session.endedAt) {
     throw new SessionFlowRefusal("SESSION_ENDED", `Planner session already ended: ${normalized}`, {
       sessionId: normalized,
@@ -117,9 +129,9 @@ export async function resolvePlannerSession(store: PlanStore, sessionId: string)
 }
 
 /** Record liveness; the adapter heartbeat calls this on its own timer. */
-export async function heartbeatPlannerSession(store: PlanStore, sessionId: string): Promise<SessionRegistrationOutcome> {
+export async function heartbeatPlannerSession(store: PlanStore, sessionId: string, principalId?: string): Promise<SessionRegistrationOutcome> {
   return store.runBatch(async () => {
-    const session = await resolvePlannerSession(store, sessionId);
+    const session = await resolvePlannerSession(store, sessionId, principalId);
     const records = await store.loadPlannerSessions();
     const updated: PlannerSessionRecord = { ...session, lastSeenAt: nowISO() };
     await store.savePlannerSessions(pruned(records.map((record) => record.sessionId === updated.sessionId ? updated : record)));
@@ -128,7 +140,7 @@ export async function heartbeatPlannerSession(store: PlanStore, sessionId: strin
 }
 
 /** End one session. Ending an already-ended session is idempotent. */
-export async function endPlannerSession(store: PlanStore, sessionId: string, reason?: string | undefined): Promise<SessionRegistrationOutcome> {
+export async function endPlannerSession(store: PlanStore, sessionId: string, reason?: string | undefined, principalId?: string): Promise<SessionRegistrationOutcome> {
   return store.runBatch(async () => {
     const normalized = sessionId.trim();
     const records = await store.loadPlannerSessions();
@@ -136,6 +148,7 @@ export async function endPlannerSession(store: PlanStore, sessionId: string, rea
     if (!existing) {
       throw new SessionFlowRefusal("SESSION_NOT_FOUND", `Planner session not found: ${normalized}`, { sessionId: normalized });
     }
+    await requireSessionScope(store, existing, principalId);
     if (existing.endedAt) return { session: existing };
     const timestamp = nowISO();
     const ended: PlannerSessionRecord = {

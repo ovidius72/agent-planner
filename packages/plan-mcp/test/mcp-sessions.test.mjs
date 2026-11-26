@@ -67,7 +67,8 @@ test("agent A's finished detour makes A return to its task, but not agent B", as
 
     const stored = (await a.store.loadProject()).workDeviations;
     assert.equal(stored.length, 1);
-    assert.match(stored[0].ownerSession, /^mcp-process:/, "the switch is stamped with the session that made it");
+    // The service issues the session id; the deviation is stamped with it.
+    assert.match(stored[0].ownerSession, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, "the switch is stamped with the service-issued session that made it");
     assert.equal(stored[0].state, "resume-required");
     assert.equal((await a.store.loadProject("some-other-session")).workDeviations.length, 0, "another session cannot see it");
     assert.equal((await a.store.loadProject(stored[0].ownerSession)).workDeviations.length, 1);

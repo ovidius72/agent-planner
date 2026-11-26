@@ -239,7 +239,7 @@ export async function withPlanRootWriteLock<T>(root: string, fn: () => Promise<T
 }
 
 /** Coordinate service discovery and startup separately from planner mutations. */
-export async function withPlanServiceLock<T>(root: string, operation: "startup" | "record", fn: () => Promise<T>): Promise<T> {
+export async function withPlanServiceLock<T>(root: string, operation: "startup" | "record" | "launcher", fn: () => Promise<T>): Promise<T> {
   const release = await acquirePlanRootLock(resolve(root), `service-${operation}`);
   try {
     return await fn();

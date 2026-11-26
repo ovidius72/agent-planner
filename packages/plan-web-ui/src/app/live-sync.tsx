@@ -1,3 +1,4 @@
+import { registeredBoardScope } from "../lib/registered-board";
 import { useEffect, useRef } from "react";
 import { useRevalidator } from "react-router-dom";
 
@@ -18,6 +19,7 @@ export function LiveSyncBridge() {
 
   useEffect(() => {
     let active = true;
+    const scope = registeredBoardScope();
 
     const setStatus = (status: LiveSyncStatus) => {
       window.dispatchEvent(new CustomEvent("agent-plan:ws-status", { detail: { status } }));
@@ -112,13 +114,14 @@ export function LiveSyncBridge() {
       setStatus(retryTimerRef.current !== null ? "reconnecting" : "connecting");
       clearRetryTimer();
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const socket = new WebSocket(`${protocol}://${window.location.host}/ws`);
+      const path = scope ? `/api/v2${scope.api}/events/stream` : "/ws";
+      const socket = new WebSocket(`${protocol}://${window.location.host}${path}`);
       socketRef.current = socket;
 
       socket.onopen = () => {
         clearRetryTimer();
         setStatus("live");
-        startHeartbeat();
+        if (!scope) startHeartbeat();
       };
 
       socket.onmessage = (event) => {
@@ -131,6 +134,8 @@ export function LiveSyncBridge() {
           window.dispatchEvent(new CustomEvent("agent-plan:ws-event", { detail: message }));
 
           switch (message.type) {
+            case "snapshot":
+            case "events":
             case "project-updated":
             case "features-updated":
             case "phases-updated":

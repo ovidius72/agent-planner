@@ -144,10 +144,7 @@ export async function showTask(store: PlanStore, ref: string, options: TaskShowO
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
   const snapshot = task.pauseSnapshot ?? pendingDeviation?.snapshot ?? null;
 
-  const phaseRequirements = await store.linkedRequirementsForPhase(phase.id);
-  const featureRequirements = phase.featureId ? await store.linkedRequirementsForFeature(phase.featureId) : [];
-  const linkedRequirements = [...phaseRequirements, ...featureRequirements]
-    .filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+  const linkedRequirements = await store.linkedRequirementsForExecution(phase);
 
   return {
     ok: true,

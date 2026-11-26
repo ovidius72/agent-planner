@@ -1,3 +1,4 @@
+import { PlanStaleWriteError, type Idea } from "@agent-plan/core";
 /**
  * Application API v2 for agent clients (P128(F025)/T490).
  *
@@ -16,11 +17,15 @@
 
 import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import type { Principal } from "./auth.js";
 import {
   SERVICE_PROTOCOL_VERSION,
   HandoffContractError,
   PlanStoreError,
   recommendNextWork,
+  exportPlannerReport,
+  readPlannerOverview,
+  buildRecommendationReply,
   listAcceptedDecisionsForOwner,
   resolveAcceptedDecisionTarget,
   resolveFeatureRefStrict,
@@ -73,6 +78,8 @@ import {
   readFeatureContextFlow,
   readPhaseContextFlow,
   readTaskContextFlow,
+  readTaskDetailContextFlow,
+  loadPlannerContextFlow,
   readPhaseRequirementsFlow,
   readProjectContextFlow,
   readProjectGuidelinesFlow,
@@ -138,11 +145,14 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     if (err instanceof SessionFlowRefusal) {
       const status: ContentfulStatusCode = err.code === "SESSION_NOT_FOUND"
         ? 404
-        : err.code === "SESSION_ENDED" ? 409 : 422;
+        : err.code === "SESSION_SCOPE_MISMATCH" ? 403 : err.code === "SESSION_ENDED" ? 409 : 422;
       return error(c, status, err.code, err.message, err.details);
     }
     return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
   };
+
+  const requestPrincipal = (c: Context): Principal | undefined => c.get("principal");
+  const noPrincipal = (c: Context) => error(c, 401, "UNAUTHENTICATED", "A service principal is required.");
 
   /** Session identity for operations that read or write per-agent state. */
   const requireSession = async (c: Context): Promise<{ sessionId: string } | { response: ReturnType<typeof error> }> => {
@@ -150,13 +160,26 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     if (!sessionId) {
       return { response: error(c, 400, "SESSION_REQUIRED", `A registered planner session is required in the ${PLANNER_SESSION_HEADER} header.`) };
     }
+    const principal = requestPrincipal(c);
+    if (!principal) return { response: noPrincipal(c) };
     try {
-      const session = await resolvePlannerSession(store, sessionId);
+      const session = await resolvePlannerSession(store, sessionId, principal.principalId);
       return { sessionId: session.sessionId };
     } catch (err) {
       return { response: sessionFailure(c, err, "SESSION_RESOLVE_FAILED") };
     }
   };
+
+  const optionalSession = (c: Context) => c.req.header(PLANNER_SESSION_HEADER) === undefined
+    ? { sessionId: undefined }
+    : requireSession(c);
+
+  const sessionMutation = <T extends { ok: boolean }>(sessionId: string, run: () => Promise<T>) =>
+    store.runBatch(async () => {
+      const outcome = await run();
+      if (outcome.ok) await store.refreshResume(undefined, undefined, sessionId);
+      return outcome;
+    });
 
   // ── Discovery ─────────────────────────────────────────────────────
   app.get("/", (c) => envelope(c, {
@@ -235,6 +258,8 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         approve: "POST /api/v2/deviations",
       },
       project: {
+        overview: "GET /api/v2/project/overview",
+        export: "POST /api/v2/project/export",
         discuss: "PUT /api/v2/project/discuss",
         guidelines: "PUT /api/v2/project/guidelines",
         language: "PUT /api/v2/project/language",
@@ -246,6 +271,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       },
       context: {
         project: "GET /api/v2/context/project?maxChars=",
+        load: "POST /api/v2/context/load",
         guidelines: "GET /api/v2/context/guidelines",
         requirements: "GET /api/v2/context/requirements?phaseRef=",
         feature: "GET /api/v2/context/features/{featureRef}",
@@ -264,20 +290,21 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   // ── Recommendation ────────────────────────────────────────────────
   app.get("/recommend", async (c) => {
     try {
-      // Same evidence the MCP recommendation flow consumes; HTTP clients
-      // are request-scoped, so no session resume pointer is applied.
-      const [features, phases, handoffs, archivedHandoffs] = await Promise.all([
+      const auth = await optionalSession(c);
+      if ("response" in auth) return auth.response;
+      const [features, phases, handoffs, archivedHandoffs, resume] = await Promise.all([
         store.loadFeatures(),
         store.loadAllPhases(),
         store.listHandoffs(),
         store.listArchivedHandoffs(),
+        auth.sessionId ? store.loadResume(auth.sessionId) : undefined,
       ]);
       const recommendation = recommendNextWork(
         features.features,
         phases,
         await store.listAllWorkDeviations(),
-        "",
-        "",
+        resume?.currentPhaseId,
+        auth.sessionId,
         {
           handoffs: handoffs.map((handoff) => ({
             compositeRef: handoff.compositeRef,
@@ -287,7 +314,9 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
           archivedHandoffs: archivedHandoffs.map(({ compositeRef, firstLine, reason }) => ({ compositeRef, firstLine, reason })),
         },
       );
-      return envelope(c, recommendation);
+      return envelope(c, c.req.query("view") === "summary"
+        ? buildRecommendationReply(recommendation, features.features)
+        : recommendation);
     } catch (err) {
       return error(c, 500, "RECOMMENDATION_FAILED", err instanceof Error ? err.message : String(err));
     }
@@ -465,6 +494,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   // canonical reconciler is the validator and reports through
   // REQUIREMENT_MACRO_TASK_INVALID.
   const requirementFailure = (c: Context, err: unknown, fallbackCode: string) => {
+    if (err instanceof PlanStaleWriteError) return error(c, 409, err.code, err.message, { details: err.details });
     if (err instanceof RequirementFlowRefusal) {
       const status: ContentfulStatusCode = err.code === "REQUIREMENT_NOT_FOUND" ? 404 : 422;
       return error(c, status, err.code, err.message);
@@ -521,6 +551,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       description?: unknown;
       linkedPhaseIds?: unknown;
       macroTasks?: unknown;
+      expectedUpdatedAt?: unknown;
     };
     try {
       body = await c.req.json();
@@ -538,8 +569,12 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     if (body.linkedPhaseIds !== undefined && (!Array.isArray(body.linkedPhaseIds) || body.linkedPhaseIds.some((ref) => typeof ref !== "string"))) {
       return error(c, 422, "REQUIREMENT_PHASE_LINK_INVALID", "linkedPhaseIds must be an array of phase references.");
     }
+    if (body.expectedUpdatedAt !== undefined && typeof body.expectedUpdatedAt !== "string") {
+      return error(c, 422, "INVALID_EXPECTED_UPDATED_AT", "expectedUpdatedAt must be a string.");
+    }
     try {
       const outcome = await updateRequirementFlow(store, requirementId, {
+        expectedUpdatedAt: body.expectedUpdatedAt,
         ...(body.title !== undefined ? { title: body.title as string } : {}),
         ...(body.description !== undefined ? { description: body.description as string } : {}),
         ...(body.linkedPhaseIds !== undefined ? { linkedPhaseIds: body.linkedPhaseIds as string[] } : {}),
@@ -999,6 +1034,8 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   // X-Planner-Session. Registration records adapter provenance only —
   // principal authentication and grants are their own checklist item.
   app.post("/sessions", async (c) => {
+    const principal = requestPrincipal(c);
+    if (!principal) return noPrincipal(c);
     const body = await readJsonBody(c);
     if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
     try {
@@ -1009,7 +1046,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         displayName: optionalString(body, "displayName"),
         harnessId: optionalString(body, "harnessId"),
         capabilities: optionalStringArray(body, "capabilities"),
-      });
+      }, principal.principalId);
       return envelope(c, { session: outcome.session });
     } catch (err) {
       return sessionFailure(c, err, "SESSION_REGISTER_FAILED");
@@ -1036,7 +1073,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
     const task = (optionalString(body, "task") ?? "").trim();
     if (!task) return error(c, 422, "TASK_REF_REQUIRED", "A task ref is required: the task the stopped caller owned or was returning to.");
-    const outcome = await recoverSessionFlow(store, auth.sessionId, task, body.confirmed === true);
+    const outcome = await sessionMutation(auth.sessionId, () => recoverSessionFlow(store, auth.sessionId, task, body.confirmed === true));
     if (!outcome.ok) {
       return error(c, recoveryRefusalStatus[outcome.code], outcome.code, outcome.message, {
         ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
@@ -1053,9 +1090,11 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   });
 
   app.post("/sessions/*/heartbeat", async (c) => {
+    const principal = requestPrincipal(c);
+    if (!principal) return noPrincipal(c);
     const sessionId = collectionTail(c, "sessions").replace(/\/heartbeat$/, "");
     try {
-      const outcome = await heartbeatPlannerSession(store, sessionId);
+      const outcome = await heartbeatPlannerSession(store, sessionId, principal.principalId);
       return envelope(c, { heartbeat: true, session: outcome.session });
     } catch (err) {
       return sessionFailure(c, err, "SESSION_HEARTBEAT_FAILED");
@@ -1063,9 +1102,11 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   });
 
   app.delete("/sessions/*", async (c) => {
+    const principal = requestPrincipal(c);
+    if (!principal) return noPrincipal(c);
     const sessionId = collectionTail(c, "sessions");
     try {
-      const outcome = await endPlannerSession(store, sessionId, c.req.query("reason") ?? undefined);
+      const outcome = await endPlannerSession(store, sessionId, c.req.query("reason") ?? undefined, principal.principalId);
       return envelope(c, { ended: true, session: outcome.session });
     } catch (err) {
       return sessionFailure(c, err, "SESSION_END_FAILED");
@@ -1076,6 +1117,32 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   // Registered sessions only: a receipt names the session that received
   // the content, so an unregistered caller cannot produce one. The
   // delivered payload is what the receipt attests to.
+  app.get("/project/overview", async (c) => envelope(c, await readPlannerOverview(store)));
+
+  app.post("/project/export", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    return envelope(c, await exportPlannerReport(store, body.full === true));
+  });
+
+  app.post("/context/load", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const maxChars = body.maxChars;
+    if (maxChars !== undefined && (typeof maxChars !== "number" || !Number.isSafeInteger(maxChars) || maxChars <= 0)) {
+      return error(c, 422, "CONTEXT_MAX_CHARS_INVALID", "maxChars must be a positive safe integer.");
+    }
+    const outcome = await loadPlannerContextFlow(store, auth.sessionId, {
+      maxChars,
+      harness: body.harness === "pi" ? "pi" : "mcp",
+      web: { localUrl: security.originRef.current },
+    });
+    if (!outcome.ok) return error(c, 409, "PLANNER_SESSION_PREPARATION_FAILED", outcome.message);
+    return envelope(c, outcome);
+  });
+
   app.get("/context/project", async (c) => {
     const auth = await requireSession(c);
     if ("response" in auth) return auth.response;
@@ -1137,7 +1204,10 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   app.get("/context/tasks/*", async (c) => {
     const auth = await requireSession(c);
     if ("response" in auth) return auth.response;
-    const outcome = await readTaskContextFlow(store, auth.sessionId, tailAfter(c, `${API_V2_BASE_PATH}/context/tasks/`));
+    const ref = tailAfter(c, `${API_V2_BASE_PATH}/context/tasks/`);
+    const outcome = c.req.query("scope") === "task"
+      ? await readTaskDetailContextFlow(store, auth.sessionId, ref)
+      : await readTaskContextFlow(store, auth.sessionId, ref);
     if (!outcome.ok) return showFailure(c, outcome);
     return envelope(c, outcome);
   });
@@ -1156,7 +1226,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     const auth = await requireSession(c);
     if ("response" in auth) return auth.response;
     const taskRef = tailAfter(c, `${API_V2_BASE_PATH}/tasks/`).replace(/\/start$/, "");
-    const outcome = await startTaskFlow(store, auth.sessionId, taskRef);
+    const outcome = await sessionMutation(auth.sessionId, () => startTaskFlow(store, auth.sessionId, taskRef));
     if (!outcome.ok) {
       return error(
         c,
@@ -1203,17 +1273,17 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     if ("response" in auth) return auth.response;
     const body = await readJsonBody(c);
     if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
-    const outcome = await completeTaskFlow(store, auth.sessionId, {
+    const outcome = await sessionMutation(auth.sessionId, () => completeTaskFlow(store, auth.sessionId, {
       task: tailAfter(c, `${API_V2_BASE_PATH}/tasks/`).replace(/\/complete$/, ""),
       force: body.force === true,
       motivation: optionalString(body, "motivation"),
       descriptionUpdate: optionalString(body, "descriptionUpdate") ?? "",
-    });
+    }));
     if (!outcome.ok) {
       return error(c, taskCompleteRefusalStatus[outcome.code], outcome.code, outcome.message, {
         ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
         ...(outcome.taskRef ? { taskRef: outcome.taskRef } : {}),
-        ...(outcome.uncheckedItems ? { uncheckedItems: outcome.uncheckedItems.map((item) => item.title) } : {}),
+        ...(outcome.uncheckedItems ? { uncheckedItems: outcome.uncheckedItems.map((item) => item.title), uncheckedChecklistItems: outcome.uncheckedItems } : {}),
       });
     }
     return envelope(c, {
@@ -1259,14 +1329,14 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     if (missing.length > 0) {
       return error(c, 422, "PAUSE_CHECKPOINT_REQUIRED", `A durable checkpoint requires ${missing.join(", ")}.`, { missing });
     }
-    const outcome = await pauseTaskFlow(store, auth.sessionId, {
+    const outcome = await sessionMutation(auth.sessionId, () => pauseTaskFlow(store, auth.sessionId, {
       task: tailAfter(c, `${API_V2_BASE_PATH}/tasks/`).replace(/\/pause$/, ""),
       reason,
       whatWasBeingDone,
       resumeLocation,
       howToResume,
       pausedBy: optionalString(body, "pausedBy"),
-    });
+    }));
     if (!outcome.ok) {
       return error(c, taskPauseRefusalStatus[outcome.code], outcome.code, outcome.message, {
         ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
@@ -1289,12 +1359,12 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     if ("response" in auth) return auth.response;
     const body = await readJsonBody(c);
     if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
-    const outcome = await reopenTaskFlow(
+    const outcome = await sessionMutation(auth.sessionId, () => reopenTaskFlow(
       store,
       auth.sessionId,
       tailAfter(c, `${API_V2_BASE_PATH}/tasks/`).replace(/\/reopen$/, ""),
       body.confirmed === true,
-    );
+    ));
     if (!outcome.ok) {
       return error(c, taskReopenRefusalStatus[outcome.code], outcome.code, outcome.message, {
         ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
@@ -1342,7 +1412,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     if (missing.length > 0) {
       return error(c, 422, "SWITCH_CHECKPOINT_REQUIRED", `A task switch requires ${missing.join(", ")}.`, { missing });
     }
-    const outcome = await switchTaskFlow(store, auth.sessionId, {
+    const outcome = await sessionMutation(auth.sessionId, () => switchTaskFlow(store, auth.sessionId, {
       fromTask,
       toTask,
       reason,
@@ -1350,7 +1420,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       resumeLocation,
       howToResume,
       switchedBy: optionalString(body, "switchedBy"),
-    });
+    }));
     if (!outcome.ok) {
       return error(c, taskSwitchRefusalStatus[outcome.code], outcome.code, outcome.message, {
         ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
@@ -1393,11 +1463,11 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     if (missing.length > 0) {
       return error(c, 422, "DEVIATION_INPUT_REQUIRED", `An approved deviation requires ${missing.join(", ")}.`, { missing });
     }
-    const outcome = await recordDeviationFlow(store, auth.sessionId, {
+    const outcome = await sessionMutation(auth.sessionId, () => recordDeviationFlow(store, auth.sessionId, {
       temporaryTask,
       resumeTask: optionalString(body, "resumeTask") ?? optionalString(body, "resume_task"),
       reason,
-    });
+    }));
     if (!outcome.ok) {
       return error(c, deviationRefusalStatus[outcome.code], outcome.code, outcome.message, {
         ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
@@ -1792,12 +1862,14 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     }
     if (err instanceof PlanStoreError) {
       const code = typeof err.details?.errorCode === "string" ? err.details.errorCode : fallbackCode;
-      return error(c, 422, code, err.message);
+      return error(c, 422, code, err.message, { failureKind: "store" });
     }
     return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
   };
 
   app.put("/tasks/*", async (c) => {
+    const auth = await optionalSession(c);
+    if ("response" in auth) return auth.response;
     const body = await readJsonBody(c);
     if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
     const taskRef = collectionTail(c, "tasks");
@@ -1814,26 +1886,30 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       ? body.subtasks.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
       : undefined;
     try {
-      const outcome = await updateTaskFlow(store, taskRef, {
-        ...(title !== undefined ? { title } : {}),
-        ...(status !== undefined ? { status } : {}),
-        ...(description !== undefined ? { description } : {}),
-        ...(descriptionRef !== undefined ? { descriptionRef } : {}),
-        ...(notes !== undefined ? { notes } : {}),
-        ...(motivation !== undefined ? { motivation } : {}),
-        ...(priority !== undefined ? { priority } : {}),
-        ...(checklist !== undefined ? { checklist } : {}),
-        ...(decisions !== undefined ? { decisions } : {}),
-        ...(subtasks !== undefined
-          ? {
-            subtasks: subtasks.map((item) => ({
-              ...(typeof item.id === "string" ? { id: item.id } : {}),
-              title: typeof item.title === "string" ? item.title : "",
-              ...(typeof item.description === "string" ? { description: item.description } : {}),
-              ...(typeof item.status === "string" ? { status: item.status } : {}),
-            })),
-          }
-          : {}),
+      const outcome = await store.runBatch(async () => {
+        const updated = await updateTaskFlow(store, taskRef, {
+          ...(title !== undefined ? { title } : {}),
+          ...(status !== undefined ? { status } : {}),
+          ...(description !== undefined ? { description } : {}),
+          ...(descriptionRef !== undefined ? { descriptionRef } : {}),
+          ...(notes !== undefined ? { notes } : {}),
+          ...(motivation !== undefined ? { motivation } : {}),
+          ...(priority !== undefined ? { priority } : {}),
+          ...(checklist !== undefined ? { checklist } : {}),
+          ...(decisions !== undefined ? { decisions } : {}),
+          ...(subtasks !== undefined
+            ? {
+              subtasks: subtasks.map((item) => ({
+                ...(typeof item.id === "string" ? { id: item.id } : {}),
+                title: typeof item.title === "string" ? item.title : "",
+                ...(typeof item.description === "string" ? { description: item.description } : {}),
+                ...(typeof item.status === "string" ? { status: item.status } : {}),
+              })),
+            }
+            : {}),
+        }, { sessionId: auth.sessionId });
+        if (auth.sessionId) await store.refreshResume(undefined, undefined, auth.sessionId);
+        return updated;
       });
       return envelope(c, {
         updated: true,
@@ -1952,12 +2028,14 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     mutableFields?: string[];
     targetRef?: string;
     targetType?: string;
+    idea?: Idea;
   }) =>
     error(c, ideaRefusalStatus[outcome.code], outcome.code, outcome.message, {
       ...(outcome.ideaRef ? { ideaRef: outcome.ideaRef } : {}),
       ...(outcome.mutableFields ? { mutableFields: outcome.mutableFields } : {}),
       ...(outcome.targetRef ? { targetRef: outcome.targetRef } : {}),
       ...(outcome.targetType ? { targetType: outcome.targetType } : {}),
+      ...(outcome.idea ? { idea: outcome.idea } : {}),
     });
 
   app.get("/ideas", async (c) => {

@@ -6,3 +6,8 @@ export { readLiveServerRecord, serverRecordPath } from "./server-record.js";
 export type { ServerRecord, ServerKind } from "./server-record.js";
 export { createApiV2App, API_V2_BASE_PATH, API_V2_VERSION } from "./api-v2.js";
 export type { Principal, AuthStrategy, PrincipalKind, RequestIdentity } from "./auth.js";
+export { connectLocalPlannerService, LocalPlannerServiceError, verifyPlannerServerRecord } from "./local-service.js";
+export type { LocalPlannerConnection } from "./local-service.js";
+export { connectRegisteredPlannerService } from "./registered-service.js";
+export type { RegisteredServiceConnection, RegisteredServiceOptions } from "./registered-service.js";
+export { ensureRegisteredPlannerRuntime, registeredDashboardInfo, stopRegisteredPlannerRuntime } from "./registered-launcher.js";

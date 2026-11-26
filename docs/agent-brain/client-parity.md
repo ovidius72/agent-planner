@@ -31,17 +31,19 @@ Ideas Inbox — the first family converted, because it needs no session:
 - `planner-idea-promotion-begin` → `POST /api/v2/ideas/{ideaRef}/promotion/begin`
 - `planner-idea-promotion-finalize` → `POST /api/v2/ideas/{ideaRef}/promotion/finalize`
 
-Requirements — CRUD plus the unscoped inventory:
+Requirements — CRUD and scoped or unscoped reads:
 
 - `planner-requirement-create` → `POST /api/v2/requirements`
 - `planner-requirement-update` → `PUT /api/v2/requirements/{requirementId}`
 - `planner-requirement-delete` → `DELETE /api/v2/requirements/{requirementId}`
 - `planner-requirement-list` → `GET /api/v2/requirements` for the unscoped
-  inventory. The phase-scoped branch stays `flow-backed` until the adapter
-  adopts the service-issued session id: a receipt written under a different
-  session id would not satisfy the local start gate.
+  inventory, or `GET /api/v2/context/requirements?phaseRef=` for a scoped
+  read under the service-issued session. MCP mirrors the returned attestations
+  for its in-process lifecycle gate during the bridge transition.
 
-Project settings:
+Project settings and guidelines:
+
+- `planner-project-guidelines-show` → `GET /api/v2/context/guidelines` under the service-issued session.
 
 - `planner-project-discuss` → `PUT /api/v2/project/discuss`
 - `planner-project-guidelines-update` → `PUT /api/v2/project/guidelines`
@@ -117,9 +119,11 @@ plus the code and the remaining details, so `handoffRefusalResult` and
 The write's `nextActions` are adapter action labels, not flow output, so they
 stay in the adapter.
 
-`planner-feature-show` and `planner-phase-show` stay `flow-backed`: with
-`full=true` they record a canonical full-read attestation for the calling
-session, which moves with the session slice.
+Feature, phase and task detail reads use the v2 entity routes for compact
+output and the registered context routes for full output. Task reads use
+`?scope=task` so the task receipt leaves parent and requirement reads
+outstanding. MCP preserves its readiness advisory and mirrors delivered
+entity receipts while its lifecycle tools still run in-process.
 
 The target is resolved by the service, not the adapter: a 404
 `ACCEPTED_DECISION_TARGET_NOT_FOUND` carries the resolver's message, and the
@@ -135,29 +139,51 @@ own texts and structured payloads. The MCP suite stays at 115/115; the only
 assertions changed were the two that asserted the old per-process web server
 status, now that application calls run through the shared service.
 
-### Flow-backed (v2 route exists; bridge pending)
+`planner-task-update` uses `PUT /api/v2/tasks/{ref}` under the registered
+session. The service updates metadata and refreshes that session's resume
+state inside one write batch. `planner-task-recommend` uses
+`GET /api/v2/recommend?view=summary` with the same session so the existing
+bounded text and structured reply retain caller-specific focus and returns.
 
-| Family | Tools | v2 route |
-| --- | --- | --- |
-| Feature/phase full reads | `planner-feature-show`, `planner-phase-show` | `GET /features/{ref}`, `GET /phases/{ref}` (attestation) |
-| Task read/update/recommend | `planner-task-show`, `planner-task-update`, `planner-task-recommend` | `GET/PUT /tasks/{ref}`, `GET /recommend` (session) |
-| Requirements (scoped read) | `planner-requirement-list` with `phaseRef` | `GET /context/requirements?phaseRef=` (session) |
-| Context reads | `planner-project-guidelines-show` | `GET /context/guidelines` (session) |
-| Lifecycle | `planner-task-start/complete/pause/reopen/switch/deviation` | `/tasks/{ref}/*`, `/deviations` (session) |
-| Recovery | `planner-session-recover` | `POST /sessions/recover` (session) |
+Task start, completion, pause, switch, reopen, deviation and session recovery
+use their registered v2 operations. The service refreshes focus in the same
+write batch. MCP renews its service-issued session every 30 seconds while the transport
+is open. It also writes a legacy process-liveness marker when claiming work.
+Task ownership is still governed by the legacy rules until shared execution
+leases and workspace registration replace them.
 
-Session-dependent families need the adapter's service-issued session. MCP
-already derives a per-transport planner session id; the bridge registers it
-once (`registerSession`) and sends `x-planner-session` on those calls.
+Planner load, overview, export and all entity lists also use v2. Pi's
+discovery lists and report export and CLI report export use the same
+root-scoped service. The Pi Ideas Inbox tools and `/planner idea` command use
+the v2 routes for reads, edits, deletion and promotion. The Web UI uses
+the same routes for idea list, create, update and confirmed delete. Requirement
+CRUD also uses v2 and keeps the original optimistic update check.
+In registered descriptor workspaces, CLI `serve` resolves the project and
+workspace against the user-scoped SQLite service. MCP and Pi use the same
+authority for explicit load, discovery, task context and lifecycle. The
+browser at `/board/{projectId}/{workspaceId}` reads the registered project and
+subscribes to its event stream. MCP, Pi and the browser create and edit
+features, phases and tasks through the registered entity commands. The
+registered service also handles discussion, Project Guidelines, requirements,
+accepted decisions, checklist mutations, dependency edits, task moves, description freshness,
+and session-scoped recommendations and approved deviations. The browser can read and save a scoped
+document using its loaded revision and release an idle or abandoned execution
+claim. Ideas CRUD and promotion, handoff preparation/write/verification/archive,
+and MCP/CLI/board exports also use the registered service. MCP, Pi tools, Pi native
+commands and the browser use registered entity deletion. Feature deletion
+unlinks phases unless cascade is selected. The service refuses deletion when
+it would lose a dependency, execution checkpoint, deviation or handoff.
+The registered Work Tree reorders siblings through the scoped entity command.
+Native Pi entity and checklist commands, Ideas Inbox, language and Project Guidelines settings, and handoff reads and archival use the same operations as their tools. The native handoff archive command asks for confirmation.
+Several legacy maintenance and host entry points still need migration.
 
 ### Adapter-only
 
 `planner-init`, `planner-repair`, `planner-cleanup-orphan-phases`,
-`planner-description-freshness`, `planner-project-context-migrate`,
-`planner-export`, `planner-authorize-bypass`, `planner-clear-bypass`,
-`planner-version`, `planner-web`, `planner-disable`, `planner-load`,
-`planner-show`. Rationale per entry is in api-v2.md; none is a plan-data
-operation, so none blocks removing direct store access.
+`planner-project-context-migrate`,
+`planner-authorize-bypass`, `planner-clear-bypass`,
+`planner-version`, `planner-web`, and `planner-disable`. Legacy maintenance
+and guard paths retain their existing adapter/store access.
 
 ## Approval parity
 

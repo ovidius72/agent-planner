@@ -21,6 +21,7 @@ import { randomUUID } from "node:crypto";
 import type { PersistenceDriver } from "./driver.js";
 import { PersistenceError, persistenceErrorFrom } from "./driver.js";
 import { deriveFeatureStatusFromPhaseStatuses, derivePhaseStatusFromTaskStatuses } from "../status-rollup.js";
+import { archivePhaseHandoffs } from "./handoff-archive.js";
 
 /** Cap on entities enumerated inside one receipt; genuine high fan-out stays durable via obligations. */
 export const IMPACT_RECEIPT_ENTITY_LIMIT = 50;
@@ -133,8 +134,17 @@ function derivedStatuses(driver: PersistenceDriver, parents: AffectedParents): {
   }
   const featureId = parents.featureId;
   if (featureId !== undefined) {
-    const rows = driver.prepare("SELECT status FROM phases WHERE feature_id = ?").all(featureId);
-    feature = deriveFeatureStatusFromPhaseStatuses(rows.map((row) => String(row.status)));
+    const byPhase = new Map<string, string[]>();
+    const rows = driver.prepare(`
+      SELECT p.id, t.status FROM phases p LEFT JOIN tasks t ON t.phase_id = p.id WHERE p.feature_id = ?
+    `).all(featureId);
+    for (const row of rows) {
+      const id = String(row.id);
+      const statuses = byPhase.get(id) ?? [];
+      if (typeof row.status === "string") statuses.push(row.status);
+      byPhase.set(id, statuses);
+    }
+    feature = deriveFeatureStatusFromPhaseStatuses([...byPhase.values()].map(derivePhaseStatusFromTaskStatuses));
   }
   return { phase, feature };
 }
@@ -202,7 +212,7 @@ export function reconcileLeafMutation(driver: PersistenceDriver, change: LeafCha
 
     // Resolve affected parents: for a move, both old and new; otherwise the current membership.
     const affectedParents = new Map<string, AffectedParents>();
-    if (change.kind === "task.moved" && change.previousPhaseId !== undefined) {
+    if ((change.kind === "task.moved" || change.kind === "task.deleted") && change.previousPhaseId !== undefined) {
       const oldParents = parentsOfPhase(driver, change.previousPhaseId);
       if (oldParents.phaseId !== undefined) affectedParents.set(oldParents.phaseId, oldParents);
     }
@@ -258,6 +268,9 @@ export function reconcileLeafMutation(driver: PersistenceDriver, change: LeafCha
     const affectedParentsList: AffectedParentStatus[] = [];
     for (const parents of affectedParents.values()) {
       const derived = derivedStatuses(driver, parents);
+      if (parents.phaseId && (derived.phase === "done" || derived.phase === "canceled" || derived.phase === "rejected")) {
+        archivePhaseHandoffs(driver, change.projectId, parents.phaseId, `phase-${derived.phase}`, new Date().toISOString());
+      }
       affectedParentsList.push({
         phaseId: parents.phaseId,
         featureId: parents.featureId,

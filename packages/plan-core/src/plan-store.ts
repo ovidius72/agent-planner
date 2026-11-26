@@ -2092,6 +2092,14 @@ export class PlanStore {
     return requirements.requirements.filter((requirement) => requirement.linkedPhaseIds.some((phaseId) => phaseIds.has(phaseId)));
   }
 
+  async linkedRequirementsForExecution(phase: Pick<Phase, "id" | "featureId">): Promise<Requirement[]> {
+    const direct = await this.linkedRequirementsForPhase(phase.id);
+    if (!phase.featureId) return direct;
+    const directIds = new Set(direct.map(({ id }) => id));
+    const inherited = await this.linkedRequirementsForFeature(phase.featureId);
+    return [...direct, ...inherited.filter(({ id }) => !directIds.has(id))];
+  }
+
   async loadPhaseWithRequirements(phaseId: string): Promise<Phase & { linkedRequirements: Requirement[] }> {
     const [phase, linkedRequirements] = await Promise.all([
       this.loadPhase(phaseId),

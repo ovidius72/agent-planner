@@ -355,29 +355,45 @@ export interface ProjectContextReply {
  * `structured.contextComplete === true`.
  */
 export function buildProjectContextLoadReply(delivery: CompleteProjectContextDelivery, maxChars: number): ProjectContextReply {
-  if (delivery.chunks.length > 1) {
+  return renderContextLoadReply(delivery.snapshot, delivery.evidence, maxChars);
+}
+
+/** Shape a single HTTP response without allocating chunks the caller cannot receive. */
+export function buildBoundedProjectContextReply(snapshot: ProjectContextSnapshot, maxChars: number): ProjectContextReply {
+  const serializedChars = serializeProjectContext(snapshot).length;
+  return renderContextLoadReply(snapshot, {
+    fingerprint: projectContextFingerprint(snapshot), serializedChars, totalChunks: Math.ceil(serializedChars / maxChars),
+  }, maxChars);
+}
+
+function renderContextLoadReply(
+  snapshot: ProjectContextSnapshot,
+  evidence: Pick<ProjectContextDeliveryEvidence, "fingerprint" | "serializedChars" | "totalChunks">,
+  maxChars: number,
+): ProjectContextReply {
+  if (evidence.totalChunks > 1) {
     return {
-      text: `Project context exceeds the ${maxChars}-character single-response bound (${delivery.evidence.serializedChars} characters across ${delivery.evidence.totalChunks} chunks). Project-level context (description, scope, out-of-scope, technologies, tools, languages, Project Guidelines, every Requirement, and every project Accepted Decision) was NOT delivered this turn, and the read was not attested.`,
+      text: `Project context exceeds the ${maxChars}-character single-response bound (${evidence.serializedChars} characters across ${evidence.totalChunks} chunks). Project-level context (description, scope, out-of-scope, technologies, tools, languages, Project Guidelines, every Requirement, and every project Accepted Decision) was NOT delivered this turn, and the read was not attested.`,
       structured: {
         loaded: false,
         contextComplete: false,
-        fingerprint: delivery.evidence.fingerprint,
-        totalChunks: delivery.evidence.totalChunks,
-        serializedChars: delivery.evidence.serializedChars,
+        fingerprint: evidence.fingerprint,
+        totalChunks: evidence.totalChunks,
+        serializedChars: evidence.serializedChars,
         nextActions: [
-          `Retry planner-load with a larger maxChars (at least ${delivery.evidence.serializedChars}) so the complete project context fits in one response.`,
+          `Retry planner-load with a larger maxChars (at least ${evidence.serializedChars}) so the complete project context fits in one response.`,
           "Do not treat this response as a complete project-context read: REQUIREMENTS_READ_REQUIRED and equivalent gates remain unsatisfied until a complete read is attested.",
         ],
       },
     };
   }
   return {
-    text: renderProjectContext(delivery.snapshot),
+    text: renderProjectContext(snapshot),
     structured: {
       loaded: true,
       contextComplete: true,
-      fingerprint: delivery.evidence.fingerprint,
-      requirementCount: delivery.snapshot.requirements.length,
+      fingerprint: evidence.fingerprint,
+      requirementCount: snapshot.requirements.length,
     },
   };
 }

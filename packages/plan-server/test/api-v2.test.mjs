@@ -165,6 +165,8 @@ test("discovery inventory is the frozen complete application surface", async () 
         approve: "POST /api/v2/deviations",
       },
       project: {
+        overview: "GET /api/v2/project/overview",
+        export: "POST /api/v2/project/export",
         discuss: "PUT /api/v2/project/discuss",
         guidelines: "PUT /api/v2/project/guidelines",
         language: "PUT /api/v2/project/language",
@@ -176,6 +178,7 @@ test("discovery inventory is the frozen complete application surface", async () 
       },
       context: {
         project: "GET /api/v2/context/project?maxChars=",
+        load: "POST /api/v2/context/load",
         guidelines: "GET /api/v2/context/guidelines",
         requirements: "GET /api/v2/context/requirements?phaseRef=",
         feature: "GET /api/v2/context/features/{featureRef}",
@@ -383,6 +386,14 @@ test("requirements family: create → list → update → delete over the shared
     assert.equal(updated.data.requirement.macroTasks.length, 2);
     assert.equal(updated.data.requirement.macroTasks[0].status, "done");
     assert.equal(updated.data.requirement.macroTasks[1].id, "MT-002");
+
+    const stale = await request(fx, `/api/v2/requirements/${requirementId}`, {
+      ...put({ title: "Should not overwrite", expectedUpdatedAt: "2020-01-01T00:00:00.000Z" }),
+      expectStatus: 409,
+    });
+    assert.equal(stale.body.error.code, "PLAN_STALE_WRITE");
+    assert.equal(stale.body.error.details.actualUpdatedAt, updated.data.requirement.updatedAt);
+    assert.deepEqual((await fx.store.loadRequirements()).requirements.find((requirement) => requirement.id === requirementId), updated.data.requirement);
 
     const deleted = (await request(fx, `/api/v2/requirements/${requirementId}`, del)).body;
     assert.equal(deleted.data.deleted, true);
@@ -1759,6 +1770,20 @@ test("lifecycle family: switch pauses the source, claims the target and records 
       expectStatus: 409,
     });
     assert.equal(foreign.body.error.code, "TASK_OWNED_BY_ANOTHER_SESSION");
+
+    const update = (await request(fx, `/api/v2/tasks/${targetPath}`, {
+      ...put({ status: "blocked", motivation: "The temporary investigation is waiting for evidence." }),
+      headers,
+    })).body.data;
+    assert.equal(update.task.status, "blocked");
+    assert.equal(update.resumeRequired.ref, sourceRef);
+
+    const summaryPath = "/api/v2/recommend?view=summary";
+    const owned = (await request(fx, summaryPath, { headers })).body.data;
+    assert.equal(owned.structured.kind, "resume");
+    assert.match(owned.text, /T001/);
+    const unrelated = (await request(fx, summaryPath, { headers: otherHeaders })).body.data;
+    assert.notEqual(unrelated.structured.kind, "resume");
   } finally {
     await closeServerFixture(fx);
   }
@@ -2114,6 +2139,71 @@ test("project family: guidelines keep an optimistic guard and language is partia
     const noop = (await request(fx, "/api/v2/project/language", put({}))).body.data;
     assert.equal(noop.contentLanguage, "it");
     assert.equal(noop.chatLanguage, "it");
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("task-only context attests the task and leaves parent and requirement reads outstanding", async () => {
+  const fx = await startServerFixture({ name: "v2-task-only-context" });
+  const taskRef = encodeURIComponent("P001(F001)/T001");
+  try {
+    const { session } = (await request(fx, "/api/v2/sessions", json({ clientKind: "mcp" }))).body.data;
+    const headers = { "X-Planner-Session": session.sessionId };
+
+    const detail = (await request(fx, `/api/v2/context/tasks/${taskRef}?scope=task`, { headers })).body.data;
+    assert.equal(detail.ref, "P001(F001)/T001");
+    assert.match(detail.text, /Accepted Decisions/);
+    assert.equal(detail.phaseText, undefined);
+    assert.equal(detail.featureText, undefined);
+
+    const result = (await request(fx, `/api/v2/tasks/${taskRef}/start`, {
+      method: "POST",
+      headers,
+      expectStatus: 409,
+    })).body.error;
+    assert.equal(result.code, "CONTEXT_READ_REQUIRED");
+    assert.deepEqual(result.context.requiredReads.map(({ kind }) => kind), ["phase", "feature"]);
+    assert.equal(result.context.requirementReadRequired, true);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("issued sessions can only be used within their service principal scope", async () => {
+  const fx = await startServerFixture({ name: "v2-session-principal" });
+  try {
+    const { session } = (await request(fx, "/api/v2/sessions", json({ clientKind: "mcp", principalId: "ignored" }))).body.data;
+    assert.equal(session.principalId, "loopback:agent");
+    const contextual = { "X-Planner-Session": session.sessionId };
+    const own = (await request(fx, "/api/v2/context/guidelines", { headers: contextual })).body;
+    assert.equal(own.apiVersion, "2");
+    const anotherPrincipal = await request(fx, "/api/v2/context/guidelines", {
+      headers: { ...contextual, Origin: fx.handle.url },
+      expectStatus: 403,
+    });
+    assert.equal(anotherPrincipal.body.error.code, "SESSION_SCOPE_MISMATCH");
+    const heartbeat = await request(fx, `/api/v2/sessions/${session.sessionId}/heartbeat`, {
+      ...json({}),
+      headers: { ...json({}).headers, Origin: fx.handle.url },
+      expectStatus: 403,
+    });
+    assert.equal(heartbeat.body.error.code, "SESSION_SCOPE_MISMATCH");
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("overview reports authoritative task state and the server saves the Markdown export", async () => {
+  const fx = await startServerFixture({ name: "v2-overview-export" });
+  try {
+    const { overview } = (await request(fx, "/api/v2/project/overview")).body.data;
+    assert.equal(overview.activeTaskState, "none");
+    assert.equal(overview.counts.tasks, 1);
+    const { markdown, filePath } = (await request(fx, "/api/v2/project/export", json({ full: true }))).body.data;
+    assert.equal(filePath, join(fx.planRoot, "EXPORT.md"));
+    assert.equal(await readFile(filePath, "utf8"), markdown);
+    assert.match(markdown, /Implement login/);
   } finally {
     await closeServerFixture(fx);
   }

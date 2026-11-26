@@ -70,18 +70,38 @@ const startTaskApply = (ctx) => {
   return { taskId: "t-1", status: "in-progress" };
 };
 
-test("bootstrap creates schema_version 1 with WAL and verifies on reopen", async () => {
+test("bootstrap creates schema_version 3 with WAL and verifies on reopen", async () => {
   const path = await tempStore("bootstrap");
   const first = await openStore({ path, create: true });
   assert.equal(first.store.created, true);
-  assert.equal(first.store.schemaVersion, 1);
+  assert.equal(first.store.schemaVersion, 3);
   const mode = first.driver.prepare("PRAGMA journal_mode").get();
   assert.equal(String(mode.journal_mode ?? Object.values(mode)[0]).toLowerCase(), "wal");
   first.close();
   const second = await openStore({ path });
   assert.equal(second.store.created, false);
-  assert.equal(second.store.schemaVersion, 1);
+  assert.equal(second.store.schemaVersion, 3);
   second.close();
+});
+
+test("upgrading schema 1 preserves existing data and grants no principal automatically", async () => {
+  const path = await tempStore("upgrade-access");
+  const opened = await openStore({ path, create: true });
+  try {
+    seedProject(opened.driver);
+    opened.driver.exec("DROP TABLE task_context_reads; DROP TABLE command_audit; DROP TABLE project_context_reads; DROP TABLE project_sessions; DROP TABLE project_workspaces; DROP TABLE project_principals;");
+    opened.driver.prepare("UPDATE store_meta SET value='1' WHERE key='schema_version'").run();
+  } finally {
+    opened.close();
+  }
+  const upgraded = await openStore({ path });
+  try {
+    assert.equal(upgraded.store.schemaVersion, 3);
+    assert.ok(upgraded.driver.prepare("SELECT id FROM projects WHERE id='proj-1'").get());
+    assert.equal(upgraded.driver.prepare("SELECT COUNT(*) AS count FROM project_principals").get().count, 0);
+  } finally {
+    upgraded.close();
+  }
 });
 
 test("task/parent/receipt/event commit atomically and bump one revision", async () => {
@@ -128,6 +148,28 @@ test("same request id with a different payload is a typed conflict", async () =>
   assert.equal(conflict.status, "conflict");
   assert.match(conflict.reason, /different payload/);
   handle.close();
+});
+
+test("command receipts retain authenticated requester provenance across retries", async () => {
+  const handle = await openStore({ path: await tempStore("audit-requester"), create: true });
+  try {
+    seedProject(handle.driver);
+    const projectId = "proj-1";
+    const workspaceId = "workspace-1";
+    handle.driver.prepare("UPDATE projects SET descriptor_project_id = ? WHERE id = ?").run(projectId, projectId);
+    handle.driver.prepare("INSERT INTO project_principals(project_id, principal_id) VALUES (?, ?)").run(projectId, "agent");
+    handle.driver.prepare("INSERT INTO project_workspaces(project_id, id, source_path, clone_key) VALUES (?, ?, ?, ?)")
+      .run(projectId, workspaceId, "/fixture", "/fixture");
+    const envelope = { projectId, requestId: "req-attributed", operation: "task.start", payload: { taskId: "t-1" } };
+    const caller = { projectId, workspaceId, principalId: "agent", requesterId: "orchestrator" };
+    assert.equal(executeCommand(handle.driver, envelope, startTaskApply, caller).status, "committed");
+    assert.equal(executeCommand(handle.driver, envelope, startTaskApply, caller).status, "already-applied");
+    assert.equal(executeCommand(handle.driver, envelope, startTaskApply, { ...caller, requesterId: "different" }).status, "conflict");
+    const audit = handle.driver.prepare("SELECT actor_id, requester_id FROM command_audit").get();
+    assert.deepEqual({ ...audit }, { actor_id: "agent", requester_id: "orchestrator" });
+  } finally {
+    handle.driver.close();
+  }
 });
 
 test("stale expected revision is a typed revision-conflict with no mutation", async () => {
@@ -233,7 +275,7 @@ test("documents: CRUD, history, folder listing, assets; content survives restore
   source.close();
   assert.ok(snapshot.bytes > 0);
   const restored = await restoreFromSnapshot(snapshotPath, join(root, "restored", "planner.sqlite"));
-  assert.equal(restored.store.schemaVersion, 1);
+  assert.equal(restored.store.schemaVersion, 3);
   const restoredDoc = getDocument(restored.driver, "doc-1");
   assert.equal(restoredDoc.revision, 2, "document revision survives restore");
   assert.equal(restoredDoc.content, "Second revision body with checkpoint words.");

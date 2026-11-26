@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { TopNav } from "../src/components/layout/top-nav";
 import { IdeasRoute } from "../src/routes/ideas/route";
 import type { Idea } from "../src/lib/types";
-import { renderRoute } from "./fixtures";
+import { createIdea, deleteIdea, getIdeas, updateIdea } from "../src/lib/api";
+import { installFetchMock, jsonResponse, renderRoute, requestJson } from "./fixtures";
 
 const idea: Idea = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -19,6 +20,26 @@ const idea: Idea = {
 };
 
 describe("Ideas Inbox UI", () => {
+  it("uses the versioned Ideas Inbox API with explicit deletion confirmation", async () => {
+    const bodies: Array<{ method: string | undefined; path: string; body: unknown }> = [];
+    installFetchMock(async (path, init) => {
+      bodies.push({ method: init.method, path, body: init.body ? await requestJson(init) : undefined });
+      const data = init.method === "DELETE" ? { ideaId: idea.id } : path === "/api/v2/ideas" && !init.method ? { ideas: [idea] } : { idea };
+      return jsonResponse({ apiVersion: "2", data });
+    });
+    const fields = { title: idea.title, description: idea.description };
+    expect(await getIdeas()).toEqual([idea]);
+    expect(await createIdea(fields)).toEqual(idea);
+    expect(await updateIdea({ id: idea.id, ...fields })).toEqual(idea);
+    expect(await deleteIdea(idea.id)).toEqual({ deleted: idea.id });
+    expect(bodies).toEqual([
+      { path: "/api/v2/ideas", method: undefined, body: undefined },
+      { path: "/api/v2/ideas", method: "POST", body: fields },
+      { path: `/api/v2/ideas/${idea.id}`, method: "PUT", body: fields },
+      { path: `/api/v2/ideas/${idea.id}?confirmed=true`, method: "DELETE", body: undefined },
+    ]);
+  });
+
   it("renders the desktop and mobile navigation entry", () => {
     vi.stubGlobal("localStorage", { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn() });
     vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));

@@ -1,4 +1,4 @@
-import { getTask, updateTask } from "../lib/api";
+import { setTaskChecklistItem } from "../lib/api";
 import { requiredParam, requiredString } from "../lib/forms";
 
 export async function action({ request, params }: { request: Request; params: Record<string, string | undefined> }) {
@@ -8,13 +8,7 @@ export async function action({ request, params }: { request: Request; params: Re
   const itemId = requiredParam(params, "itemId");
   const formData = await request.formData();
   const checked = requiredString(formData, "checked") === "true";
-  const current = await getTask(taskId);
-
-  await updateTask({
-    ...current,
-    phaseId,
-    checklist: current.checklist.map((item) => item.id === itemId ? { ...item, checked } : item),
-  });
+  await setTaskChecklistItem(taskId, phaseId, itemId, checked);
 
   return Response.json({ ok: true, taskId, itemId, checked });
 }

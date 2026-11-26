@@ -52,8 +52,8 @@ export function findIdeaByRef(ideas: Idea[], ref: string): Idea | undefined {
  * identical copy; kept here so the ref grammar (number, shortId, UUID, exact
  * name, partial name with ambiguity detection) is one decision.
  */
-export function resolveFeatureRefStrict(features: Feature[], ref: string):
-  | { ok: true; feature: Feature }
+export function resolveFeatureRefStrict<T extends Pick<Feature, "id" | "number" | "shortId" | "name">>(features: T[], ref: string):
+  | { ok: true; feature: T }
   | { ok: false; error: string } {
   const raw = ref.trim();
   if (!raw) return { ok: false, error: "Feature ref is required." };
@@ -88,7 +88,7 @@ export function resolveFeatureRefStrict(features: Feature[], ref: string):
  * filters and mutations agree on which feature a ref names. Use
  * resolveFeatureRefStrict when ambiguity must be refused instead of guessed.
  */
-export function findFeatureByRef(features: Feature[], ref: string): Feature | undefined {
+export function findFeatureByRef<T extends Pick<Feature, "id" | "number" | "shortId" | "name">>(features: T[], ref: string): T | undefined {
   const normalized = ref.trim().toLowerCase();
   if (!normalized) return undefined;
   const fMatch = normalized.match(/^f(\d+)$/);
@@ -111,11 +111,11 @@ export function findFeatureByRef(features: Feature[], ref: string): Feature | un
  * @param features all features (st.loadAllFeatures() / loadFeatures())
  * @param ref     the human-facing ref (P00x / P00x(F00x) / UUID / title)
  */
-export function findPhaseByRef(
-  phases: Phase[],
-  features: Feature[],
+export function findPhaseByRef<T extends Pick<Phase, "id" | "number" | "shortId" | "title" | "featureId">>(
+  phases: T[],
+  features: Array<Pick<Feature, "id" | "number">>,
   ref: string,
-): Phase | undefined {
+): T | undefined {
   const normalized = ref.trim().toLowerCase();
   if (!normalized) return undefined;
 
@@ -183,11 +183,13 @@ function parseTaskComposite(ref: string): { featureNum?: number | undefined; pha
   return {};
 }
 
-export function findTaskByRef(
-  phases: Phase[],
-  features: Feature[],
+export function findTaskByRef<T extends Pick<Phase, "number" | "featureId"> & {
+  tasks: Array<Pick<Task, "id" | "number" | "shortId" | "title">>;
+}>(
+  phases: T[],
+  features: Array<Pick<Feature, "id" | "number">>,
   ref: string,
-): { phase: Phase; task: Task } | undefined {
+): { phase: T; task: T["tasks"][number] } | undefined {
   const normalized = ref.trim().toLowerCase();
   if (!normalized) return undefined;
 

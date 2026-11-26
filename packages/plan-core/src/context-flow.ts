@@ -25,7 +25,9 @@ import {
 import { taskStartGateState } from "./task-start-outcome.js";
 import { showFeature, showPhase, showTask, type TaskShowOutcome } from "./show-flow.js";
 import type { Feature, Phase, PlanStore, Project, Requirement, Task } from "./index.js";
-import type { CompleteProjectContextDelivery } from "./project-context.js";
+import { DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, buildProjectContextLoadReply, type CompleteProjectContextDelivery } from "./project-context.js";
+import { buildPlannerLoadReply, buildScopedDecisionContext } from "./load-reply.js";
+import { buildRecap, type RecapHarness, type RecapWebInfo } from "./recap.js";
 
 export type ContextFlowRefusal = {
   ok: false;
@@ -79,6 +81,7 @@ function taskContextText(task: Task, ref: string, phaseRef: string, linkedRequir
 export interface FeatureContextOutcome {
   ref: string;
   feature: Feature;
+  phaseCount: number;
   /** Delivered text; exactly what the receipt attests. */
   text: string;
   attested: true;
@@ -90,7 +93,7 @@ export async function readFeatureContextFlow(store: PlanStore, sessionId: string
   if (!outcome.ok) return outcome;
   const text = featureContextText(outcome.feature, outcome.ref);
   markCanonicalFullReadForSessionId(sessionId, "feature", outcome.feature, text);
-  return { ok: true, ref: outcome.ref, feature: outcome.feature, text, attested: true };
+  return { ok: true, ref: outcome.ref, feature: outcome.feature, phaseCount: outcome.phaseCount, text, attested: true };
 }
 
 export interface PhaseContextOutcome {
@@ -109,6 +112,45 @@ export async function readPhaseContextFlow(store: PlanStore, sessionId: string, 
   markCanonicalFullReadForSessionId(sessionId, "phase", outcome.phase, text);
   return { ok: true, ref: outcome.ref, phase: outcome.phase, linkedRequirements: outcome.linkedRequirements, text, attested: true };
 }
+
+/** Deliver only the requested task. Parent and requirement data here supports
+ * the readiness advisory and does not attest those entities. */
+export async function readTaskDetailContextFlow(store: PlanStore, sessionId: string, ref: string) {
+  const outcome = await showTask(store, ref, { sessionId });
+  if (!outcome.ok) return outcome;
+  const { task, phase, feature, linkedRequirements } = outcome;
+  const text = taskContextText(task, outcome.ref, outcome.phaseRef, []);
+  const project = await store.loadProject();
+  markCanonicalFullReadForSessionId(sessionId, "task", task, text);
+  return {
+    ok: true as const,
+    ref: outcome.ref,
+    task,
+    phaseRef: outcome.phaseRef,
+    featureRef: outcome.featureRef,
+    phase: {
+      id: phase.id,
+      featureId: phase.featureId,
+      updatedAt: phase.updatedAt,
+      descriptionUpdatedAt: phase.descriptionUpdatedAt,
+      sessionInfo: phase.sessionInfo.filter((entry) => entry.sessionId === sessionId),
+    },
+    feature: feature ? {
+      id: feature.id,
+      updatedAt: feature.updatedAt,
+      descriptionUpdatedAt: feature.descriptionUpdatedAt,
+      sessionInfo: feature.sessionInfo.filter((entry) => entry.sessionId === sessionId),
+    } : undefined,
+    orderContext: outcome.orderContext,
+    snapshot: outcome.snapshot,
+    pendingDeviation: outcome.pendingDeviation,
+    linkedRequirements,
+    projectGuidelinesReadState: projectGuidelinesReadStateForSession(project, sessionId),
+    text,
+  };
+}
+
+export type TaskDetailContextOutcome = Extract<Awaited<ReturnType<typeof readTaskDetailContextFlow>>, { ok: true }>;
 
 /** The start gate as the read leaves it: what this delivery did not satisfy. */
 export interface TaskContextGate {
@@ -221,7 +263,7 @@ export interface PhaseRequirementsOutcome {
 export async function readPhaseRequirementsFlow(store: PlanStore, sessionId: string, ref: string): Promise<({ ok: true } & PhaseRequirementsOutcome) | ContextFlowRefusal> {
   const outcome = await showPhase(store, ref);
   if (!outcome.ok) return outcome;
-  const requirements = outcome.linkedRequirements;
+  const requirements = await store.linkedRequirementsForExecution(outcome.phase);
   requirements.forEach((requirement) => markRequirementReadForSessionId(sessionId, requirement.id));
   return {
     ok: true,
@@ -271,3 +313,36 @@ export async function readProjectGuidelinesFlow(store: PlanStore, sessionId: str
   const refreshed = await store.loadProject();
   return { projectGuidelines: refreshed.projectGuidelines, readRecorded: Boolean(content) };
 }
+
+/** Prepare the registered session and deliver the same recap to each adapter. */
+export async function loadPlannerContextFlow(
+  store: PlanStore,
+  sessionId: string,
+  options: { maxChars?: number | undefined; harness: RecapHarness; web?: RecapWebInfo },
+) {
+  let preparation: Awaited<ReturnType<PlanStore["preparePlannerSession"]>>;
+  try {
+    preparation = await store.preparePlannerSession();
+  } catch (cause) {
+    return { ok: false as const, message: cause instanceof Error ? cause.message : String(cause) };
+  }
+  await store.runBatch(() => store.refreshResume(undefined, undefined, sessionId));
+  if (preparation.project.projectGuidelines.content.trim()) {
+    await store.recordProjectGuidelinesRead({ sessionId });
+  }
+  const plannerSkill = await store.syncPlannerSkill();
+  await store.syncGrillMeSkill();
+  const recap = await buildRecap(store, options.web, { harness: options.harness, sessionId });
+  const plan = await store.loadAll();
+  const maxChars = options.maxChars ?? DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS;
+  const delivery = await readProjectContextFlow(store, sessionId, maxChars);
+  const reply = buildPlannerLoadReply({
+    recap: preparation.changed ? `${preparation.legacyProjectContext.summary}\n\n${recap}` : recap,
+    projectContext: buildProjectContextLoadReply(delivery.delivery, maxChars),
+    scopedDecisions: buildScopedDecisionContext(plan),
+    plannerGuide: { mode: "pointer", path: ".planner/SKILL.md", customized: plannerSkill.customized, message: plannerSkill.message },
+  });
+  return { ok: true as const, ...reply, preparation: preparation.legacyProjectContext };
+}
+
+export type PlannerContextLoadOutcome = Extract<Awaited<ReturnType<typeof loadPlannerContextFlow>>, { ok: true }>;

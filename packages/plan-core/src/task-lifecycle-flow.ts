@@ -156,10 +156,7 @@ export async function startTaskFlow(store: PlanStore, sessionId: string, ref: st
     // did a full planner-load gets a non-blocking advisory when project-level
     // context has drifted since, instead of silently going stale.
     const projectContextReadState = await store.projectContextReadStateForSession(sessionId);
-    const linkedRequirements = [
-      ...(await store.linkedRequirementsForPhase(found.phase.id)),
-      ...(found.phase.featureId ? await store.linkedRequirementsForFeature(found.phase.featureId) : []),
-    ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+    const linkedRequirements = await store.linkedRequirementsForExecution(found.phase);
     const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
     const contextInput = {
       sessionId,
@@ -801,10 +798,7 @@ export async function switchTaskFlow(
     };
   }
 
-  const linkedRequirements = [
-    ...(await store.linkedRequirementsForPhase(target.phase.id)),
-    ...(target.phase.featureId ? await store.linkedRequirementsForFeature(target.phase.featureId) : []),
-  ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+  const linkedRequirements = await store.linkedRequirementsForExecution(target.phase);
   const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
   const contextInput = {
     sessionId,

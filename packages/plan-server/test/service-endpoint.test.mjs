@@ -10,16 +10,19 @@
  */
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";import { tmpdir } from "node:os";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { once } from "node:events";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import http from "node:http";
 import WebSocket from "ws";
 import { cleanupServerFixtures, closeServerFixture, startServerFixture } from "../../../test/helpers/server-fixture.mjs";
-import { serve } from "../dist/index.js";
+import { connectRegisteredPlannerService, serve } from "../dist/index.js";
 import { SERVICE_PROTOCOL_VERSION, readServiceEndpointRecord, serviceEndpointRecordPath, verifyLiveServiceEndpoint } from "../../../packages/plan-core/dist/index.js";
 
 after(async () => {
   await cleanupServerFixtures();
+  await Promise.all(homes.map((home) => rm(home, { recursive: true, force: true })));
 });
 
 const tempHome = (name) => mkdtemp(join(tmpdir(), `agent-plan-service-${name}-`));
@@ -30,22 +33,24 @@ const withHome = (serveOptions = {}, name) => tempHome(name).then((home) => {
 });
 
 test("the service advertises its boot identity in the user-scoped runtime record", async () => {
-  const fixture = await startServerFixture({ name: "svc-advertise", serveOptions: await withHome({}, "advertise") });
+  const home = await tempHome("advertise");
+  homes.push(home);
+  const handle = await connectRegisteredPlannerService({ home });
   try {
     const record = await readServiceEndpointRecord(homes.at(-1));
     assert.ok(record, "the runtime record exists after startup");
     assert.equal(record.host, "127.0.0.1");
     assert.equal(record.protocolVersion, SERVICE_PROTOCOL_VERSION);
-    assert.equal(record.port, Number(new URL(fixture.handle.url).port));
+    assert.equal(record.port, Number(new URL(handle.url).port));
     assert.equal(typeof record.bootId, "string");
 
-    const health = await (await fetch(`${fixture.handle.url}/health`)).json();
+    const health = await (await fetch(`${handle.url}/health`)).json();
     assert.equal(health.protocolVersion, SERVICE_PROTOCOL_VERSION);
     assert.equal(health.bootId, record.bootId, "the /health boot identity matches the advertisement");
     const verification = await verifyLiveServiceEndpoint(record, { acceptedProtocolVersions: [SERVICE_PROTOCOL_VERSION] });
     assert.deepEqual(verification, { verified: true });
   } finally {
-    await closeServerFixture(fixture);
+    await handle.close();
     assert.equal(await readServiceEndpointRecord(homes.at(-1)), null, "close removes its own boot record");
   }
 });
@@ -53,14 +58,36 @@ test("the service advertises its boot identity in the user-scoped runtime record
 test("a structurally corrupt runtime record is removed, not served", async () => {
   const home = await tempHome("corrupt-record");
   homes.push(home);
-  const fixture = await startServerFixture({ name: "svc-corrupt", serveOptions: { runtimeHome: home } });
+  const handle = await connectRegisteredPlannerService({ home });
   try {
     await writeFile(serviceEndpointRecordPath(home), "{corrupt");
     assert.equal(await readServiceEndpointRecord(home), null, "a corrupt advertisement is not a service");
     await assert.rejects(() => readFile(serviceEndpointRecordPath(home), "utf-8"), "the corrupt record file is removed");
   } finally {
-    await closeServerFixture(fixture);
+    await handle.close();
     assert.equal(await readServiceEndpointRecord(home), null, "close removes its own boot record");
+  }
+});
+
+test("negotiation accepts an advertised adjacent protocol and checks the boot identity", async () => {
+  const authority = "registered-projects";
+  let health = { authority, protocolVersion: "2", acceptedProtocolVersions: ["2", "1"], bootId: "boot-fixture" };
+  const server = http.createServer((_request, response) => {
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify(health));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const record = { authority, bootId: health.bootId, protocolVersion: "2", host: "127.0.0.1", port: server.address().port };
+    const options = { acceptedProtocolVersions: ["1"] };
+    assert.deepEqual(await verifyLiveServiceEndpoint(record, options), { verified: true });
+    health = { ...health, bootId: "different-fixture" };
+    assert.deepEqual(await verifyLiveServiceEndpoint(record, options), { verified: false, reason: "boot-mismatch" });
+    health = { ...health, bootId: record.bootId, acceptedProtocolVersions: ["2"] };
+    assert.deepEqual(await verifyLiveServiceEndpoint(record, options), { verified: false, reason: "protocol-incompatible" });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 

@@ -4,6 +4,7 @@ import { readFile, writeFile, rename } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { createPlannerFixture } from "../../../test/helpers/fixtures.mjs";
 import { callTool, cleanupMcpFixtures, startMcpClient } from "../../../test/helpers/mcp-fixture.mjs";
 import { readLiveServerRecord, serve, serverRecordPath } from "@agent-plan/server";
@@ -12,6 +13,7 @@ import {
   plannerApiForSession,
   resetPlannerSessions,
   stopPlannerService,
+  stopPlannerSessionHeartbeats,
 } from "../dist/service.js";
 
 after(cleanupMcpFixtures);
@@ -55,6 +57,45 @@ test("concurrent startup and transport registration reuse the authority without 
   }
 });
 
+test("a registered MCP session renews against the live endpoint until heartbeat shutdown", async (t) => {
+  const fixture = await createPlannerFixture({ name: "mcp-heartbeat" });
+  const realSetTimeout = globalThis.setTimeout;
+  t.mock.method(globalThis, "setTimeout", (callback, milliseconds, ...args) =>
+    realSetTimeout(callback, milliseconds === 30_000 ? 20 : milliseconds, ...args));
+  try {
+    const { sessionId } = await plannerApiForSession(fixture.planRoot, "heartbeat", { clientKind: "mcp" });
+    const readSession = async () => (await fixture.store.loadPlannerSessions()).find((session) => session.sessionId === sessionId);
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const record = await readSession();
+      if (record.lastSeenAt > record.registeredAt) break;
+      await delay(10);
+    }
+    const renewed = await readSession();
+    assert.ok(renewed.lastSeenAt > renewed.registeredAt);
+    stopPlannerSessionHeartbeats();
+    await delay(40);
+    const stopped = await readSession();
+    await delay(50);
+    assert.equal((await readSession()).lastSeenAt, stopped.lastSeenAt);
+  } finally {
+    await stopPlannerService();
+    resetPlannerSessions();
+  }
+});
+
+test("a copied server advertisement is ignored across planner roots", async () => {
+  const source = await createPlannerFixture({ name: "service-source" });
+  const destination = await createPlannerFixture({ name: "service-destination" });
+  const owner = await serve({ planRoot: source.planRoot, port: 0, runtimeHome: source.root, staticDir: "", quiet: true });
+  try {
+    await writeFile(serverRecordPath(destination.planRoot), await readFile(serverRecordPath(source.planRoot)));
+    assert.equal(await readLiveServerRecord(destination.planRoot), null);
+    assert.equal((await readLiveServerRecord(source.planRoot)).localUrl, owner.localUrl);
+  } finally {
+    await owner.close();
+  }
+});
+
 test("an incompatible but live root endpoint is preserved and refused", async () => {
   const fixture = await createPlannerFixture({ name: "mcp-incompatible-service" });
   const server = await serve({ planRoot: fixture.planRoot, port: 0, runtimeHome: fixture.root, staticDir: "", quiet: true });
@@ -65,6 +106,8 @@ test("an incompatible but live root endpoint is preserved and refused", async ()
     const result = await ensurePlannerService(fixture.planRoot);
     assert.match(result.error, /incompatible/);
     assert.equal((await readLiveServerRecord(fixture.planRoot)).localUrl, server.localUrl);
+    assert.deepEqual(await stopPlannerService(fixture.planRoot), { stopped: false, foreign: true, url: server.localUrl });
+    assert.ok((await fetch(`${server.localUrl}/health`)).ok);
   } finally {
     await server.close();
   }

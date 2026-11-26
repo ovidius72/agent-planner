@@ -1,3 +1,5 @@
+import type { MiddlewareHandler } from "hono";
+
 /**
  * Service authentication seam (P128(F025)/T490, architecture.md §6).
  *
@@ -20,6 +22,8 @@ export type PrincipalKind = "agent" | "web-ui" | "heca";
 
 export interface Principal {
   principalId: string;
+  /** A requester already verified by the authentication strategy. */
+  requesterId?: string | undefined;
   kind: PrincipalKind;
   /** The verified Origin that produced a browser-kind principal, if any. */
   origin?: string | undefined;
@@ -106,5 +110,36 @@ export function loopbackAuthStrategy(): AuthStrategy {
       else if (identity.origin && identity.allowedOrigins.includes(identity.origin)) kind = "heca";
       return { principalId: `loopback:${kind}`, kind, origin: identity.origin };
     },
+  };
+}
+
+/** Apply the same admission policy before mounting any planner application surface. */
+export function plannerAdmission(options: {
+  originRef: { current: string | undefined };
+  allowedOrigins?: readonly string[] | undefined;
+  webUiOrigins?: readonly string[] | undefined;
+  auth?: AuthStrategy | undefined;
+}): MiddlewareHandler {
+  const strategy = options.auth ?? loopbackAuthStrategy();
+  const allowedOrigins = [...(options.allowedOrigins ?? []), ...(options.webUiOrigins ?? [])];
+  return async (c, next) => {
+    if (!hostHeaderIsLoopback(c.req.header("Host"))) {
+      return c.json({ error: "UNTRUSTED_HOST", message: "Host header must name the loopback interface." }, 403);
+    }
+    const origin = c.req.header("Origin");
+    if (MUTATION_METHODS.includes(c.req.method) && !originIsAllowed(origin, options.originRef.current, allowedOrigins)) {
+      return c.json({ error: "UNTRUSTED_ORIGIN", message: "Writes are accepted only from the Agent Plan UI and configured extra origins." }, 403);
+    }
+    const principal = strategy.resolvePrincipal({
+      method: c.req.method,
+      path: c.req.path,
+      origin,
+      serviceOrigin: options.originRef.current,
+      allowedOrigins,
+      webUiOrigins: options.webUiOrigins ?? [],
+    });
+    if (!principal) return c.json({ error: "UNAUTHENTICATED", message: "No principal resolved for this request." }, 401);
+    c.set("principal", principal);
+    await next();
   };
 }

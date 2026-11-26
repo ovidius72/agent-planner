@@ -8,6 +8,10 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "node:http";
 import type { EntityChangedData } from "./entity-events.js";
+import { hostHeaderIsLoopback } from "./auth.js";
+
+const MAX_INBOUND_BYTES = 64 * 1024;
+const MAX_BUFFERED_BYTES = 1024 * 1024;
 
 export type WsEvent =
   | { type: "file-changed"; data: { filename: string } }
@@ -36,7 +40,7 @@ export class WsHub {
     // noServer + manual upgrade so the origin check runs before any socket
     // is upgraded to a WebSocket (architecture.md §6: writes and WebSocket
     // upgrades are accepted only from the Agent Plan UI and Heca origins).
-    this.wss = new WebSocketServer({ noServer: true });
+    this.wss = new WebSocketServer({ noServer: true, maxPayload: MAX_INBOUND_BYTES });
 
     server.on("upgrade", (req, socket, head) => {
       const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
@@ -45,7 +49,7 @@ export class WsHub {
         socket.destroy();
         return;
       }
-      if (upgradeOriginAllowed && !upgradeOriginAllowed(req.headers.origin)) {
+      if (!hostHeaderIsLoopback(req.headers.host) || (upgradeOriginAllowed && !upgradeOriginAllowed(req.headers.origin))) {
         socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
         socket.destroy();
         return;
@@ -68,13 +72,13 @@ export class WsHub {
       if (!this.quiet) console.log(`[ws] client connected (${this.clients.size} total)`);
 
       // Send initial connected event
-      ws.send(JSON.stringify({ type: "connected", data: "ok" }));
+      this.send(ws, JSON.stringify({ type: "connected", data: "ok" }));
 
       ws.on("message", (raw) => {
         try {
           const msg = JSON.parse(raw.toString());
           if (msg.type === "ping") {
-            ws.send(JSON.stringify({ type: "pong", data: "" }));
+            this.send(ws, JSON.stringify({ type: "pong", data: "" }));
           }
           // Future: handle client requests like "refresh" or "subscribe"
         } catch {
@@ -93,17 +97,26 @@ export class WsHub {
     });
   }
 
-  broadcast(event: WsEvent): void {
-    const msg = JSON.stringify(event);
-    for (const client of this.clients) {
-      if (client.readyState === WebSocket.OPEN) {
-        try {
-          client.send(msg);
-        } catch {
-          this.clients.delete(client);
-        }
-      }
+  private send(client: WebSocket, message: string): void {
+    if (client.readyState !== WebSocket.OPEN) return;
+    // Bound the queue for clients that stop draining. A reconnect can fetch
+    // the current planner snapshot without retaining this socket's backlog.
+    if (client.bufferedAmount > MAX_BUFFERED_BYTES) {
+      this.clients.delete(client);
+      client.terminate();
+      return;
     }
+    try {
+      client.send(message);
+    } catch {
+      this.clients.delete(client);
+      client.terminate();
+    }
+  }
+
+  broadcast(event: WsEvent): void {
+    const message = JSON.stringify(event);
+    for (const client of this.clients) this.send(client, message);
   }
 
   close(): void {

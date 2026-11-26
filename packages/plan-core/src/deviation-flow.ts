@@ -19,7 +19,7 @@ import { findTaskByRef, taskCompositeRef } from "./index.js";
 import { formatFeatureRef, formatPhaseRef, featureNumberOfPhase } from "./naming.js";
 import { isStartableTaskStatus } from "./task-selection.js";
 import { recommendNextTask } from "./task-selection.js";
-import type { PlanStore, Task, WorkDeviation } from "./index.js";
+import type { Feature, Phase, PlanStore, Task, WorkDeviation } from "./index.js";
 
 // ── Approved deviation ──────────────────────────────────────────────────
 
@@ -69,13 +69,23 @@ export async function recordDeviationFlow(
     store.loadAllPhases(),
     store.loadResume(sessionId),
   ]);
-  const features = featuresDoc.features;
+  const outcome = prepareWorkDeviation(featuresDoc.features, phases, await store.listAllWorkDeviations(),
+    focus?.currentPhaseId, sessionId, input);
+  if (!outcome.ok) return outcome;
+  await store.addWorkDeviation(outcome.deviation, sessionId);
+  await store.writeGenerated();
+  return outcome;
+}
+
+export function prepareWorkDeviation(
+  features: Feature[], phases: Phase[], deviations: WorkDeviation[], currentPhaseId: string | undefined,
+  sessionId: string, input: RecordDeviationInput,
+): DeviationSuccess | DeviationRefusal {
   const temporary = findTaskByRef(phases, features, input.temporaryTask);
   if (!temporary) {
     return { ok: false, code: "TASK_NOT_FOUND", message: `Task not found: ${input.temporaryTask}` };
   }
-  const deviations = await store.listAllWorkDeviations();
-  const selected = recommendNextTask(features, phases, deviations, focus?.currentPhaseId, sessionId);
+  const selected = recommendNextTask(features, phases, deviations, currentPhaseId, sessionId);
   const resume = input.resumeTask ? findTaskByRef(phases, features, input.resumeTask) : selected.candidate;
   if (!resume) {
     return {
@@ -121,8 +131,6 @@ export async function recordDeviationFlow(
     resolvedAt: "",
     resumedAt: "",
   };
-  await store.addWorkDeviation(record, sessionId);
-  await store.writeGenerated();
   return {
     ok: true,
     deviation: record,

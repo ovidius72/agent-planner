@@ -1,3 +1,4 @@
+import { registeredBoardScope } from "../lib/registered-board";
 import { createBrowserRouter } from "react-router-dom";
 import { loader as rootLoader, RootErrorBoundary, RootRoute } from "./root";
 import { loader as dashboardLoader } from "../routes/dashboard/loader";
@@ -36,6 +37,7 @@ import { action as taskDeleteAction } from "../routes/task-delete.action";
 import { action as taskStatusAction } from "../routes/task-status.action";
 import { action as taskStartAction } from "../routes/task-start.action";
 import { action as taskReopenAction } from "../routes/task-reopen.action";
+import { action as taskReleaseAction } from "../routes/task-release.action";
 import { action as taskSubtaskCreateAction } from "../routes/task-subtask-create.action";
 import { action as taskDependencyAddAction } from "../routes/task-dependency-add.action";
 import { action as projectEditAction } from "../routes/project-edit.action";
@@ -121,8 +123,9 @@ export const router = createBrowserRouter([
       { path: "features/:featureId/phases/:phaseId/tasks/:taskId/delete", action: taskDeleteAction },
       { path: "features/:featureId/phases/:phaseId/tasks/:taskId/start", action: taskStartAction },
       { path: "features/:featureId/phases/:phaseId/tasks/:taskId/reopen", action: taskReopenAction },
+      { path: "features/:featureId/phases/:phaseId/tasks/:taskId/release", action: taskReleaseAction },
       { path: "features/:featureId/phases/:phaseId/tasks/:taskId/status", action: taskStatusAction },
       { path: "features/:featureId/phases/:phaseId/tasks/:taskId/checklist/:itemId/toggle", action: taskChecklistToggleAction },
     ],
   },
-]);
+], { basename: registeredBoardScope()?.route ?? "/" });

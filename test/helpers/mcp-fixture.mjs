@@ -58,15 +58,15 @@ export async function closeMcpFixture(session) {
  * The server resolves its planner from AGENT_PLAN_ROOT, so planRoot points at
  * the target .planner directory (may not exist yet — planner-init creates it).
  */
-export async function startMcpClient({ planRoot, name = "agent-plan-test", env = {} } = {}) {
-  if (!planRoot) throw new Error("startMcpClient: planRoot is required");
+export async function startMcpClient({ planRoot, cwd, name = "agent-plan-test", env = {} } = {}) {
+  if (!planRoot && !cwd) throw new Error("startMcpClient: planRoot or cwd is required");
   const serverPath = packageDist("plan-mcp");
   const client = new Client({ name, version: "0.0.0" }, { capabilities: {} });
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [serverPath],
-    cwd: dirname(serverPath),
-    env: { ...process.env, ...env, AGENT_PLAN_ROOT: planRoot },
+    cwd: cwd ?? dirname(serverPath),
+    env: { ...process.env, ...env, AGENT_PLAN_ROOT: planRoot ?? "" },
     stderr: "pipe",
   });
   let stderr = "";

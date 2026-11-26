@@ -9,7 +9,19 @@
 
 import { formatFeatureRef, formatPhaseRef, taskCompositeRef, featureNumberOfPhase } from "./naming.js";
 import { findFeatureByRef, findPhaseByRef } from "./refs.js";
-import type { PlanStore } from "./index.js";
+import type { Feature, Phase, Task } from "./schema.js";
+
+export type FeatureListSource = Pick<Feature, "id" | "number" | "shortId" | "name" | "priority"> & { status: string };
+export type TaskListSource = Pick<Task, "id" | "number" | "shortId" | "title" | "priority" | "dependsOn"> & { status: string };
+export type PhaseListSource = Pick<Phase, "id" | "number" | "shortId" | "title" | "priority" | "featureId"> & {
+  status: string;
+  tasks: TaskListSource[];
+};
+
+export interface PlannerListSource {
+  loadFeatures(): Promise<{ features: FeatureListSource[] }>;
+  loadAllPhases(): Promise<PhaseListSource[]>;
+}
 
 export interface FeatureListFilter {
   /** Optional feature ref (F00x/shortId/UUID/title). */
@@ -33,7 +45,7 @@ export interface FeatureListOutcome {
   filterResolved: boolean | null;
 }
 
-export async function listFeatureSummaries(store: PlanStore, filter: FeatureListFilter = {}): Promise<FeatureListOutcome> {
+export async function listFeatureSummaries(store: PlannerListSource, filter: FeatureListFilter = {}): Promise<FeatureListOutcome> {
   const features = (await store.loadFeatures()).features;
   const matched = filter.featureRef
     ? features.filter((feature) => feature.id === findFeatureByRef(features, filter.featureRef!)?.id)
@@ -75,7 +87,7 @@ export type PhaseListOutcome =
   | { ok: true; items: PhaseListSummary[] }
   | { ok: false; code: "FEATURE_NOT_FOUND"; message: string };
 
-export async function listPhaseSummaries(store: PlanStore, filter: PhaseListFilter = {}): Promise<PhaseListOutcome> {
+export async function listPhaseSummaries(store: PlannerListSource, filter: PhaseListFilter = {}): Promise<PhaseListOutcome> {
   const features = (await store.loadFeatures()).features;
   let phases = await store.loadAllPhases();
   if (filter.featureRef) {
@@ -123,7 +135,7 @@ export type TaskListOutcome =
   | { ok: true; items: TaskListSummary[] }
   | { ok: false; code: "FEATURE_NOT_FOUND" | "PHASE_NOT_FOUND"; message: string };
 
-export async function listTaskSummaries(store: PlanStore, filter: TaskListFilter = {}): Promise<TaskListOutcome> {
+export async function listTaskSummaries(store: PlannerListSource, filter: TaskListFilter = {}): Promise<TaskListOutcome> {
   const features = (await store.loadFeatures()).features;
   let phases = await store.loadAllPhases();
   if (filter.featureRef) {

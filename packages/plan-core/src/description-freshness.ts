@@ -149,3 +149,9 @@ export function freshnessForOwner(
 ): DescriptionFreshnessDiagnostic | undefined {
   return freshness.diagnostics.find((entry) => entry.ownerKind === ownerKind && entry.ownerId === ownerId);
 }
+
+export function formatDescriptionFreshness(freshness: HierarchicalDescriptionFreshness): string {
+  if (!freshness.reconciliationRequired) return "Description hierarchy is fresh; no parent reconciliation is required.";
+  const lines = freshness.reconciliationPreview.map((step) => `- ${step.ownerRef} after ${step.causedByRef}: ${step.action}`);
+  return `Parent description reconciliation required (${freshness.staleParentRefs.length}):\n${lines.join("\n")}`;
+}

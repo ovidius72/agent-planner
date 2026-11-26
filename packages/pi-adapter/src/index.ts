@@ -1,3 +1,5 @@
+import { TaskStatusSchema } from "@agent-plan/core";
+import { formatDescriptionFreshness, type DeviationSuccess, type HierarchicalDescriptionFreshness } from "@agent-plan/core";
 /**
  * Agent Plan — Pi adapter extension.
  *
@@ -9,12 +11,14 @@
  *  - inject context into prompts
  */
 
+import { ensureRegisteredPlannerRuntime, registeredDashboardInfo } from "@agent-plan/server";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, taskOwnershipConflict, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, classifyGuardedTool, loadNoTaskGuardState, noTaskWarning, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, statusIcon, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { type exportPlannerReport, PlannerApiClient, PlannerApiError, PlanStore, type FeatureListSummary, type Idea, type IdeaTargetType, type PhaseListSummary, type TaskListSummary, resolveLegacyPlannerRoot, ProjectAuthorityUnavailableError, registeredWorkspaceClient, createRegisteredSessionClient, resolvePlannerWorkspace, splitPlannerLoadText, PlanStoreError, taskOwnershipConflict, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, classifyGuardedTool, loadNoTaskGuardState, noTaskWarning, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, statusIcon, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
-import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
+import { loadRegisteredNoTaskGuardState } from "@agent-plan/core";
+import type { AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
 /** Stated on every long-prose input so a caller learns the limit before the
@@ -24,17 +28,16 @@ const LONG_TEXT_LIMIT_NOTICE = longTextFieldLimitNotice();
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { writeFile, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
-import { serve } from "@agent-plan/server/serve";
+import { connectLocalPlannerService, LocalPlannerServiceError } from "@agent-plan/server";
 import type { ServeHandle, UiConfig, ShortcutConfigSpec } from "@agent-plan/server/serve";
 
 // ─── State (module-level) ───────────────────────────────────────────────
 
 const PI_CONFIG_DIR_NAME = ".pi";
-const PLAN_DIR_NAME = ".planner";
 const PI_ADAPTER_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/pi-adapter");
 const CORE_PACKAGE = resolvedPackageVersion("@agent-plan/core", import.meta.url);
 const SERVER_PACKAGE = resolvedPackageVersion("@agent-plan/server", import.meta.url);
@@ -59,7 +62,10 @@ function sendToAgent(message: string): boolean {
 }
 
 let store: PlanStore | null = null;
-let server: ServeHandle | null = null;
+type PiPlannerEndpoint = Pick<ServeHandle, "url" | "localUrl" | "lanUrl" | "mode" | "close"> &
+  Partial<Pick<ServeHandle, "hub">> & { owned: boolean; planRoot: string };
+
+let server: PiPlannerEndpoint | null = null;
 let lastKnownWebPort: number | null = null;
 let plannerSessionId = "pi:uninitialized";
 
@@ -268,26 +274,8 @@ function hasPlannerCommandArgument(prefix: string): boolean {
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
-function manifestPathFor(root: string): string {
-  return join(root, "manifest.json");
-}
-
-function planRootForCwd(cwd: string): string {
-  return join(cwd, PLAN_DIR_NAME);
-}
-
-function rootHasPlan(root: string): boolean {
-  return existsSync(manifestPathFor(root));
-}
-
-function resolvePlanRoot(cwd: string): string {
-  const plannerRoot = planRootForCwd(cwd);
-  if (rootHasPlan(plannerRoot)) return plannerRoot;
-  return plannerRoot;
-}
-
-function ensureStore(ctx: ExtensionContext): PlanStore {
-  const root = resolvePlanRoot(ctx.cwd);
+async function ensureStore(ctx: ExtensionContext): Promise<PlanStore> {
+  const root = await resolveLegacyPlannerRoot(ctx.cwd);
   if (!store || store.root !== root) {
     store = new PlanStore(root);
     store.enableAutoSync(true);
@@ -668,7 +656,7 @@ async function isPortAvailable(port: number): Promise<boolean> {
 }
 
 async function pickProjectPort(ctx: ExtensionContext, explicitPort?: number): Promise<number> {
-  const st = ensureStore(ctx);
+  const st = await ensureStore(ctx);
   const project = await st.loadProject();
 
   if (explicitPort && explicitPort > 0) {
@@ -742,7 +730,7 @@ async function maybeStartWeb(ctx: ExtensionContext): Promise<void> {
   ctx.ui.notify("Starting web server (LAN)…", "info");
   try {
     await startServer(ctx, undefined, "lan");
-    const srv = server as ServeHandle | null;
+    const srv = server as PiPlannerEndpoint | null;
     ctx.ui.notify(srv?.lanUrl ? `Web UI ready. Local: ${srv.localUrl} — LAN: ${srv.lanUrl}` : `Web UI ready. Open: ${srv?.url ?? "?"}`, "info");
   } catch (err) {
     ctx.ui.notify(`Failed to start web server: ${String(err)}`, "error");
@@ -757,27 +745,130 @@ function normalizeVisibility(input: string | undefined): "local" | "lan" | undef
   return undefined;
 }
 
+async function connectPiPlanner(ctx: ExtensionContext, planRoot: string, port: number): Promise<PiPlannerEndpoint> {
+  const connection = await connectLocalPlannerService({
+    port,
+    planRoot,
+    staticDir: resolveStaticDir(),
+    quiet: true,
+    uiConfig: readUiConfig(ctx),
+    isBusy: () => planBusy,
+  });
+  if (!connection.reused) return { ...connection.handle, owned: true, planRoot };
+  return {
+    url: connection.localUrl,
+    localUrl: connection.localUrl,
+    mode: "local",
+    owned: false,
+    planRoot,
+    close: async () => {},
+  };
+}
+
+async function piPlannerApi(ctx: ExtensionContext): Promise<PlannerApiClient> {
+  const planRoot = await resolveLegacyPlannerRoot(ctx.cwd);
+  if (server && server.planRoot !== planRoot) await stopServer();
+  const endpoint = server?.planRoot === planRoot && server.owned
+    ? server
+    : await connectPiPlanner(ctx, planRoot, 0);
+  server = endpoint;
+  return new PlannerApiClient({ baseUrl: endpoint.localUrl });
+}
+
+async function piIdeaRequest<T>(
+  ctx: ExtensionContext,
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  path: string,
+  body?: object,
+) {
+  try {
+    const workspace = await resolvePlannerWorkspace(ctx.cwd);
+    if (workspace.kind === "descriptor") {
+      const { client, prefix } = await registeredWorkspaceClient(ctx.cwd);
+      const route = `${prefix}/ideas${path}`;
+      if (method === "GET" || path.endsWith("/promotion/begin")) return { ok: true as const, data: await client.request<T>(method, route, body) };
+      const requestId = randomUUID();
+      const data = method === "DELETE"
+        ? await client.request<T>(method, `${route}&requestId=${requestId}`)
+        : await client.request<T>(method, route, { ...body, requestId });
+      return { ok: true as const, data };
+    }
+    const client = await piPlannerApi(ctx);
+    return { ok: true as const, data: await client.request<T>(method, `/ideas${path}`, body) };
+  } catch (error) {
+    if (error instanceof LocalPlannerServiceError && error.code === "PLAN_NOT_FOUND") {
+      return { ok: false as const, code: error.code, message: "No .planner/ found.", details: {} };
+    }
+    if (error instanceof PlannerApiError && error.code.startsWith("IDEA_")) {
+      const code = {
+        IDEA_NOT_FOUND: "NOT_FOUND",
+        IDEA_ALREADY_PROMOTED: "ALREADY_PROMOTED",
+        IDEA_DELETE_CONFIRMATION_REQUIRED: "CONFIRMATION_REQUIRED",
+        IDEA_PROMOTION_TARGET_NOT_FOUND: "TARGET_NOT_FOUND",
+      }[error.code] ?? error.code;
+      return { ok: false as const, code, message: error.message, details: error.details };
+    }
+    throw error;
+  }
+}
+
+function piIdeaRefusal(
+  outcome: { code: string; message: string },
+  details: Record<string, unknown> = {},
+) {
+  return {
+    content: [{ type: "text" as const, text: outcome.message }],
+    details: outcome.code === "PLAN_NOT_FOUND" ? {} : { errorCode: outcome.code, ...details },
+  };
+}
+
+async function piPlannerList<T>(
+  ctx: ExtensionContext,
+  collection: "features" | "phases" | "tasks",
+  params: { featureRef?: string; phaseRef?: string; status?: string },
+) {
+  try {
+    const { client, prefix } = await piPlannerApi(ctx).then(
+      (client) => ({ client, prefix: "" }),
+      (error: unknown) => {
+        if (!(error instanceof ProjectAuthorityUnavailableError)) throw error;
+        return registeredWorkspaceClient(ctx.cwd);
+      },
+    );
+    const query = new URLSearchParams();
+    if (params.featureRef?.trim()) query.set("featureRef", params.featureRef.trim());
+    if (params.phaseRef?.trim()) query.set("phaseRef", params.phaseRef.trim());
+    if (params.status) query.set("status", params.status);
+    return { data: await client.request<T>("GET", `${prefix}/${collection}?${query}`) };
+  } catch (error) {
+    if (error instanceof LocalPlannerServiceError && error.code === "PLAN_NOT_FOUND") return { message: "No .planner/ found." };
+    if (error instanceof PlannerApiError && ["FEATURE_NOT_FOUND", "PHASE_NOT_FOUND"].includes(error.code)) {
+      return { message: collection === "features" ? "No features" : error.message };
+    }
+    throw error;
+  }
+}
+
 async function startServer(ctx: ExtensionContext, requestedPort?: number, visibility: "local" | "lan" = "lan"): Promise<void> {
-  if (server) return;
+  let planRoot: string;
+  try {
+    planRoot = await resolveLegacyPlannerRoot(ctx.cwd);
+  } catch (error) {
+    ctx.ui.notify(`Failed to resolve planner workspace: ${error instanceof Error ? error.message : String(error)}`, "error");
+    return;
+  }
+  if (server?.planRoot === planRoot && server.owned) return;
+  if (server) await stopServer();
   // T490 (architecture.md §6): there is no LAN mode. The service binds the
   // loopback interface only; a lan request is honoured as a request to start
   // the dashboard and reported honestly as loopback-bound.
-  const host = "127.0.0.1";
   if (visibility === "lan") ctx.ui.notify("LAN visibility is no longer supported (T490); binding the loopback interface only.", "info");
   const port = await pickProjectPort(ctx, requestedPort);
   // A started server must be reflected in the next context block; the cache
   // may hold a stale "Web UI: not running" block from a stop+prompt pair.
   contextBlockDirty = true;
   try {
-    server = await serve({
-      port,
-      host,
-      planRoot: resolvePlanRoot(ctx.cwd),
-      staticDir: resolveStaticDir(),
-      quiet: true,
-      uiConfig: readUiConfig(ctx),
-      isBusy: () => planBusy,
-    });
+    server = await connectPiPlanner(ctx, planRoot, port);
   } catch (e) {
     // Any listen failure at startup is potentially transient — EADDRINUSE from
     // a racy port scan (another process grabbed the port between our check and
@@ -786,15 +877,7 @@ async function startServer(ctx: ExtensionContext, requestedPort?: number, visibi
     // serve() throws here only during startup binding/serving setup; if the retry
     // also fails, surface the error to the user.
     try {
-      server = await serve({
-        port: 0,
-        host,
-        planRoot: resolvePlanRoot(ctx.cwd),
-        staticDir: resolveStaticDir(),
-        quiet: true,
-        uiConfig: readUiConfig(ctx),
-        isBusy: () => planBusy,
-      });
+      server = await connectPiPlanner(ctx, planRoot, 0);
       ctx.ui.notify(`Planner web server: port ${port} unavailable (${e instanceof Error ? e.message : String(e)}), started on ${server?.url ?? "?"} instead.`, "info");
     } catch (e2) {
       ctx.ui.notify(`Failed to start web server (also retry failed): ${e2 instanceof Error ? e2.message : String(e2)}`, "error");
@@ -811,7 +894,7 @@ async function startServer(ctx: ExtensionContext, requestedPort?: number, visibi
     // Persist the actual listening port in project data so other processes
     // (e.g. subagents) can notify the server via HTTP.
     try {
-      const st = ensureStore(ctx);
+      const st = new PlanStore(planRoot);
       const project = await st.loadProject().catch(() => null);
       if (project) {
         // Persist only the canonical port (first run, or realPort matches the
@@ -841,10 +924,9 @@ function disablePlannerSession(): void {
 }
 
 async function stopServer(): Promise<void> {
-  if (server) {
-    await server.close();
-    server = null;
-  }
+  const endpoint = server;
+  server = null;
+  await endpoint?.close();
   capturedPi?.appendEntry("plan-web-state", { running: false });
   // The cached context block embeds the web UI address; after stop it must
   // not keep claiming the dashboard is running (T241 — context invalidation).
@@ -858,10 +940,70 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   const registerSessionTool = pi.registerTool.bind(pi);
   const sessionTools = new Set(["planner-load", "task_start", "task_switch", "task_pause", "task_complete", "task_reopen", "task_update", "task_deviation", "session_recover"]);
   const registeredSessions = new Set<string>();
+  const registeredPi = createRegisteredSessionClient("pi");
+  let registeredPlannerEnabled = false;
+
+  async function registeredCall<T>(
+    ctx: ExtensionContext, route: string, body: Record<string, unknown>,
+    summarize: (result: T) => { text: string; details: Record<string, unknown> },
+    failure: Record<string, unknown> = {},
+    method: "GET" | "POST" = "POST",
+  ) {
+    const location = await resolvePlannerWorkspace(ctx.cwd);
+    if (location.kind !== "descriptor") return undefined;
+    try {
+      if (route === "/context/load") await ensureRegisteredPlannerRuntime();
+      const { client, prefix } = await registeredPi.attach(ctx.cwd, piSessionIdOf(ctx));
+      const reply = summarize(await client.request<T>(method, `${prefix}${route}`, method === "POST" ? body : undefined));
+      return { content: [{ type: "text" as const, text: reply.text }], details: reply.details };
+    } catch (error) {
+      registeredPi.handleFailure(error);
+      if (!(error instanceof PlannerApiError)) throw error;
+      const nextActions = error.code === "CONTEXT_READ_REQUIRED"
+        ? [`Call task_get with taskId=${String(body.toRef ?? body.ref)} and full=true, then retry.`]
+        : [];
+      return {
+        content: [{ type: "text" as const, text: error.message }],
+        details: { ...failure, errorCode: error.code, nextActions },
+        isError: true,
+      };
+    }
+  }
+  function registeredDecision(ctx: ExtensionContext, action: "create" | "update" | "delete", params: {
+    targetType: string; targetRef?: string | undefined; decisionId?: string | undefined;
+    confirmed?: boolean | undefined; title?: string | undefined; decision?: string | undefined;
+    rationale?: string | undefined; implementationNotes?: string | undefined;
+  }) {
+    const { targetType, targetRef, decisionId, confirmed, ...fields } = params;
+    const outcome = action === "create" ? "created" : action === "update" ? "updated" : "deleted";
+    return registeredCall<{ targetRef: string; acceptedDecision: AcceptedDecision; updatedFields: string[] }>(
+      ctx, `/accepted-decisions/${action}`, { targetType, targetRef, decisionId, confirmed, fields, requestId: randomUUID() },
+      (result) => ({
+        text: `Accepted decision ${outcome} on ${result.targetRef}: ${result.acceptedDecision.title}`,
+        details: { ...result, targetType, [outcome]: true },
+      }), { [outcome]: false },
+    );
+  }
+  function registeredDependency(ctx: ExtensionContext, action: "add" | "delete", params: {
+    taskId: string; dependsOn: string; confirmed?: boolean;
+  }) {
+    return registeredCall<{ ref: string; task: Task; dependsOn: string[] }>(
+      ctx, "/tasks/dependencies", { action, ref: params.taskId, dependsOn: params.dependsOn, confirmed: params.confirmed, requestId: randomUUID() },
+      ({ task, ref, dependsOn }) => {
+        const reply = buildMutationReply({
+          identity: { entity: "task", ref, id: task.id, shortId: task.shortId, title: task.title, status: task.status },
+          operation: "update", updatedFields: ["dependsOn"], changedValues: { dependsOn }, readBackCommand: `task_get ${ref}`,
+        });
+        return { text: reply.text, details: reply.structured };
+      }, { updated: false },
+    );
+  }
   pi.registerTool = (definition) => {
     if (!sessionTools.has(definition.name)) return registerSessionTool(definition);
     const execute = definition.execute;
     registerSessionTool({ ...definition, async execute(id, params, signal, onUpdate, ctx) {
+      const workspace = await resolvePlannerWorkspace(ctx.cwd);
+      if (workspace.kind === "descriptor") return execute(id, params, signal, onUpdate, ctx);
       const st = await requirePlan(ctx);
       if (!st) return execute(id, params, signal, onUpdate, ctx);
       const sessionId = piSessionIdOf(ctx);
@@ -927,7 +1069,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }));
 
     resetState();
-    const st = ensureStore(ctx);
+    registeredPlannerEnabled = false;
+    if ((await resolvePlannerWorkspace(ctx.cwd)).kind === "descriptor") {
+      ctx.ui.notify("Registered planner workspace detected. Run '/planner load' to load its context.", "info");
+      return;
+    }
+    const st = await ensureStore(ctx);
     st.enableAutoSync(true);
 
     const exists = await st.exists().catch(() => false);
@@ -971,8 +1118,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("session_before_switch", async (event, ctx) => {
+    await registeredPi.end();
+    registeredPlannerEnabled = false;
     try {
-      const st = ensureStore(ctx);
+      const st = await ensureStore(ctx);
       if (await st.exists().catch(() => false)) {
         await writeProjectHandoff(st, `before session ${event.reason}`).catch(() => {});
       }
@@ -981,7 +1130,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
   pi.on("session_before_compact", async (_event, ctx) => {
     try {
-      const st = ensureStore(ctx);
+      const st = await ensureStore(ctx);
       if (await st.exists().catch(() => false)) {
         await writeProjectHandoff(st, "before compact").catch(() => {});
       }
@@ -989,6 +1138,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("session_shutdown", async (event) => {
+    await registeredPi.end();
+    registeredPlannerEnabled = false;
     try {
       const st = store;
       if (st && await st.exists().catch(() => false)) {
@@ -1018,7 +1169,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     // messages (tool calls + final summary), and we must guarantee the address
     // lands on the final summary the user actually reads. The flag is cleared
     // at the start of the next turn (before_agent_start) plus a safety timeout.
-    const webServer = server as ServeHandle | null;
+    const webServer = server as PiPlannerEndpoint | null;
     const localUrl = webServer?.localUrl ?? webServer?.url ?? "";
     if (!localUrl) return;
     const lanUrl = webServer?.lanUrl ?? "";
@@ -1036,12 +1187,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     if (!plannerSessionEnabled) return;
 
     if (event.toolName === "task_update") {
-      const nextStatus = (event.input as { status?: string } | undefined)?.status;
-      const motivation = (event.input as { motivation?: string } | undefined)?.motivation;
+      const input = event.input as { status?: string; motivation?: string; taskId?: string } | undefined;
+      const nextStatus = input?.status;
+      const motivation = input?.motivation;
       if (nextStatus) {
-        const st = ensureStore(ctx);
+        const st = await ensureStore(ctx);
         const tasks = await st.loadAllPhases().then(phases => phases.flatMap(p => p.tasks));
-        const task = tasks.find(t => t.id === (event.input as any).taskId);
+        const task = tasks.find((candidate) => candidate.id === input?.taskId);
         if (task) {
           // Allow legal reopen: done → in-progress via task_update.
           if (nextStatus === "in-progress" && task.status === "done") {
@@ -1069,22 +1221,24 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   // in progress, remind it to complete the task. Notes are appended to the
   // tool's own output, which Pi would otherwise replace.
   pi.on("tool_result", async (event, ctx) => {
-    if (!plannerSessionEnabled) return;
+    if (!plannerSessionEnabled && !registeredPlannerEnabled) return;
     if (event.toolName !== "edit" && event.toolName !== "write" && event.toolName !== "bash") return;
     try {
       const input = event.input as { path?: unknown; filePath?: unknown; command?: unknown };
       const stringField = (value: unknown) => typeof value === "string" && value ? value : undefined;
       const filePath = stringField(input.path ?? input.filePath);
       const command = stringField(input.command);
+      const workspace = registeredPlannerEnabled ? await resolvePlannerWorkspace(ctx.cwd) : undefined;
+      const registered = workspace?.kind === "descriptor";
       const guardEvent = {
         toolName: event.toolName,
         cwd: ctx.cwd,
-        plannerRoot: resolvePlanRoot(ctx.cwd),
+        plannerRoot: registered ? join(workspace.root, ".planner") : await resolveLegacyPlannerRoot(ctx.cwd),
         ...(filePath !== undefined ? { filePath } : {}),
         ...(command !== undefined ? { command } : {}),
       };
       if (!classifyGuardedTool(guardEvent).guarded) return;
-      const state = await loadNoTaskGuardState(loadStore(ctx));
+      const state = registered ? await loadRegisteredNoTaskGuardState(ctx.cwd) : await loadNoTaskGuardState(await loadStore(ctx));
       const { warning } = noTaskWarning(guardEvent, { ...state, guardBypassed: state.guardBypassed || isGuardBypassed() });
       const note = warning
         ?? (state.hasInProgressTask && !taskCompleteReminderSaidThisTurn
@@ -1128,8 +1282,599 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     return cancellableCtx;
   }
 
+  type ChecklistCommand = "checklist-add" | "checklist-remove" | "checklist-toggle";
+
+  function parseChecklistCommand(action: ChecklistCommand, args: string[], ctx: ExtensionContext) {
+    const [ref, ...parts] = args;
+    const text = parts.join(" ").trim();
+    if (!ref || !text) {
+      ctx.ui.notify(`Usage: /planner task ${action} <T00x> <${action === "checklist-add" ? "title" : "C{n}|title"}>${action === "checklist-toggle" ? " [on|off]" : ""}`, "warning");
+      return undefined;
+    }
+    const state = action === "checklist-toggle" ? text.match(/\s+(on|off)$/i)?.[1] : undefined;
+    return { ref, item: state ? text.slice(0, -state.length).trimEnd() : text, checked: state === undefined ? undefined : state.toLowerCase() === "on" };
+  }
+
+  async function editRegisteredTask(action: "update" | "discuss", ref: string, ctx: ExtensionContext) {
+    const { client, prefix } = await registeredWorkspaceClient(ctx.cwd);
+    const { task } = await client.request<{ task: Task }>("GET", `${prefix}/tasks/${encodeURIComponent(ref)}?full=true`);
+    const updates: Record<string, unknown> = { expectedUpdatedAt: task.updatedAt };
+    if (action === "update") {
+      const title = (await ctx.ui.input(`Title [${task.title}]`))?.trim();
+      const status = (await ctx.ui.input(`Status [${task.status}]`))?.trim();
+      if (title && title !== task.title) updates.title = title;
+      if (status && status !== task.status) {
+        const parsed = TaskStatusSchema.safeParse(status);
+        if (!parsed.success) {
+          ctx.ui.notify("Invalid task status.", "warning");
+          return;
+        }
+        if (status === "in-progress" || status === "done" || task.status === "in-progress" || task.status === "done") {
+          ctx.ui.notify("Use the dedicated task lifecycle command for this status change.", "warning");
+          return;
+        }
+        if (needsMotivation(task.status, parsed.data)) {
+          const motivation = (await ctx.ui.input("Reason for this status change"))?.trim();
+          if (!motivation) return;
+          updates.motivation = motivation;
+        }
+        updates.status = status;
+      }
+    }
+    const description = await ctx.ui.editor("Task description", task.description);
+    if (description !== undefined && description.trim() !== task.description) updates.description = description.trim();
+    if (action === "discuss") {
+      const checklist = (await ctx.ui.input("Checklist items (comma-separated, blank to keep current)"))?.trim();
+      if (checklist) updates.checklist = checklist.split(",").map((item) => item.trim()).filter(Boolean);
+    }
+    if (Object.keys(updates).length === 1) {
+      ctx.ui.notify("No changes saved.", "info");
+      return;
+    }
+    const result = await registeredCall<{ ref: string; lostChecklistTicks?: string[] }>(
+      ctx, `/entities/${action}`, { kind: "task", ref: task.id, updates, requestId: randomUUID() },
+      ({ ref: taskRef, lostChecklistTicks = [] }) => ({
+        text: `Updated ${taskRef}.${lostChecklistTicks.length ? ` Unchecked after replacement: ${lostChecklistTicks.join(", ")}.` : ""}`,
+        details: {},
+      }),
+    );
+    if (result?.content[0]) ctx.ui.notify(result.content[0].text, result.isError ? "error" : "info");
+  }
+
+  async function handleRegisteredTaskCommand(action: string, reference: string, ctx: ExtensionContext): Promise<boolean> {
+    if (action === "checklist-add" || action === "checklist-remove" || action === "checklist-toggle") {
+      const input = parseChecklistCommand(action, reference.trim().split(/\s+/), ctx);
+      if (!input) return true;
+      const result = await registeredCall<{ message: string }>(
+        ctx, `/tasks/checklist/${action.slice("checklist-".length)}`, { ...input, requestId: randomUUID() },
+        ({ message }) => ({ text: message, details: {} }),
+      );
+      if (result?.content[0]) ctx.ui.notify(result.content[0].text, result.isError ? "error" : "info");
+      return true;
+    }
+    if (action !== "start" && action !== "complete" && action !== "show" && action !== "recommend"
+      && action !== "update" && action !== "discuss") return false;
+    if (action === "recommend") {
+      const result = await registeredCall<{ text: string; structured: Record<string, unknown> }>(
+        ctx, "/recommend", {}, ({ text, structured }) => ({ text, details: structured }), {}, "GET",
+      );
+      if (result?.content[0]) ctx.ui.notify(result.content[0].text, "info");
+      return true;
+    }
+    let ref = reference.trim();
+    if (!ref) {
+      const list = await piPlannerList<{ tasks: TaskListSummary[] }>(ctx, "tasks", {});
+      const tasks = list.data?.tasks ?? [];
+      const options = tasks.filter((task) => action !== "complete" || task.status === "in-progress");
+      if (!options.length) {
+        ctx.ui.notify(list.message ?? "No matching tasks.", "info");
+        return true;
+      }
+      const labels = options.map((task) => `${task.ref} — ${task.title}`);
+      const selected = await ctx.ui.select("Choose a task", labels);
+      if (!selected) return true;
+      ref = options[labels.indexOf(selected)]?.ref ?? "";
+    }
+    if (!ref) return true;
+    if (action === "update" || action === "discuss") {
+      await editRegisteredTask(action, ref, ctx);
+      return true;
+    }
+    if (action === "start") {
+      const start = await registeredCall<{ taskRef: string; title: string }>(
+        ctx, "/tasks/start", { ref, requestId: randomUUID() },
+        (result) => ({ text: `Task started: ${result.taskRef} — ${result.title}.`, details: result }),
+      );
+      if (start?.content[0]) ctx.ui.notify(start.content[0].text, start.isError ? "error" : "info");
+      return true;
+    }
+    const read = await registeredCall<
+      { kind: "context"; context: { checklist: Array<{ checked: boolean }> } } | { kind: "incomplete"; requiredChars: number }
+    >(ctx, "/tasks/context", { ref, maxChars: 1_000_000 }, (result) => result.kind === "context"
+      ? { text: JSON.stringify(result.context), details: { unchecked: result.context.checklist.filter((item) => !item.checked).length } }
+      : { text: `Full context requires ${result.requiredChars} characters.`, details: {} });
+    const unchecked = read && "unchecked" in read.details ? read.details.unchecked : undefined;
+    if (!read || read.isError || action === "show" || typeof unchecked !== "number") {
+      if (read?.content[0]) ctx.ui.notify(read.content[0].text, read.isError ? "error" : "info");
+      return true;
+    }
+    const force = unchecked > 0;
+    if (force && !await ctx.ui.confirm("Complete task?", `${unchecked} checklist items are still open.`)) return true;
+    const descriptionUpdate = (await ctx.ui.input("Completion summary including verification evidence"))?.trim();
+    if (!descriptionUpdate) return true;
+    const motivation = force ? (await ctx.ui.input("Explain why the remaining checklist items can stay open"))?.trim() : undefined;
+    if (force && !motivation) return true;
+    const completed = await registeredCall<{ taskRef: string; resumeRequired?: { taskRef: string } }>(
+      ctx, "/tasks/complete", { ref, requestId: randomUUID(), descriptionUpdate, force, motivation }, (result) => ({
+        text: `Completed ${result.taskRef}.${result.resumeRequired ? ` Resume ${result.resumeRequired.taskRef}.` : ""}`, details: result,
+      }),
+    );
+    if (completed?.content[0]) ctx.ui.notify(completed.content[0].text, completed.isError ? "error" : "info");
+    return true;
+  }
+
+  async function handleRegisteredReadCommand(command: string, action: string, ref: string, ctx: ExtensionContext): Promise<boolean> {
+    if (command === "show") {
+      const result = await registeredCall<{ summary: string }>(
+        ctx, "/project/overview", {}, ({ summary }) => ({ text: summary, details: {} }), {}, "GET",
+      );
+      if (result?.content[0]) ctx.ui.notify(result.content[0].text, result.isError ? "error" : "info");
+      return true;
+    }
+    if ((command !== "feature" && command !== "phase") || (action !== "list" && action !== "show")) return false;
+    const collection = command === "feature" ? "features" : "phases";
+    if (action === "list" || !ref) {
+      const result = await piPlannerList<{ features?: FeatureListSummary[]; phases?: PhaseListSummary[] }>(ctx, collection, {});
+      const lines = [
+        ...(result.data?.features ?? []).map(({ ref: itemRef, name, status }) => `${itemRef} — ${name} (${status})`),
+        ...(result.data?.phases ?? []).map(({ ref: itemRef, title, status }) => `${itemRef} — ${title} (${status})`),
+      ];
+      ctx.ui.notify(lines.length ? lines.join("\n") : result.message ?? `No ${collection}.`, "info");
+      return true;
+    }
+    const result = await registeredCall<{ ref: string; feature?: Feature; phase?: Phase; linkedRequirements: Requirement[] }>(
+      ctx, `/${collection}/${encodeURIComponent(ref)}?full=true`, {}, (data) => {
+        const entity = data.feature ?? data.phase;
+        return { text: entity ? [
+          data.ref, entity.description,
+          ...data.linkedRequirements.map((requirement) => `- ${requirement.id} — ${requirement.title}`),
+          renderAcceptedDecisionsSection("Accepted Decisions", entity.acceptedDecisions),
+        ].filter(Boolean).join("\n\n") : `Could not resolve ${ref}.`, details: {} };
+      }, {}, "GET",
+    );
+    if (result?.content[0]) ctx.ui.notify(result.content[0].text, result.isError ? "error" : "info");
+    return true;
+  }
+
+  async function editRegisteredParent(
+    kind: "feature" | "phase", action: "update" | "discuss", argument: string, ctx: ExtensionContext,
+  ) {
+    const collection = kind === "feature" ? "features" : "phases";
+    let ref = argument;
+    if (!ref) {
+      const list = await piPlannerList<{ features?: FeatureListSummary[]; phases?: PhaseListSummary[] }>(ctx, collection, {});
+      const items = list.data?.[collection] ?? [];
+      if (!items.length) {
+        ctx.ui.notify(list.message ?? `No ${collection} available.`, "warning");
+        return;
+      }
+      const chosen = await paginatedSelect<FeatureListSummary | PhaseListSummary>(ctx, {
+        title: `Pick a ${kind}`, items, pageSize: 10,
+        render: (item) => `${item.ref} — ${"name" in item ? item.name : item.title}`,
+      });
+      if (!chosen) return;
+      ref = chosen.ref;
+    }
+
+    const { client, prefix } = await registeredWorkspaceClient(ctx.cwd);
+    const data = await client.request<{ feature?: Feature; phase?: Phase }>(
+      "GET", `${prefix}/${collection}/${encodeURIComponent(ref)}?full=true`,
+    );
+    const entity = data[kind];
+    if (!entity) return;
+    const updates: Record<string, unknown> = { expectedUpdatedAt: entity.updatedAt };
+    async function input(field: string, label: string, current: string) {
+      const value = (await ctx.ui.input(`${label} [${current}]`))?.trim();
+      if (value && value !== current) updates[field] = value;
+    }
+    async function editor(field: string, label: string, current: string) {
+      const value = (await ctx.ui.editor(label, current))?.trim();
+      if (value !== undefined && value !== current) updates[field] = value;
+    }
+    async function list(field: string, label: string, current: string[]) {
+      const prior = current.join(", ");
+      const value = (await ctx.ui.input(`${label} (comma-separated) [${prior}]`))?.trim();
+      if (value && value !== prior) updates[field] = value.split(",").map((item) => item.trim()).filter(Boolean);
+    }
+    if (data.feature) {
+      const feature = data.feature;
+      if (action === "update") await input("name", "Name", feature.name);
+      await editor("description", "Feature description and scope", feature.description);
+      await editor("workDone", "Work done", feature.workDone);
+      await editor("workRemaining", "Work remaining", feature.workRemaining);
+      if (action === "update") {
+        await input("startDate", "Start date", feature.startDate);
+        await input("endDate", "End date", feature.endDate);
+      } else {
+        await list("dependencies", "Dependencies", feature.dependsOn);
+      }
+    }
+    if (data.phase) {
+      const phase = data.phase;
+      if (action === "update") await input("title", "Title", phase.title);
+      await input("summary", "Summary", phase.summary);
+      await editor(action === "discuss" ? "scope" : "description", "Phase scope and implementation context", phase.description);
+      await list("goals", "Goals", phase.goals);
+      await list("nonGoals", "Non-goals", phase.nonGoals);
+      await list("dependencies", "Dependencies", phase.dependencies);
+      await list("risks", "Risks", phase.risks);
+      await list("completionCriteria", "Completion criteria", phase.completionCriteria);
+      if (action === "discuss") await list("openQuestions", "Open questions", phase.openQuestions);
+    }
+    if (Object.keys(updates).length === 1) {
+      ctx.ui.notify("No changes saved.", "info");
+      return;
+    }
+    const result = await registeredCall<{ ref: string }>(
+      ctx, `/entities/${action}`, { kind, ref: entity.id, updates, requestId: randomUUID() },
+      ({ ref: canonicalRef }) => ({ text: `Updated ${canonicalRef}.`, details: {} }),
+    );
+    if (result?.content[0]) ctx.ui.notify(result.content[0].text, result.isError ? "error" : "info");
+  }
+
+  async function handleRegisteredCreateCommand(
+    kind: "feature" | "phase" | "task", argument: string, ctx: ExtensionContext,
+  ): Promise<void> {
+    let featureRef: string | undefined;
+    let phaseRef: string | undefined;
+    if (kind === "phase") {
+      const result = await piPlannerList<{ features: FeatureListSummary[] }>(ctx, "features", {});
+      const items = result.data?.features ?? [];
+      const feature = items.length ? await paginatedSelect(ctx, {
+        title: "Pick a feature",
+        items,
+        render: (item) => `${item.ref} — ${item.name}`,
+        pageSize: 10,
+      }) : undefined;
+      if (!feature) {
+        if (!items.length) ctx.ui.notify(result.message ?? "Create a feature before adding a phase.", "warning");
+        return;
+      }
+      featureRef = feature.ref;
+    }
+    if (kind === "task") {
+      const list = await piPlannerList<{ phases: PhaseListSummary[] }>(ctx, "phases", {});
+      const items = list.data?.phases ?? [];
+      const phase = items.length ? await paginatedSelect(ctx, {
+        title: "Pick a phase",
+        items,
+        render: (item) => `${item.ref} — ${item.title}`,
+        pageSize: 10,
+      }) : undefined;
+      if (!phase) {
+        if (!items.length) ctx.ui.notify(list.message ?? "Create a phase before adding a task.", "warning");
+        return;
+      }
+      phaseRef = phase.ref;
+      const { client, prefix } = await registeredWorkspaceClient(ctx.cwd);
+      const data = await client.request<{ phase: { featureId?: string } }>("GET", `${prefix}/phases/${encodeURIComponent(phaseRef)}`);
+      featureRef = data.phase.featureId;
+    }
+    const title = argument || (await ctx.ui.input(kind === "feature" ? "Feature name" : `${kind === "task" ? "Task" : "Phase"} title`))?.trim();
+    if (!title) return;
+    const description = (await ctx.ui.editor("Description including implementation context and behaviors to preserve", ""))?.trim();
+    if (description === undefined) return;
+    const checklist = kind === "task"
+      ? (await ctx.ui.editor("Checklist steps, one per line", ""))?.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+      : undefined;
+    const result = await registeredCall<{ message: string }>(
+      ctx, "/entities/create", { kind, title, description, featureRef, phaseRef, checklist, requestId: randomUUID() },
+      ({ message }) => ({ text: message, details: {} }),
+    );
+    if (result?.content[0]) ctx.ui.notify(result.content[0].text, result.isError ? "error" : "info");
+  }
+
+  async function handleRegisteredDeleteCommand(
+    kind: "feature" | "phase" | "task", reference: string, ctx: ExtensionContext,
+  ): Promise<void> {
+    const collection = kind === "task" ? "tasks" : kind === "phase" ? "phases" : "features";
+    type Entry = { id: string; ref: string; title?: string; name?: string };
+    let ref = reference.trim();
+    if (!ref) {
+      const list = await piPlannerList<Partial<Record<typeof collection, Entry[]>>>(ctx, collection, {});
+      const entries = list.data?.[collection] ?? [];
+      if (entries.length === 0) {
+        ctx.ui.notify(list.message ?? `No ${collection} available.`, "warning");
+        return;
+      }
+      const labels = entries.map((item) => `${item.ref} — ${item.title ?? item.name}`);
+      const chosen = await ctx.ui.select(`Choose a ${kind} to delete`, labels);
+      if (!chosen) return;
+      ref = entries[labels.indexOf(chosen)]?.ref ?? "";
+      if (!ref) return;
+    }
+    const { client, prefix } = await registeredWorkspaceClient(ctx.cwd);
+    const found = await client.request<{ feature?: Entry; phase?: Entry; task?: Entry; phaseCount?: number }>(
+      "GET", `${prefix}/${collection}/${encodeURIComponent(ref)}`,
+    );
+    const entity = found[kind];
+    if (!entity) return;
+    const label = entity.title ?? entity.name ?? ref;
+    const phaseCount = found.phaseCount ?? 0;
+    const cascade = kind === "feature" && phaseCount > 0
+      && await ctx.ui.confirm(`Delete ${phaseCount} phase(s) inside "${label}" too?`, "Declining leaves the phases unlinked.");
+    const confirmed = await ctx.ui.input(`Confirm delete "${label}" (${entity.id})? Type yes:`);
+    if (confirmed?.trim() !== "yes") return;
+    const result = await registeredCall<{ ref: string }>(
+      ctx, "/entities/delete", { kind, ref: entity.id, cascade, confirmed: true, requestId: randomUUID() },
+      (deleted) => ({ text: `Deleted ${deleted.ref}.`, details: deleted }),
+    );
+    if (result?.content[0]?.text) ctx.ui.notify(result.content[0].text, result.isError ? "error" : "info");
+  }
+
+  function registeredHandoffList(ctx: ExtensionContext, page: number, pageSize: number) {
+    return registeredCall<{
+      items: Array<{ compositeRef: string; firstLine: string; updatedAt: string; contentLength: number; resumeReady: boolean }>;
+      page: number; pageSize: number; total: number; totalPages: number;
+    }>(ctx, `/handoffs?page=${page}&pageSize=${pageSize}`, {}, ({ items, ...page }) => ({
+      text: items.length
+        ? `Phase handoffs — page ${page.page}/${page.totalPages} (${page.total} total):\n${items.map((item) => `- ${item.compositeRef} — ${item.firstLine} (updated ${item.updatedAt}; ${item.contentLength} chars; ${item.resumeReady ? "resume-ready" : "verification required"})`).join("\n")}`
+        : "No phase handoffs set.",
+      details: { ...page, count: items.length, handoffs: items },
+    }), {}, "GET");
+  }
+
+  function registeredHandoffShow(ctx: ExtensionContext, phaseRef: string) {
+    return registeredCall<{ message: string } & Record<string, unknown>>(
+      ctx, `/handoffs/${encodeURIComponent(phaseRef)}`, {}, ({ message, ...details }) => ({ text: message, details }), {}, "GET",
+    );
+  }
+
+  function registeredHandoffClear(ctx: ExtensionContext, phaseRef: string) {
+    return registeredCall<{ phaseRef: string; phaseId: string }>(
+      ctx, "/handoffs/clear", { ref: phaseRef, requestId: randomUUID(), confirmed: true },
+      (result) => ({ text: `Archived handoff on ${result.phaseRef}.`, details: result }),
+    );
+  }
+
+  function prepareHandoffFromConversation(ctx: ExtensionContext) {
+    const handoffPrepared = sendToAgent(
+      "Prepare a canonical session handoff proposal. Do not write anything yet. First identify from this conversation and the latest planner lifecycle events the exact feature and phase where the decisions/work belong. Never use the first in-progress phase or a stale resume pointer as a target.\n\n" +
+      "If the last phase was just completed, do not create an operational handoff for it; its existing handoff must have been archived by the phase-done lifecycle. If another non-done phase is the real continuation, identify that phase explicitly.\n\n" +
+      "Before writing, tell the user exactly: `I propose writing this handoff on P00x(F00x) — <phase title>. Confirm?` Wait for an explicit confirmation. If the target is ambiguous, ask the user to identify the feature and phase instead of guessing.\n\n" +
+      "After confirmation, call `handoff_prepare` with that exact phaseRef. BEFORE drafting prose, use its exact returned scaffold and cold-start inventory categories. Read the entire existing handoff and its handoffUpdatedAt token. Complete every source review by checking the conversation and approvals, planner entities and sibling tasks, current diff/implementation, verification/runtime evidence, and peer-agent or network messages (or explicitly record that no peer output exists). Inventory every exact file, symbol, working-tree ownership/completion state, commit authorization, work or deletion not yet started, command/tool path, runtime call site, preservation constraint, proof observation, related planned capability, user-visible behavior, operator action, blocker/risk, remaining item, and ordered resume step known from this session. Then call `handoff_write` once with the exact token, the completed scaffold, the structured coldStartInventory, taskUpdates for every missing task, and either durable phase/feature updates or explicit no-update reasons. Every inventory item must appear verbatim in the inline handoff or a validated supporting document. Never overwrite an existing handoff without retaining its still-relevant decisions, solved problems, architecture, files, and constraints. Replace stale focus, blockers, and next steps. The write persists only a candidate and returns resumeReady=false. Immediately call `handoff_show`, read the entire persisted body, compare it again against all five sources, and either rewrite every discovered omission or call `handoff_verify` with the shown contentHash. Never tell the user the handoff is complete until verification returns resumeReady=true.\n\n" +
+      "The reconciled handoff MUST contain at minimum:\n" +
+      "- `Created at:` and `Updated at:` lines (ISO timestamps)\n" +
+      "- `Reason:` why this handoff is being written\n" +
+      "- `## Current focus`: feature, phase and task refs/titles/statuses derived from the confirmed target\n" +
+      "- `## Current and partial state`: concise completed/current/partial state (extended detail goes in .planner/docs/)\n" +
+      "- `## Preservation constraints`: minimal surviving behaviors and boundaries\n" +
+      "- `## Supporting documents`: ordered .planner/docs/*.md links or an explicit verified none-needed statement\n" +
+      "- `## Blockers and risks`: blockers/risks or an explicit verified none statement\n" +
+      "- `## How to resume`: explicit ordered steps\n" +
+      "Pass a meaningful title beginning with the confirmed phase ref. Generic titles are rejected. Handoff refresh synchronizes durable task/phase/feature context and updates the single active phase.handoff; `.planner/HANDOFF.md` is deprecated."
+    );
+    ctx.ui.notify(handoffPrepared
+      ? "Instructing the agent to prepare the phase handoff…"
+      : "Agent bridge unavailable. Run handoff_prepare in an agent session.",
+      handoffPrepared ? "info" : "warning");
+  }
+
+  async function handleRegisteredHandoffCommand(action: string, argument: string, ctx: ExtensionContext) {
+    if (action === "prepare") {
+      prepareHandoffFromConversation(ctx);
+      return;
+    }
+    if (action === "write") {
+      ctx.ui.notify("Run /planner handoff prepare to propose the target, then confirm before the agent runs handoff_write.", "warning");
+      return;
+    }
+    if (action === "list") {
+      const page = argument ? Number(argument) : 1;
+      if (!Number.isSafeInteger(page) || page < 1) {
+        ctx.ui.notify("Usage: /planner handoff list [page]", "warning");
+        return;
+      }
+      const result = await registeredHandoffList(ctx, page, 10);
+      if (result?.content[0]) ctx.ui.notify(result.content[0].text, result.isError ? "error" : "info");
+      return;
+    }
+    if (!argument || (action !== "show" && action !== "clear" && action !== "delete")) {
+      ctx.ui.notify("Usage: /planner handoff list [page] | show <phase> | clear <phase> | prepare", "warning");
+      return;
+    }
+    if (action !== "show" && !await ctx.ui.confirm("Archive handoff?", `Archive the active handoff on ${argument}?`)) return;
+    const result = action === "show" ? await registeredHandoffShow(ctx, argument) : await registeredHandoffClear(ctx, argument);
+    if (result?.content[0]) ctx.ui.notify(result.content[0].text, result.isError ? "error" : "info");
+  }
+
+  async function handleIdeaCommand(b: string | undefined, subArgs: string, ctx: ExtensionContext) {
+    if (!b) {
+      ctx.ui.notify("idea actions: list | add [title] | show [ref] | update [ref] | delete [ref] | promote [ref]", "info");
+      return;
+    }
+    if (b === "list") {
+      const result = await piIdeaRequest<{ ideas: Idea[] }>(ctx, "GET", "");
+      if (!result.ok) { ctx.ui.notify(result.message, "error"); return; }
+      const { ideas } = result.data;
+      await paginatedNotify(ctx, {
+        title: "ideas",
+        lines: ideas.map((idea) => `${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}${idea.promotion ? ` → ${idea.promotion.targetRef}` : ""}`),
+        pageSize: 10,
+      });
+      return;
+    }
+    if (b === "add") {
+      const title = subArgs.trim() || await ctx.ui.input("Idea title");
+      if (!title?.trim()) { ctx.ui.notify("Aborted", "warning"); return; }
+      const description = await ctx.ui.editor("Idea description", "");
+      const result = await piIdeaRequest<{ idea: Idea }>(ctx, "POST", "", { title: title.trim(), description: description?.trim() });
+      if (!result.ok) { ctx.ui.notify(result.message, "error"); return; }
+      const { idea } = result.data;
+      ctx.ui.notify(`Idea created: ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}`, "info");
+      return;
+    }
+    const ref = subArgs.trim() || await ctx.ui.input("Idea ref (I00x, short ID, or title)");
+    if (!ref) { ctx.ui.notify("Idea not found: (empty)", "error"); return; }
+    const found = await piIdeaRequest<{ idea: Idea }>(ctx, "GET", `/${encodeURIComponent(ref)}`);
+    if (!found.ok) { ctx.ui.notify(found.message, "error"); return; }
+    const { idea } = found.data;
+    const ideaPath = `/${encodeURIComponent(idea.id)}`;
+    if (b === "show") {
+      ctx.ui.notify(`${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}\n\n${idea.description || "(no description)"}${idea.promotion ? `\n\nPromoted to: ${idea.promotion.targetRef}` : ""}`, "info");
+      return;
+    }
+    if (b === "update") {
+      const title = await ctx.ui.input(`Title [${idea.title}]`);
+      const description = await ctx.ui.editor("Description", idea.description);
+      if (!title?.trim() && description === undefined) { ctx.ui.notify("Cancelled — no changes saved.", "info"); return; }
+      const result = await piIdeaRequest<{ idea: Idea }>(ctx, "PUT", ideaPath, { title: title?.trim() || undefined, description: description?.trim() });
+      if (!result.ok) { ctx.ui.notify(result.message, "error"); return; }
+      const { idea: updated } = result.data;
+      ctx.ui.notify(`Idea updated: ${formatIdeaRef(updated.number)} — ${updated.title}`, "info");
+      return;
+    }
+    if (b === "delete") {
+      const answer = await ctx.ui.select(`Delete ${formatIdeaRef(idea.number)} — ${idea.title}?`, ["cancel", "delete"]);
+      if (answer !== "delete") { ctx.ui.notify("Cancelled — no changes saved.", "info"); return; }
+      const result = await piIdeaRequest<{ ideaRef: string }>(ctx, "DELETE", `${ideaPath}?confirmed=true`);
+      if (!result.ok) { ctx.ui.notify(result.message, "error"); return; }
+      ctx.ui.notify(`Idea deleted: ${result.data.ideaRef}.`, "info");
+      return;
+    }
+    if (b === "promote") {
+      if (idea.promotion) { ctx.ui.notify(`Already promoted to ${idea.promotion.targetRef}.`, "warning"); return; }
+      const targetType = await ctx.ui.select("Promotion target", ["feature", "phase", "task"]);
+      if (!targetType) return;
+      const result = await piIdeaRequest<{ grillMeSkill: string }>(ctx, "POST", `${ideaPath}/promotion/begin`, { targetType });
+      if (!result.ok) { ctx.ui.notify(result.message, "error"); return; }
+      const { grillMeSkill: skill } = result.data;
+      if (!sendToAgent(`Discuss promotion of ${formatIdeaRef(idea.number)} — ${idea.title} to a ${targetType}.\n\n${skill}\n\nDo not create or persist a target until the discussion is complete and I explicitly confirm the exact destination. For a phase, recommend and confirm its feature. For a task, recommend and confirm its feature and phase. After creating the confirmed target with the normal planner tool, record the promotion with idea_promotion_finalize.`)) {
+        ctx.ui.notify("Promotion discussion instructions loaded. Use the idea_promotion_begin tool in an agent session.", "info");
+      }
+      return;
+    }
+    ctx.ui.notify(`Unknown idea action "${b}". Try: list, add, show, update, delete, promote`, "warning");
+    return;
+  }
+
+  type ProjectLanguages = Pick<Project, "contentLanguage" | "chatLanguage">;
+
+  async function readRegisteredLanguages(ctx: ExtensionContext): Promise<ProjectLanguages> {
+    const { client, prefix } = await registeredWorkspaceClient(ctx.cwd);
+    return client.request<ProjectLanguages>("GET", prefix);
+  }
+
+  function writeRegisteredLanguages(ctx: ExtensionContext, fields: ProjectLanguages) {
+    return registeredCall<{ project: ProjectLanguages }>(
+      ctx, "/project/update", { requestId: randomUUID(), fields }, ({ project }) => ({
+        text: `Saved language preferences: content=${project.contentLanguage || "(unset)"}, chat=${project.chatLanguage || "(unset)"}`,
+        details: { contentLanguage: project.contentLanguage, chatLanguage: project.chatLanguage },
+      }),
+    );
+  }
+
+  async function handleRegisteredProjectSettings(action: "language" | "guidelines", ctx: ExtensionContext) {
+    if (action === "language") {
+      const project = await readRegisteredLanguages(ctx);
+      const contentLanguage = (await ctx.ui.input(`Plan content language [${project.contentLanguage || "English"}]`))?.trim()
+        || project.contentLanguage || "English";
+      const chatLanguage = (await ctx.ui.input(`Chat language [${project.chatLanguage || contentLanguage}]`))?.trim()
+        || project.chatLanguage || contentLanguage;
+      const result = await writeRegisteredLanguages(ctx, { contentLanguage, chatLanguage });
+      if (result?.content[0]) ctx.ui.notify(result.content[0].text, result.isError ? "error" : "info");
+      return;
+    }
+    const { client, prefix } = await registeredWorkspaceClient(ctx.cwd);
+    const { projectGuidelines } = await client.request<{ projectGuidelines: Project["projectGuidelines"] }>(
+      "GET", `${prefix}/project/guidelines`,
+    );
+    const content = (await ctx.ui.editor("Project Guidelines / Coding Standard", projectGuidelines.content))?.trim();
+    if (content === undefined || content === projectGuidelines.content) return;
+    const result = await registeredCall<{ cleared: boolean }>(
+      ctx, "/project/update", { requestId: randomUUID(), fields: {
+        projectGuidelines: { content }, expectedGuidelinesUpdatedAt: projectGuidelines.updatedAt,
+      } }, ({ cleared }) => ({ text: cleared ? "Project Guidelines cleared." : "Project Guidelines updated.", details: {} }),
+    );
+    if (result?.content[0]) ctx.ui.notify(result.content[0].text, result.isError ? "error" : "info");
+  }
+
   async function handlePlanner(args: string, ctx: ExtensionContext): Promise<void> {
     try {
+      if (args.trim() === "load") {
+        const result = await registeredCall<{ text: string; structured: Record<string, unknown> }>(
+          ctx, "/context/load", {}, ({ text, structured }) => ({ text, details: structured }),
+        );
+        if (result) {
+          registeredPlannerEnabled = !result.isError;
+          const { recap, agentContext } = splitPlannerLoadText(result.content[0]?.text ?? "");
+          if (recap) ctx.ui.notify(recap, "info");
+          if (agentContext) pi.sendMessage({ customType: "planner-context", content: agentContext, display: false });
+          return;
+        }
+      }
+      const [command, action = "status", ...tail] = args.trim().split(/\s+/);
+      const argument = tail.join(" ");
+      const scopedCommands = ["project", "idea", "handoff", "feature", "phase", "task", "show", "stop", "disable", "web"];
+      if (command && scopedCommands.includes(command) && (await resolvePlannerWorkspace(ctx.cwd)).kind === "descriptor") {
+        const ui = withCancellablePlannerUi(ctx);
+        if (command === "project" && (action === "guidelines" || action === "language")) {
+          await handleRegisteredProjectSettings(action, ui);
+          return;
+        }
+        if (command === "idea") {
+          await handleIdeaCommand(action === "status" ? undefined : action, argument, ui);
+          return;
+        }
+        if (command === "handoff") {
+          await handleRegisteredHandoffCommand(action === "status" ? "show" : action, argument, ui);
+          return;
+        }
+        if (command === "feature" || command === "phase" || command === "task") {
+          if (action === "add") {
+            await handleRegisteredCreateCommand(command, argument, ui);
+            return;
+          }
+          if (action === "delete") {
+            await handleRegisteredDeleteCommand(command, argument, ui);
+            return;
+          }
+          if (command === "task") {
+            if (await handleRegisteredTaskCommand(action, argument, ui)) return;
+          } else {
+            if (action === "update" || action === "discuss") {
+              await editRegisteredParent(command, action, argument, ui);
+              return;
+            }
+            if (await handleRegisteredReadCommand(command, action, argument, ui)) return;
+          }
+        }
+        if (command === "show") {
+          await handleRegisteredReadCommand(command, action, argument, ui);
+          return;
+        }
+        if (command === "stop" || command === "disable") {
+          await registeredPi.end();
+          registeredPlannerEnabled = false;
+          ctx.ui.notify("Registered planner session ended.", "info");
+          return;
+        }
+        if (command === "web") {
+          if (action !== "start" && action !== "status" && action !== "stop") {
+            ctx.ui.notify("Web commands: start, status, stop.", "warning");
+            return;
+          }
+          const port = tail[0];
+          const requested = port === undefined ? undefined : Number(port);
+          if (requested !== undefined && (!Number.isSafeInteger(requested) || requested < 0 || requested > 65535)) {
+            ctx.ui.notify("The dashboard port must be an integer from 0 to 65535.", "warning");
+            return;
+          }
+          const result = await registeredDashboardInfo(ctx.cwd, action, requested);
+          ctx.ui.notify(result.text, result.details.running ? "info" : "warning");
+          return;
+        }
+      }
       await withPlanBusy(() => runPlanner(args, withCancellablePlannerUi(ctx)));
     } catch (error) {
       if (error === plannerInteractionCancelled) {
@@ -1202,7 +1947,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ctx.ui.notify(SUB_HELP, "info");
         return;
       }
-      await runPlanner(action, ctx);
+      if ((await resolvePlannerWorkspace(ctx.cwd)).kind === "descriptor") await handlePlanner(action, ctx);
+      else await runPlanner(action, ctx);
       return;
     }
 
@@ -1221,7 +1967,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       return;
     }
 
-    const st = ensureStore(ctx);
+    const st = await ensureStore(ctx);
 
     // ── init ──
     if (a === "init") {
@@ -1601,62 +2347,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     //  idea <sub>
     // ═══════════════════════════════════════════════════════════════
     if (a === "idea") {
-      if (!b) {
-        ctx.ui.notify("idea actions: list | add [title] | show [ref] | update [ref] | delete [ref] | promote [ref]", "info");
-        return;
-      }
-      const ideas = (await st.loadIdeas()).ideas;
-      if (b === "list") {
-        await paginatedNotify(ctx, {
-          title: "ideas",
-          lines: ideas.map((idea) => `${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}${idea.promotion ? ` → ${idea.promotion.targetRef}` : ""}`),
-          pageSize: 10,
-        });
-        return;
-      }
-      if (b === "add") {
-        const title = subArgs.trim() || await ctx.ui.input("Idea title");
-        if (!title?.trim()) { ctx.ui.notify("Aborted", "warning"); return; }
-        const description = await ctx.ui.editor("Idea description", "");
-        const idea = await st.createIdea({ title: title.trim(), ...(description?.trim() ? { description: description.trim() } : {}) });
-        await st.writeGenerated();
-        ctx.ui.notify(`Idea created: ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}`, "info");
-        return;
-      }
-      const ref = subArgs.trim() || await ctx.ui.input("Idea ref (I00x, short ID, or title)");
-      const idea = ref ? findIdeaByRef(ideas, ref) : undefined;
-      if (!idea) { ctx.ui.notify(`Idea not found: ${ref || "(empty)"}`, "error"); return; }
-      if (b === "show") {
-        ctx.ui.notify(`${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}\n\n${idea.description || "(no description)"}${idea.promotion ? `\n\nPromoted to: ${idea.promotion.targetRef}` : ""}`, "info");
-        return;
-      }
-      if (b === "update") {
-        const title = await ctx.ui.input(`Title [${idea.title}]`);
-        const description = await ctx.ui.editor("Description", idea.description);
-        const updated = await st.updateIdea(idea.id, { ...(title?.trim() ? { title: title.trim() } : {}), ...(description !== undefined ? { description: description.trim() } : {}) });
-        await st.writeGenerated();
-        ctx.ui.notify(`Idea updated: ${formatIdeaRef(updated.number)} — ${updated.title}`, "info");
-        return;
-      }
-      if (b === "delete") {
-        const answer = await ctx.ui.select(`Delete ${formatIdeaRef(idea.number)} — ${idea.title}?`, ["cancel", "delete"]);
-        if (answer !== "delete") { ctx.ui.notify("Cancelled — no changes saved.", "info"); return; }
-        await st.deleteIdea(idea.id);
-        await st.writeGenerated();
-        ctx.ui.notify(`Idea deleted: ${formatIdeaRef(idea.number)}.`, "info");
-        return;
-      }
-      if (b === "promote") {
-        if (idea.promotion) { ctx.ui.notify(`Already promoted to ${idea.promotion.targetRef}.`, "warning"); return; }
-        const targetType = await ctx.ui.select("Promotion target", ["feature", "phase", "task"]);
-        if (!targetType) return;
-        const skill = await st.ideaDiscussionSkill();
-        if (!sendToAgent(`Discuss promotion of ${formatIdeaRef(idea.number)} — ${idea.title} to a ${targetType}.\n\n${skill}\n\nDo not create or persist a target until the discussion is complete and I explicitly confirm the exact destination. For a phase, recommend and confirm its feature. For a task, recommend and confirm its feature and phase. After creating the confirmed target with the normal planner tool, record the promotion with idea_promotion_finalize.`)) {
-          ctx.ui.notify("Promotion discussion instructions loaded. Use the idea_promotion_begin tool in an agent session.", "info");
-        }
-        return;
-      }
-      ctx.ui.notify(`Unknown idea action "${b}". Try: list, add, show, update, delete, promote`, "warning");
+      await handleIdeaCommand(b, subArgs, ctx);
       return;
     }
 
@@ -2320,10 +3011,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (phase) {
           const features = (await st.loadFeatures()).features;
           const feature = phase.featureId ? features.find((candidate) => candidate.id === phase.featureId) : undefined;
-          const linkedRequirements = [
-            ...(await st.linkedRequirementsForPhase(phase.id)),
-            ...(phase.featureId ? await st.linkedRequirementsForFeature(phase.featureId) : []),
-          ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+          const linkedRequirements = await st.linkedRequirementsForExecution(phase);
           const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
           const contextInput = {
             sessionId: plannerSessionId,
@@ -2463,17 +3151,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       // checklist-add <T00x> <title>  /  checklist-remove <T00x> <C{n}|title>  /  checklist-toggle <T00x> <C{n}|title> [on|off]
       if (b === "checklist-add" || b === "checklist-remove" || b === "checklist-toggle") {
-        const [taskRef, ...itemParts] = rest;
-        const itemText = itemParts.join(" ").trim();
-        if (!taskRef || !itemText) { ctx.ui.notify(`Usage: /planner task ${b} <T00x> <${b === "checklist-add" ? "title" : "C{n}|title"}>${b === "checklist-toggle" ? " [on|off]" : ""}`, "warning"); return; }
+        const input = parseChecklistCommand(b, rest, ctx);
+        if (!input) return;
+        const { ref: taskRef, item: selector, checked } = input;
         const resolved = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, taskRef.trim());
         if (!resolved) { ctx.ui.notify(`Task not found: ${taskRef}`, "warning"); return; }
-        let checked: boolean | undefined;
-        if (b === "checklist-toggle") {
-          const m = itemText.match(/\s+(on|off)$/i);
-          if (m) { checked = m[1]!.toLowerCase() === "on"; }
-        }
-        const selector = b === "checklist-toggle" ? itemText.replace(/\s+(on|off)$/i, "").trim() : itemText;
         let msg = "";
         await st.updatePhase(resolved.phase.id, (phase) => {
           const task = phase.tasks.find((t) => t.id === resolved.task.id);
@@ -2546,26 +3228,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return;
       }
       if (action === "prepare") {
-        const handoffPrepared = sendToAgent(
-          "Prepare a canonical session handoff proposal. Do not write anything yet. First identify from this conversation and the latest planner lifecycle events the exact feature and phase where the decisions/work belong. Never use the first in-progress phase or a stale resume pointer as a target.\n\n" +
-          "If the last phase was just completed, do not create an operational handoff for it; its existing handoff must have been archived by the phase-done lifecycle. If another non-done phase is the real continuation, identify that phase explicitly.\n\n" +
-          "Before writing, tell the user exactly: `I propose writing this handoff on P00x(F00x) — <phase title>. Confirm?` Wait for an explicit confirmation. If the target is ambiguous, ask the user to identify the feature and phase instead of guessing.\n\n" +
-          "After confirmation, call `handoff_prepare` with that exact phaseRef. BEFORE drafting prose, use its exact returned scaffold and cold-start inventory categories. Read the entire existing handoff and its handoffUpdatedAt token. Complete every source review by checking the conversation and approvals, planner entities and sibling tasks, current diff/implementation, verification/runtime evidence, and peer-agent or network messages (or explicitly record that no peer output exists). Inventory every exact file, symbol, working-tree ownership/completion state, commit authorization, work or deletion not yet started, command/tool path, runtime call site, preservation constraint, proof observation, related planned capability, user-visible behavior, operator action, blocker/risk, remaining item, and ordered resume step known from this session. Then call `handoff_write` once with the exact token, the completed scaffold, the structured coldStartInventory, taskUpdates for every missing task, and either durable phase/feature updates or explicit no-update reasons. Every inventory item must appear verbatim in the inline handoff or a validated supporting document. Never overwrite an existing handoff without retaining its still-relevant decisions, solved problems, architecture, files, and constraints. Replace stale focus, blockers, and next steps. The write persists only a candidate and returns resumeReady=false. Immediately call `handoff_show`, read the entire persisted body, compare it again against all five sources, and either rewrite every discovered omission or call `handoff_verify` with the shown contentHash. Never tell the user the handoff is complete until verification returns resumeReady=true.\n\n" +
-          "The reconciled handoff MUST contain at minimum:\n" +
-          "- `Created at:` and `Updated at:` lines (ISO timestamps)\n" +
-          "- `Reason:` why this handoff is being written\n" +
-          "- `## Current focus`: feature, phase and task refs/titles/statuses derived from the confirmed target\n" +
-          "- `## Current and partial state`: concise completed/current/partial state (extended detail goes in .planner/docs/)\n" +
-          "- `## Preservation constraints`: minimal surviving behaviors and boundaries\n" +
-          "- `## Supporting documents`: ordered .planner/docs/*.md links or an explicit verified none-needed statement\n" +
-          "- `## Blockers and risks`: blockers/risks or an explicit verified none statement\n" +
-          "- `## How to resume`: explicit ordered steps\n" +
-          "Pass a meaningful title beginning with the confirmed phase ref. Generic titles are rejected. Handoff refresh synchronizes durable task/phase/feature context and updates the single active phase.handoff; `.planner/HANDOFF.md` is deprecated."
-        );
-        ctx.ui.notify(handoffPrepared
-          ? "Instructing the agent to prepare the phase handoff…"
-          : "Agent bridge unavailable; use /planner handoff write for an auto-generated handoff.",
-          handoffPrepared ? "info" : "warning");
+        prepareHandoffFromConversation(ctx);
         return;
       }
       if (action === "clear" || action === "delete") {
@@ -2595,17 +3258,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           const visibility = visibilityArg ?? "lan";
           ctx.ui.notify(`Starting web server (${visibility})${portArg ? ` on port ${portArg}` : ""} …`, "info");
           await startServer(ctx, portArg, visibility);
-          const srv = server as ServeHandle | null;
+          const srv = server as PiPlannerEndpoint | null;
           if (srv) ctx.ui.notify(srv.lanUrl ? `Web UI ready. Local: ${srv.localUrl} — LAN: ${srv.lanUrl}` : `Web UI ready. Open: ${srv.url}`, "info");
           break;
         }
         case "stop":
           if (!server) { ctx.ui.notify("Not running", "info"); return; }
+          const owned = server.owned;
           await stopServer();
-          ctx.ui.notify("Server stopped", "info");
+          ctx.ui.notify(owned ? "Server stopped" : "Detached from the shared planner service", "info");
           break;
         default: {
-          const srv = server as ServeHandle | null;
+          const srv = server as PiPlannerEndpoint | null;
           if (!srv) { ctx.ui.notify("Not running", "info"); return; }
           const lines = [`Web UI running (${srv.mode}).`, `  local: ${srv.localUrl}`];
           if (srv.lanUrl) lines.push(`  lan:   ${srv.lanUrl}`);
@@ -2649,10 +3313,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     if (a === "export" || a === "export-full") {
       const isFull = a === "export-full" || subArgs.includes("--full");
       try {
-        const plan = await st.loadAll();
-        const markdown = new ExportService().exportToMarkdown(plan, isFull);
-        const filePath = join(st.root, "EXPORT.md");
-        await writeFile(filePath, markdown, "utf-8");
+        const client = await piPlannerApi(ctx);
+        const { markdown, filePath } = await client.request<Awaited<ReturnType<typeof exportPlannerReport>>>("POST", "/project/export", { full: isFull });
         ctx.ui.notify(`Export generated: ${filePath}\n\n${markdown.slice(0, 500)}${markdown.length > 500 ? "..." : ""}`, "info");
       } catch (e) {
         ctx.ui.notify(`Export failed: ${e instanceof Error ? e.message : String(e)}`, "error");
@@ -2678,7 +3340,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }
 
     if (a === "load") {
-      const st = ensureStore(ctx);
+      const st = await ensureStore(ctx);
       let preparation: Awaited<ReturnType<PlanStore["preparePlannerSession"]>>;
       try {
         preparation = await st.preparePlannerSession();
@@ -2720,7 +3382,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       try {
         const plannerSkill = await st.syncPlannerSkill();
         await st.syncGrillMeSkill();
-        const srv = server as ServeHandle | null;
+        const srv = server as PiPlannerEndpoint | null;
         let recapText = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi", sessionId: plannerSessionId });
         if (preparation.changed) recapText = `${preparation.legacyProjectContext.summary}\n\n${recapText}`;
         // Explicit planner load must deliver the complete project-level
@@ -2781,14 +3443,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   // for humans in the TUI. The agent (LLM) can only call tools, so the full
   // CRUD surface is exposed here as tools that operate directly on the store.
 
-  function loadStore(ctx: ExtensionContext): PlanStore {
-    const s = new PlanStore(resolvePlanRoot(ctx.cwd));
+  async function loadStore(ctx: ExtensionContext): Promise<PlanStore> {
+    const s = new PlanStore(await resolveLegacyPlannerRoot(ctx.cwd));
     s.enableAutoSync(true);
     return s;
   }
 
   async function requirePlan(ctx: ExtensionContext): Promise<PlanStore | null> {
-    const st = loadStore(ctx);
+    const st = await loadStore(ctx);
     if (!(await st.exists())) return null;
     await maybeHealStatuses(st, ctx);
     return st;
@@ -2805,6 +3467,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       chatLanguage: Type.Optional(Type.String({ description: "Preferred language for assistant-user chat in this project" })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      if ((await resolvePlannerWorkspace(ctx.cwd)).kind === "descriptor") {
+        if (params.contentLanguage === undefined && params.chatLanguage === undefined) {
+          return { content: [{ type: "text", text: "Nothing to update. Provide contentLanguage and/or chatLanguage." }], details: {} };
+        }
+        const project = await readRegisteredLanguages(ctx);
+        const contentLanguage = normalizeLanguagePref(params.contentLanguage ?? project.contentLanguage);
+        const chatLanguage = normalizeLanguagePref(params.chatLanguage ?? project.chatLanguage);
+        const result = await writeRegisteredLanguages(ctx, { contentLanguage: contentLanguage || chatLanguage, chatLanguage: chatLanguage || contentLanguage });
+        if (result) return result;
+      }
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       if (params.contentLanguage === undefined && params.chatLanguage === undefined) {
@@ -2844,7 +3516,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       requirements: Type.Optional(Type.Array(Type.String(), { description: "Initial declarative product outcomes to seed as Requirements. Never include coding standards, best practices, formatting, verification process, or other Project Guidelines." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const st = loadStore(ctx);
+      const st = await loadStore(ctx);
       if (await st.exists()) {
         return { content: [{ type: "text", text: ".planner/ already exists" }], details: {} };
       }
@@ -2907,6 +3579,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       decisions: Type.Optional(Type.Array(Type.String(), { description: "Deprecated legacy field. Read-only history now; supplying it returns LEGACY_DECISIONS_ARRAY_READ_ONLY. Use accepted_decision_create for new durable decisions." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ project: Project; updatedFields: string[] }>(
+        ctx, "/project/update", { requestId: randomUUID(), fields: params },
+        ({ project, updatedFields }) => {
+          const reply = buildMutationReply({
+            identity: { entity: "project", ref: project.name, title: project.name },
+            operation: "update", updatedFields, changedValues: project as unknown as Record<string, unknown>,
+            readBackCommand: "planner-load",
+          });
+          return { text: reply.text, details: reply.structured };
+        }, { updated: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found. Use plan_init first." }], details: {} };
       if (params.decisions !== undefined) {
@@ -2984,6 +3668,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Read the canonical Project Guidelines / Coding Standard section for this project. Call this when task_start or task_switch nextActions require it, and keep the guidance in working memory while doing task work.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ projectGuidelines: Project["projectGuidelines"]; readRecorded: boolean }>(
+        ctx, "/project/guidelines", {}, (data) => ({
+          text: data.projectGuidelines.content ? `## Project Guidelines\n\n${data.projectGuidelines.content}` : "No project guidelines set.",
+          details: data,
+        }), {}, "GET",
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const project = await st.loadProject();
@@ -3016,6 +3707,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       content: Type.String({ description: "Full Project Guidelines markdown/text. Pass an empty string to clear the section." }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ projectGuidelines: Project["projectGuidelines"]; cleared: boolean }>(
+        ctx, "/project/update", { requestId: randomUUID(), fields: { projectGuidelines: { content: params.content } } },
+        ({ projectGuidelines, cleared }) => ({
+          text: cleared ? "Project Guidelines cleared." : `Project Guidelines updated. Updated at ${projectGuidelines.updatedAt}.`,
+          details: { updated: true, projectGuidelines },
+        }), { updated: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found. Use plan_init first." }], details: {} };
       const project = await st.loadProject();
@@ -3072,6 +3771,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       phaseRef: Type.Optional(Type.String({ description: "Optional target phase ref. When supplied, return full target-relevant requirements and record only those delivered requirements as read." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const phaseRef = params.phaseRef?.trim();
+      const query = phaseRef ? `?${new URLSearchParams({ phaseRef })}` : "";
+      const registered = await registeredCall<{
+        requirements: Requirement[]; target?: { phaseId: string; phaseRef: string; featureId?: string };
+      }>(ctx, `/requirements${query}`, {}, ({ requirements, target }) => ({
+        text: requirements.map((requirement) => [
+          `- ${requirement.id} — ${requirement.title}`,
+          ...(target ? [`  Description: ${requirement.description || "None"}`,
+            `  Linked phases: ${requirement.linkedPhaseIds.join(", ") || "None"}`,
+            `  Macro tasks: ${requirement.macroTasks.map((item) => `${item.title} (${item.status})`).join("; ") || "None"}`] : []),
+        ].join("\n")).join("\n") || (target ? `No requirements linked to ${target.phaseRef}` : "No requirements"),
+        details: { requirements, attestedRequirementIds: [], readScope: target ? "target" : "inventory", target },
+      }), {}, "GET");
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       const plannerSessionId = piSessionIdOf(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
@@ -3085,10 +3798,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const features = (await st.loadFeatures()).features;
       const phase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseRef.trim());
       if (!phase) return { isError: true, content: [{ type: "text", text: `Phase not found: ${params.phaseRef}` }], details: { attestedRequirementIds: [] } };
-      const delivered = [
-        ...(await st.linkedRequirementsForPhase(phase.id)),
-        ...(phase.featureId ? await st.linkedRequirementsForFeature(phase.featureId) : []),
-      ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+      const delivered = await st.linkedRequirementsForExecution(phase);
       delivered.forEach((requirement) => markRequirementReadForSessionId(plannerSessionId, requirement.id));
       const targetRef = formatPhaseRef(phase.number, featureNumberOfPhase(phase, features));
       const body = delivered.map((requirement) => [
@@ -3125,6 +3835,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }), { description: "Initial macro tasks. IDs and timestamps are planner-managed." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ requirement: Requirement }>(
+        ctx, "/requirements/create", { requestId: randomUUID(), fields: params },
+        ({ requirement }) => ({ text: `Requirement created: ${requirement.id}`, details: { requirement, created: true } }),
+        { created: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const title = params.title?.trim();
@@ -3181,6 +3897,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }), { description: "Replace, add, remove, or reorder macro tasks. IDs/timestamps are preserved or assigned by the planner." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const { requirementId, ...fields } = params;
+      const registered = await registeredCall<{ requirement: Requirement; updatedFields: string[] }>(
+        ctx, "/requirements/update", { requestId: randomUUID(), requirementId, fields },
+        ({ requirement, updatedFields }) => {
+          const reply = buildMutationReply({
+            identity: { entity: "requirement", ref: requirement.id, id: requirement.id, title: requirement.title },
+            operation: "update", updatedFields,
+            changedValues: requirement as unknown as Record<string, unknown>, readBackCommand: "requirement_list",
+          });
+          return { text: reply.text, details: reply.structured };
+        }, { updated: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const requirements = await st.loadRequirements();
@@ -3248,6 +3977,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       requirementId: Type.String({ description: "Requirement ID" }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ deleted: boolean; requirementId: string }>(
+        ctx, "/requirements/delete", { requestId: randomUUID(), requirementId: params.requirementId },
+        (result) => ({ text: `Requirement deleted: ${result.requirementId}`, details: result }), { deleted: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       let deleted = false;
@@ -3266,47 +4000,103 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "idea_list", label: "Idea List", description: "List rollup-independent Ideas Inbox entries.", parameters: Type.Object({}),
-    async execute(_id, _params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const ideas = (await st.loadIdeas()).ideas; return { content: [{ type: "text", text: ideas.map((idea) => `- ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}${idea.promotion ? ` → ${idea.promotion.targetRef}` : ""}`).join("\n") || "No ideas" }], details: { ideas } }; },
+    async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const result = await piIdeaRequest<{ ideas: Idea[] }>(ctx, "GET", "");
+      if (!result.ok) return piIdeaRefusal(result);
+      const { ideas } = result.data;
+      const text = ideas.map((idea) => `- ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}${idea.promotion ? ` → ${idea.promotion.targetRef}` : ""}`).join("\n");
+      return { content: [{ type: "text", text: text || "No ideas" }], details: { ideas } };
+    },
   });
   pi.registerTool({
     name: "idea_show", label: "Idea Show", description: "Show an idea by I-number, short ID, UUID, or title.", parameters: Type.Object({ idea: Type.String() }),
-    async execute(_id, params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const idea = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); return idea ? { content: [{ type: "text", text: `${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}\n\n${idea.description || "(no description)"}` }], details: { idea } } : { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND" } }; },
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const result = await piIdeaRequest<{ idea: Idea }>(ctx, "GET", `/${encodeURIComponent(params.idea)}`);
+      if (!result.ok) return piIdeaRefusal(result);
+      const { idea } = result.data;
+      return {
+        content: [{ type: "text", text: `${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}\n\n${idea.description || "(no description)"}` }],
+        details: { idea },
+      };
+    },
   });
   pi.registerTool({
     name: "idea_create", label: "Idea Create", description: "Create an independent Ideas Inbox entry.", parameters: Type.Object({ title: Type.String(), description: Type.Optional(Type.String()) }),
-    async execute(_id, params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const idea = await st.createIdea({ title: params.title, ...(params.description !== undefined ? { description: params.description } : {}) }); await st.writeGenerated(); return { content: [{ type: "text", text: `Idea created: ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}` }], details: { idea, created: true } }; },
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const result = await piIdeaRequest<{ idea: Idea; created: true }>(ctx, "POST", "", params);
+      if (!result.ok) return piIdeaRefusal(result);
+      const { idea } = result.data;
+      return {
+        content: [{ type: "text", text: `Idea created: ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}` }],
+        details: result.data,
+      };
+    },
   });
   pi.registerTool({
     name: "idea_update", label: "Idea Update", description: "Update an Ideas Inbox title or description.", parameters: Type.Object({ idea: Type.String(), title: Type.Optional(Type.String()), description: Type.Optional(Type.String()) }),
-    async execute(_id, params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const current = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); if (!current) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND", updated: false } }; if (params.title === undefined && params.description === undefined) return piMutationNoFieldsFailure({ entity: "idea", ref: params.idea, operation: "update", mutableFields: ["title", "description"], retryCommand: `idea_update ${params.idea}` }); const ideaUpdatedFields = [...(params.title !== undefined ? ["title"] : []), ...(params.description !== undefined ? ["description"] : [])]; const idea = await st.updateIdea(current.id, { ...(params.title !== undefined ? { title: params.title } : {}), ...(params.description !== undefined ? { description: params.description } : {}) }); await st.writeGenerated(); const ideaReply = buildMutationReply({ identity: { entity: "idea", ref: formatIdeaRef(idea.number), id: idea.id, title: idea.title }, operation: "update", updatedFields: ideaUpdatedFields, changedValues: idea as unknown as Record<string, unknown>, readBackCommand: `idea_show ${formatIdeaRef(idea.number)}` }); return { content: [{ type: "text", text: ideaReply.text }], details: ideaReply.structured }; },
+    async execute(_id, { idea: ref, ...fields }, _signal, _onUpdate, ctx) {
+      const result = await piIdeaRequest<{ idea: Idea; updatedFields: string[] }>(ctx, "PUT", `/${encodeURIComponent(ref)}`, fields);
+      if (!result.ok) {
+        if (result.code === "IDEA_NO_MUTABLE_FIELDS") {
+          return piMutationNoFieldsFailure({ entity: "idea", ref, operation: "update", mutableFields: ["title", "description"], retryCommand: `idea_update ${ref}` });
+        }
+        return piIdeaRefusal(result, { updated: false });
+      }
+      const { idea, updatedFields } = result.data;
+      const ideaRef = formatIdeaRef(idea.number);
+      const reply = buildMutationReply({
+        identity: { entity: "idea", ref: ideaRef, id: idea.id, title: idea.title },
+        operation: "update",
+        updatedFields,
+        changedValues: { ...idea },
+        readBackCommand: `idea_show ${ideaRef}`,
+      });
+      return { content: [{ type: "text", text: reply.text }], details: reply.structured };
+    },
   });
   pi.registerTool({
     name: "idea_delete", label: "Idea Delete", description: "Delete an Idea only after explicit user confirmation.", parameters: Type.Object({ idea: Type.String(), confirmed: Type.Boolean() }),
-    async execute(_id, params, _signal, _onUpdate, ctx) { if (!params.confirmed) return { content: [{ type: "text", text: "Idea deletion requires confirmed=true after explicit user confirmation." }], details: { errorCode: "CONFIRMATION_REQUIRED", deleted: false } }; const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const current = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); if (!current) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND", deleted: false } }; await st.deleteIdea(current.id); await st.writeGenerated(); return { content: [{ type: "text", text: `Idea deleted: ${formatIdeaRef(current.number)}.` }], details: { deleted: true, ideaRef: formatIdeaRef(current.number) } }; },
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      if (!params.confirmed) {
+        return piIdeaRefusal({ code: "CONFIRMATION_REQUIRED", message: "Idea deletion requires confirmed=true after explicit user confirmation." }, { deleted: false });
+      }
+      const result = await piIdeaRequest<{ ideaRef: string }>(ctx, "DELETE", `/${encodeURIComponent(params.idea)}?confirmed=true`);
+      if (!result.ok) return piIdeaRefusal(result, { deleted: false });
+      const { ideaRef } = result.data;
+      return { content: [{ type: "text", text: `Idea deleted: ${ideaRef}.` }], details: { deleted: true, ideaRef } };
+    },
   });
   pi.registerTool({
     name: "idea_promotion_begin", label: "Idea Promotion Begin", description: "Begin a grill-me idea promotion discussion without persisting a target or promotion.", parameters: Type.Object({ idea: Type.String(), targetType: Type.Union([Type.Literal("feature"), Type.Literal("phase"), Type.Literal("task")]) }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const st = await requirePlan(ctx);
-      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const idea = findIdeaByRef((await st.loadIdeas()).ideas, params.idea);
-      if (!idea) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND" } };
-      if (idea.promotion) return { content: [{ type: "text", text: `${formatIdeaRef(idea.number)} is already promoted to ${idea.promotion.targetRef}.` }], details: { errorCode: "ALREADY_PROMOTED", idea } };
-      const features = (await st.loadFeatures()).features;
-      const phases = await st.loadAllPhases();
-      const recommendedFeature = features[0];
-      const recommendedPhase = recommendedFeature ? phases.find((phase) => phase.featureId === recommendedFeature.id) : phases[0];
-      const recommendation = params.targetType === "feature"
-        ? "Create a new feature after the discussion."
-        : params.targetType === "phase"
-          ? recommendedFeature ? `Recommended parent feature: ${formatFeatureRef(recommendedFeature.number)} — ${recommendedFeature.name}. Confirm or choose another feature before creating the phase.` : "Create and confirm a parent feature before promoting to a phase."
-          : recommendedPhase ? `Recommended destination: ${formatPhaseRef(recommendedPhase.number, features.find((feature) => feature.id === recommendedPhase.featureId)?.number)} — ${recommendedPhase.title}. Confirm its feature and phase before creating the task.` : "Create and confirm a parent feature and phase before promoting to a task.";
-      return { content: [{ type: "text", text: `Promotion discussion started for ${formatIdeaRef(idea.number)}. ${recommendation}` }], details: { idea, targetType: params.targetType, recommendation, grillMeSkill: await st.ideaDiscussionSkill(), persisted: false, nextActions: ["Follow grill-me one question at a time.", "Obtain explicit parent and target confirmation.", "Create the agreed target using feature_create, phase_create, or task_create.", "Call idea_promotion_finalize with discussionCompleted=true and confirmed=true."] } };
+      const result = await piIdeaRequest<{ idea: Idea; targetType: IdeaTargetType; persisted: false; recommendation: string; grillMeSkill: string }>(
+        ctx, "POST", `/${encodeURIComponent(params.idea)}/promotion/begin`, { targetType: params.targetType },
+      );
+      if (!result.ok) return piIdeaRefusal(result, result.code === "ALREADY_PROMOTED" ? { idea: result.details.idea } : {});
+      const { idea, recommendation } = result.data;
+      return {
+        content: [{ type: "text", text: `Promotion discussion started for ${formatIdeaRef(idea.number)}. ${recommendation}` }],
+        details: {
+          ...result.data,
+          nextActions: ["Follow grill-me one question at a time.", "Obtain explicit parent and target confirmation.", "Create the agreed target using feature_create, phase_create, or task_create.", "Call idea_promotion_finalize with discussionCompleted=true and confirmed=true."],
+        },
+      };
     },
   });
   pi.registerTool({
     name: "idea_promotion_finalize", label: "Idea Promotion Finalize", description: "Record an idea promotion after grill-me discussion, explicit confirmation, and successful normal target creation.", parameters: Type.Object({ idea: Type.String(), targetType: Type.Union([Type.Literal("feature"), Type.Literal("phase"), Type.Literal("task")]), targetRef: Type.String(), discussionCompleted: Type.Boolean(), confirmed: Type.Boolean() }),
-    async execute(_id, params, _signal, _onUpdate, ctx) { if (!params.discussionCompleted || !params.confirmed) return { content: [{ type: "text", text: "Promotion requires discussionCompleted=true and confirmed=true; no promotion was persisted." }], details: { errorCode: "IDEA_PROMOTION_CONFIRMATION_REQUIRED", promoted: false } }; const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const idea = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); if (!idea) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND", promoted: false } }; const features = (await st.loadFeatures()).features; const phases = await st.loadAllPhases(); let target: { id: string } | undefined; if (params.targetType === "feature") { const resolved = resolveFeatureRefStrict(features, params.targetRef); target = resolved.ok ? { id: resolved.feature.id } : undefined; } else if (params.targetType === "phase") { const phase = findPhaseByRef(phases, features, params.targetRef); target = phase ? { id: phase.id } : undefined; } else { const found = findTaskByRef(phases, features, params.targetRef); target = found ? { id: found.task.id } : undefined; } if (!target) return { content: [{ type: "text", text: `Confirmed ${params.targetType} target not found: ${params.targetRef}; no promotion was persisted.` }], details: { errorCode: "TARGET_NOT_FOUND", promoted: false } }; const promoted = await st.promoteIdea(idea.id, { targetType: params.targetType, targetId: target.id }); await st.writeGenerated(); return { content: [{ type: "text", text: `Idea promoted: ${formatIdeaRef(promoted.number)} → ${promoted.promotion!.targetRef}` }], details: { idea: promoted, promoted: true, targetRef: promoted.promotion!.targetRef } }; },
+    async execute(_id, { idea: ref, ...input }, _signal, _onUpdate, ctx) {
+      if (!input.discussionCompleted || !input.confirmed) {
+        return piIdeaRefusal({ code: "IDEA_PROMOTION_CONFIRMATION_REQUIRED", message: "Promotion requires discussionCompleted=true and confirmed=true; no promotion was persisted." }, { promoted: false });
+      }
+      const result = await piIdeaRequest<{ idea: Idea; promoted: true; targetRef: string }>(ctx, "POST", `/${encodeURIComponent(ref)}/promotion/finalize`, input);
+      if (!result.ok) return piIdeaRefusal(result, { promoted: false });
+      const { idea, targetRef } = result.data;
+      return {
+        content: [{ type: "text", text: `Idea promoted: ${formatIdeaRef(idea.number)} → ${targetRef}` }],
+        details: result.data,
+      };
+    },
   });
 
   pi.registerTool({
@@ -3315,6 +4105,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Read the full plan plus explicit active-task evidence: manifest, project (including Accepted Decisions), features, phases (with their tasks), requirements, activeTaskState, and activeTasks. Never infer that no task is active from counts or omitted detail.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{
+        project: Project; features: FeaturesDocument; phases: Phase[]; requirements: { requirements: Requirement[] };
+        activeTasks: Array<{ ref: string; title: string }>; activeTaskState: string;
+      }>(ctx, "/project/plan", {}, (plan) => ({
+        text: `Plan "${plan.project.name}": ${plan.features.features.length} features, ${plan.phases.length} phases, ${plan.requirements.requirements.length} requirements. ${plan.activeTasks.length ? `Active tasks (${plan.activeTasks.length}): ${plan.activeTasks.map((task) => `${task.ref} — ${task.title}`).join("; ")}` : "Active tasks: none."}`,
+        details: plan,
+      }), {}, "GET");
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found. Use plan_init first." }], details: {} };
       const plan = await st.loadAll();
@@ -3354,12 +4152,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Preview deterministic child-to-parent description drift. Returns exact stale phase/feature refs and leaf-to-root reconciliation steps without rewriting user-authored descriptions.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<HierarchicalDescriptionFreshness>(
+        ctx, "/project/description-freshness", {},
+        (freshness) => ({ text: formatDescriptionFreshness(freshness), details: { ...freshness } }), {}, "GET",
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const freshness = await st.previewDescriptionReconciliation();
-      if (!freshness.reconciliationRequired) return { content: [{ type: "text", text: "Description hierarchy is fresh; no parent reconciliation is required." }], details: freshness };
-      const lines = freshness.reconciliationPreview.map((step) => `- ${step.ownerRef} after ${step.causedByRef}: ${step.action}`);
-      return { content: [{ type: "text", text: `Parent description reconciliation required (${freshness.staleParentRefs.length}):\n${lines.join("\n")}` }], details: freshness };
+      return { content: [{ type: "text", text: formatDescriptionFreshness(freshness) }], details: freshness };
     },
   });
 
@@ -3554,6 +4355,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 25, description: "Summaries per page (default 10, maximum 25)." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredHandoffList(ctx, params.page ?? 1, params.pageSize ?? 10);
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const list = await st.listHandoffs();
@@ -3571,6 +4374,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Read the active entity-scoped handoff of a phase, or its latest terminal archive, together with a bounded priority-ordered phase work map. Reread the canonical phase and relevant sibling tasks before proposing work so capability ownership is not duplicated. phaseRef is required and accepts P00x, P00x(F00x), UUID, or title. Never infer a phase automatically.",
     parameters: Type.Object({ phaseRef: Type.String({ description: "Exact phase ref: P00x | P00x(F00x) | UUID | title. Ask the user when the target is ambiguous." }) }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredHandoffShow(ctx, params.phaseRef);
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const r = await resolvePhaseForHandoff(st, params.phaseRef);
@@ -3614,6 +4419,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       omissionsFound: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const { phaseRef, ...fields } = params;
+      const registered = await registeredCall<{ phaseRef: string } & Record<string, unknown>>(
+        ctx, "/handoffs/verify", { ref: phaseRef, fields, requestId: randomUUID() },
+        (result) => ({ text: `Handoff on ${result.phaseRef} is resume-ready.`, details: result }), { resumeReady: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const r = await resolvePhaseForHandoff(st, params.phaseRef);
@@ -3649,6 +4460,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }), { description: "Optional: validate an already-known manifest now, before drafting. Usually unnecessary — most handoffs need none; oversized content is externalized automatically." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ message: string } & Record<string, unknown>>(
+        ctx, "/handoffs/prepare", { ref: params.phaseRef, supportingDocuments: params.supportingDocuments },
+        ({ message, ...details }) => ({ text: message, details }),
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const r = await resolvePhaseForHandoff(st, params.phaseRef);
@@ -3724,6 +4540,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       featureNoUpdateReason: Type.Optional(Type.String({ description: "Required when featureUpdate is omitted." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const { phaseRef, markdown_content, ...fields } = params;
+      const registered = await registeredCall<{ phaseRef: string } & Record<string, unknown>>(
+        ctx, "/handoffs/write", { ref: phaseRef, requestId: randomUUID(), fields: { ...fields, content: markdown_content ?? fields.content } },
+        (result) => ({ text: `Handoff candidate persisted on ${result.phaseRef}. Read it with handoff_show and verify its content hash before resuming.`,
+          details: { ...result, nextActions: [`handoff_show ${result.phaseRef}`, "handoff_verify with the persisted content hash"] } }),
+        { persisted: false, resumeReady: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       // content/markdown_content are optional so a retry after a failed write
@@ -3823,6 +4647,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Clear the entity-scoped handoff of a phase (archives it and keeps handoffUpdatedAt as an audit trail). phaseRef is required; never infer a phase automatically.",
     parameters: Type.Object({ phaseRef: Type.String({ description: "Exact phase ref: P00x | P00x(F00x) | UUID | title." }) }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredHandoffClear(ctx, params.phaseRef);
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const r = await resolvePhaseForHandoff(st, params.phaseRef);
@@ -3869,16 +4695,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       description: "List features (compact: F00x · shortId — name (status; priority N; N phases, M tasks)). Use this to discover refs cheaply — do NOT read .planner/ files or plan_get full=true to find entities.",
       parameters: Type.Object({ featureRef: Type.Optional(Type.String({ description: "Optional: filter to one feature (F00x/shortId/UUID/name)" })) }),
       async execute(_id, params, _signal, _onUpdate, ctx) {
-        const st = await requirePlan(ctx);
-        if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-        const all = (await st.loadFeatures()).features;
-        const ref = params.featureRef?.trim();
-        const matchF = (f: Feature) => !ref || formatFeatureRef(f.number) === ref || f.shortId === ref || f.id === ref || f.name.toLowerCase() === ref.toLowerCase();
-        const features = all.filter(matchF);
-        const phases = await st.loadAllPhases();
-        const summary = features.map((f) => {
-          const fp = phases.filter((p) => p.featureId === f.id);
-          return `- ${formatFeatureRef(f.number)}${f.shortId ? ` · ${f.shortId}` : ""} — ${f.name} (${f.status}${f.priority > 0 ? `; priority ${f.priority}` : ""}; ${fp.length} phases, ${fp.reduce((t, p) => t + p.tasks.length, 0)} tasks)`;
+        const outcome = await piPlannerList<{ features: FeatureListSummary[] }>(ctx, "features", params);
+        if (!outcome.data) return { content: [{ type: "text", text: outcome.message }], details: {} };
+        const summary = outcome.data.features.map((item) => {
+          const priority = item.priority > 0 ? `; priority ${item.priority}` : "";
+          return `- ${item.ref}${item.shortId ? ` · ${item.shortId}` : ""} — ${item.name} (${item.status}${priority}; ${item.phaseCount} phases, ${item.taskCount} tasks)`;
         }).join("\n");
         return { content: [{ type: "text", text: summary || "No features" }], details: {} };
       },
@@ -3893,6 +4714,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         full: Type.Optional(Type.Boolean({ description: "If true, include the feature description. Default: compact identity only." })),
       }),
       async execute(_id, params, _signal, _onUpdate, ctx) {
+        const registered = await registeredCall<{ feature: Feature; ref: string; phaseCount: number; linkedRequirements: Requirement[] }>(
+          ctx, `/features/${encodeURIComponent(params.featureId)}${params.full ? "?full=true" : ""}`, {},
+          ({ feature, ref, phaseCount, linkedRequirements }) => {
+            const summary = `${feature.name} — ${ref}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phaseCount} phases)`;
+            if (!params.full) return { text: summary, details: { linkedRequirements } };
+            const lines = [summary, feature.description,
+              ...(feature.descriptionRef ? [`Description reference:\n- ${feature.descriptionRef}`] : []),
+              ...(linkedRequirements.length ? [`Linked requirements:\n${linkedRequirements.map(({ title }) => `- ${title}`).join("\n")}`] : []),
+              renderAcceptedDecisionsSection("Accepted Decisions", feature.acceptedDecisions)];
+            return { text: lines.join("\n\n"), details: { feature: { ...feature, ref }, linkedRequirements } };
+          }, {}, "GET",
+        );
+        if (registered) return registered;
         const st = await requirePlan(ctx);
       const plannerSessionId = piSessionIdOf(ctx);
         if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
@@ -3937,6 +4771,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       status: Type.Optional(Type.String({ description: "Initial status. One of: planned, in-progress, done, blocked, canceled. Default: planned. Usually leave this alone: feature status is derived from child phases/tasks." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ message: string; ref: string }>(
+        ctx, "/entities/create", { ...{ kind: "feature", title: params.name, description: params.description, status: params.status }, requestId: randomUUID() },
+        (result) => ({ text: result.message, details: { ...result, created: true } }), { created: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       return st.runBatch(async () => {
@@ -3994,12 +4833,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       dependencies: Type.Optional(Type.Array(Type.String(), { description: "Cross-feature or external dependencies" })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const { featureId, ...fields } = params;
+      const registered = await registeredCall<{ feature: Feature; ref: string; updatedFields: string[] }>(
+        ctx, "/entities/discuss", { kind: "feature", ref: featureId, requestId: randomUUID(),
+          updates: { ...fields, contextReadyReason: "Updated through feature_discuss tool." } },
+        (result) => ({ text: `Discussed ${result.ref}.`, details: { ...result, discussed: true, contextReady: true } }),
+        { discussed: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features;
       const resolvedFeature = resolveFeatureRefStrict(features, params.featureId);
       if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
-      const featureId = resolvedFeature.feature.id;
+      const resolvedId = resolvedFeature.feature.id;
       const mutableFields = ["description", "descriptionRef", "workDone", "workRemaining", "dependencies"] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
@@ -4011,7 +4858,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           retryCommand: `feature_discuss ${formatFeatureRef(resolvedFeature.feature.number)}`,
           readBackCommand: `feature_get ${formatFeatureRef(resolvedFeature.feature.number)} with full=true`,
           descriptionFallback: {
-            entityId: featureId,
+            entityId: resolvedId,
             inputField: "description",
             storedField: "feature description",
             descriptionRefField: "descriptionRef",
@@ -4019,7 +4866,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         });
       }
       const updatedDoc = await st.updateFeatures((doc) => {
-        const feature = doc.features.find((f) => f.id === featureId);
+        const feature = doc.features.find((f) => f.id === resolvedId);
         if (!feature) return doc;
         if (params.description !== undefined) feature.description = params.description.trim();
         if (params.descriptionRef !== undefined) {
@@ -4036,7 +4883,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         feature.updatedAt = nowISO();
         return doc;
       });
-      const feature = updatedDoc.features.find((f) => f.id === featureId);
+      const feature = updatedDoc.features.find((f) => f.id === resolvedId);
       if (!feature) return { content: [{ type: "text", text: `Feature not found: ${params.featureId}` }], details: {} };
       await st.writeGenerated();
       const featureDiscussReply = buildMutationReply({
@@ -4075,6 +4922,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }), { description: "Deprecated compatibility field. Raw replacement is rejected; use accepted_decision_create, accepted_decision_update, or accepted_decision_delete." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const { featureId: registeredRef, ...updates } = params;
+      const registered = await registeredCall<{ ref: string; updatedFields: string[]; lostChecklistTicks?: string[] }>(
+        ctx, "/entities/update", { kind: "feature", ref: registeredRef, updates, requestId: randomUUID() },
+        (result) => ({ text: `Updated ${result.ref}: ${result.updatedFields.join(", ")}.`, details: { ...result, updated: true } }),
+        { updated: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features;
@@ -4172,6 +5026,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       cascade: Type.Optional(Type.Boolean({ description: "If true, also delete all phases belonging to this feature. Default: false" })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{
+        ref: string; id: string; phaseCount: number; cascade: boolean;
+      }>(ctx, "/entities/delete", {
+        kind: "feature", ref: params.featureId, cascade: params.cascade, requestId: randomUUID(),
+      }, (result) => ({
+        text: `Feature deleted: ${result.ref} (${result.cascade ? "deleted" : "unlinked"}: ${result.phaseCount} phases)`,
+        details: { deleted: true, ref: result.ref, id: result.id, cascadedPhases: result.cascade ? result.phaseCount : 0,
+          unlinkedPhases: result.cascade ? 0 : result.phaseCount },
+      }), { deleted: false });
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features;
@@ -4200,21 +5064,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         status: Type.Optional(Type.String({ description: "Optional: filter by status name" })),
       }),
       async execute(_id, params, _signal, _onUpdate, ctx) {
-        const st = await requirePlan(ctx);
-        if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-        const features = (await st.loadFeatures()).features;
-        let phases = await st.loadAllPhases();
-        const fref = params.featureRef?.trim();
-        if (fref) {
-          const f = features.find((x) => formatFeatureRef(x.number) === fref || x.shortId === fref || x.id === fref || x.name.toLowerCase() === fref.toLowerCase());
-          if (!f) return { content: [{ type: "text", text: `Feature not found: ${fref}` }], details: {} };
-          phases = phases.filter((p) => p.featureId === f.id);
-        }
-        if (params.status) phases = phases.filter((p) => p.status === params.status);
-        const summary = phases.map((p) => {
-          const fNum = featureNumberOfPhase(p, features);
-          const fTag = fNum !== undefined ? ` [F${pad(fNum)}]` : "";
-          return `- ${formatPhaseRef(p.number, fNum)}${p.shortId ? ` · ${p.shortId}` : ""} — ${p.title} (${p.status}${p.priority > 0 ? `; priority ${p.priority}` : ""}; ${p.tasks.length} tasks)${fTag}`;
+        const outcome = await piPlannerList<{ phases: PhaseListSummary[] }>(ctx, "phases", params);
+        if (!outcome.data) return { content: [{ type: "text", text: outcome.message }], details: {} };
+        const summary = outcome.data.phases.map((item) => {
+          const priority = item.priority > 0 ? `; priority ${item.priority}` : "";
+          const feature = item.featureNumber == null ? "" : ` [F${pad(item.featureNumber)}]`;
+          return `- ${item.ref}${item.shortId ? ` · ${item.shortId}` : ""} — ${item.title} (${item.status}${priority}; ${item.taskCount} tasks)${feature}`;
         }).join("\n");
         return { content: [{ type: "text", text: summary || "No phases" }], details: {} };
       },
@@ -4229,6 +5084,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         full: Type.Optional(Type.Boolean({ description: "If true, include the phase description. Default: compact identity only." })),
       }),
       async execute(_id, params, _signal, _onUpdate, ctx) {
+        const registered = await registeredCall<{ phase: Phase; ref: string; linkedRequirements: Requirement[] }>(
+          ctx, `/phases/${encodeURIComponent(params.phaseId)}${params.full ? "?full=true" : ""}`, {},
+          ({ phase, ref, linkedRequirements }) => {
+            const summary = `${phase.title} — ${ref}${phase.shortId ? ` · ${phase.shortId}` : ""} (${phase.status}; ${phase.tasks.length} tasks)`;
+            if (!params.full) return { text: summary, details: { linkedRequirements } };
+            const lines = [summary, phase.description,
+              ...(phase.descriptionRef ? [`Description reference:\n- ${phase.descriptionRef}`] : []),
+              ...(linkedRequirements.length ? [`Linked requirements:\n${linkedRequirements.map(({ title }) => `- ${title}`).join("\n")}`] : []),
+              renderAcceptedDecisionsSection("Accepted Decisions", phase.acceptedDecisions)];
+            return { text: lines.join("\n\n"), details: { phase: { ...phase, ref }, linkedRequirements } };
+          }, {}, "GET",
+        );
+        if (registered) return registered;
         const st = await requirePlan(ctx);
       const plannerSessionId = piSessionIdOf(ctx);
         if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
@@ -4273,6 +5141,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       status: Type.Optional(Type.String({ description: "Initial status. Default: draft. Usually leave this alone: once tasks exist, phase status is derived from task statuses." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ message: string; ref: string }>(
+        ctx, "/entities/create", { ...{ kind: "phase", title: params.title, description: params.description, featureRef: params.featureId, summary: params.summary, status: params.status }, requestId: randomUUID() },
+        (result) => ({ text: result.message, details: { ...result, created: true } }), { created: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const title = params.title?.trim();
@@ -4346,6 +5219,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       completionCriteria: Type.Optional(Type.Array(Type.String())),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const { phaseId, ...fields } = params;
+      const registered = await registeredCall<{ phase: Phase; ref: string; updatedFields: string[] }>(
+        ctx, "/entities/discuss", { kind: "phase", ref: phaseId, requestId: randomUUID(),
+          updates: { ...fields, contextReadyReason: "Updated through phase_discuss tool." } },
+        (result) => ({ text: `Discussed ${result.ref}.`, details: { ...result, discussed: true, contextReady: true } }),
+        { discussed: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features;
@@ -4434,6 +5315,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       completionCriteria: Type.Optional(Type.Array(Type.String(), { description: "Replace completion criteria list" })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const { phaseId: registeredRef, ...updates } = params;
+      const registered = await registeredCall<{ ref: string; updatedFields: string[]; lostChecklistTicks?: string[] }>(
+        ctx, "/entities/update", { kind: "phase", ref: registeredRef, updates, requestId: randomUUID() },
+        (result) => ({ text: `Updated ${result.ref}: ${result.updatedFields.join(", ")}.`, details: { ...result, updated: true } }),
+        { updated: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features;
@@ -4601,6 +5489,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       implementationNotes: Type.Optional(Type.String()),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredDecision(ctx, "create", params);
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const target = await resolveAcceptedDecisionTarget(st, params.targetType, params.targetRef);
@@ -4651,6 +5541,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           }),
         };
       }
+      const registered = await registeredDecision(ctx, "update", params);
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const target = await resolveAcceptedDecisionTarget(st, params.targetType, params.targetRef);
@@ -4682,6 +5574,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       confirmed: Type.Boolean({ description: "Must be true to confirm deleting this accepted decision." }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredDecision(ctx, "delete", params);
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const target = await resolveAcceptedDecisionTarget(st, params.targetType, params.targetRef);
@@ -4707,6 +5601,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       phaseId: Type.String({ description: "Phase ref: F00x/P00x, bare P00x (global), shortId, UUID, or title to delete" }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ ref: string }>(ctx, "/entities/delete", {
+        kind: "phase", ref: params.phaseId, requestId: randomUUID(),
+      }, (result) => ({ text: `Phase deleted: ${result.ref}`, details: { deleted: params.phaseId } }), { deleted: false });
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features;
@@ -4749,30 +5647,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         status: Type.Optional(Type.String({ description: "Optional: filter by status name" })),
       }),
       async execute(_id, params, _signal, _onUpdate, ctx) {
-        const st = await requirePlan(ctx);
-        if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-        const features = (await st.loadFeatures()).features;
-        let phases = await st.loadAllPhases();
-        const fref = params.featureRef?.trim();
-        if (fref) {
-          const f = features.find((x) => formatFeatureRef(x.number) === fref || x.shortId === fref || x.id === fref || x.name.toLowerCase() === fref.toLowerCase());
-          if (!f) return { content: [{ type: "text", text: `Feature not found: ${fref}` }], details: {} };
-          phases = phases.filter((p) => p.featureId === f.id);
-        }
-        const pref = params.phaseRef?.trim();
-        if (pref) {
-          const p = findPhaseByRef(phases, features, pref);
-          if (!p) return { content: [{ type: "text", text: `Phase not found: ${pref}` }], details: {} };
-          phases = [p];
-        }
-        const out: string[] = [];
-        for (const phase of phases) {
-          for (const task of phase.tasks) {
-            if (params.status && task.status !== params.status) continue;
-            out.push(`- ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}/T${pad(task.number)}${task.shortId ? ` · ${task.shortId}` : ""} — ${task.title} (${task.status}${task.priority > 0 ? `; priority ${task.priority}` : ""})`);
-          }
-        }
-        return { content: [{ type: "text", text: out.join("\n") || "No tasks" }], details: {} };
+        const outcome = await piPlannerList<{ tasks: TaskListSummary[] }>(ctx, "tasks", params);
+        if (!outcome.data) return { content: [{ type: "text", text: outcome.message }], details: {} };
+        const summary = outcome.data.tasks.map((item) => {
+          const priority = item.priority > 0 ? `; priority ${item.priority}` : "";
+          return `- ${item.ref}${item.shortId ? ` · ${item.shortId}` : ""} — ${item.title} (${item.status}${priority})`;
+        }).join("\n");
+        return { content: [{ type: "text", text: summary || "No tasks" }], details: {} };
       },
     });
 
@@ -4782,9 +5663,28 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       description: "Show a task. Compact identity by default (saves tokens); pass full=true to include the description, every canonical Accepted Decision field, resume checkpoint/advisory, and statusLog.",
       parameters: Type.Object({
         taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title" }),
+        maxChars: Type.Optional(Type.Number()),
         full: Type.Optional(Type.Boolean({ description: "If true, include the task description, resume checkpoint/advisory, and statusLog. Default: compact identity only." })),
       }),
       async execute(_id, params, _signal, _onUpdate, ctx) {
+        if (params.full) {
+          const registered = await registeredCall<
+            { kind: "context"; context: unknown; parkedTakeoverAt?: string } | { kind: "incomplete"; requiredChars: number }
+          >(ctx, "/tasks/context", { ref: params.taskId, maxChars: params.maxChars }, (result) =>
+            result.kind === "context"
+              ? { text: (result.parkedTakeoverAt ? `Another session resumed your parked task at ${result.parkedTakeoverAt}.\n\n` : "")
+                + JSON.stringify(result.context), details: { contextComplete: true, parkedTakeoverAt: result.parkedTakeoverAt } }
+              : { text: `Full context requires ${result.requiredChars} characters. Retry with a larger maxChars.`, details: { contextComplete: false, requiredChars: result.requiredChars } },
+          );
+          if (registered) return registered;
+        } else {
+          const registered = await registeredCall<{ task: Task; ref: string; phaseRef: string }>(
+            ctx, `/tasks/${encodeURIComponent(params.taskId)}`, {}, ({ task, ref, phaseRef }) => ({
+              text: `${task.title} — ${ref}${task.shortId ? ` · ${task.shortId}` : ""} (${task.status}; phase ${phaseRef})`, details: {},
+            }), {}, "GET",
+          );
+          if (registered) return registered;
+        }
         const st = await requirePlan(ctx);
       const plannerSessionId = piSessionIdOf(ctx);
         if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
@@ -4857,10 +5757,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const phaseRef = formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features));
         const featureRef = parentFeature ? formatFeatureRef(parentFeature.number) : "";
         const taskRef = `${phaseRef}/T${pad(found.task.number)}`;
-        const linkedRequirements = [
-          ...(await st.linkedRequirementsForPhase(found.phase.id)),
-          ...(found.phase.featureId ? await st.linkedRequirementsForFeature(found.phase.featureId) : []),
-        ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+        const linkedRequirements = await st.linkedRequirementsForExecution(found.phase);
         const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
         const contextEligibility = contextReadEligibilityForSession({
           sessionId: plannerSessionId,
@@ -4908,6 +5805,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       checklist: Type.Optional(Type.Array(Type.String(), { description: "Initial checklist items (plain strings). Seeded as C1, C2, … (unchecked)." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ message: string; ref: string }>(
+        ctx, "/entities/create", { ...{ kind: "task", title: params.title, description: params.description, featureRef: params.featureId, phaseRef: params.phaseId, checklist: params.checklist, status: params.status }, requestId: randomUUID() },
+        (result) => ({ text: result.message, details: { ...result, created: true } }), { created: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const title = params.title?.trim();
@@ -4982,6 +5884,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Add a validated task dependency atomically. A task may depend on any task in any phase; the dependency is rejected only when the target does not exist, is the task itself, or would create a cycle.",
     parameters: Type.Object({ taskId: Type.String(), dependsOn: Type.String() }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredDependency(ctx, "add", params);
+      if (registered) return registered;
       const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features; const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId); const dependency = findTaskByRef(await st.loadAllPhases(), features, params.dependsOn);
       if (!found || !dependency) return { content: [{ type: "text", text: "Dependency target not found." }], details: { updated: false, errorCode: "DEPENDENCY_TASK_NOT_FOUND" }, isError: true };
@@ -4997,6 +5901,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({ taskId: Type.String(), dependsOn: Type.String(), confirmed: Type.Boolean() }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       if (!params.confirmed) return { content: [{ type: "text", text: "Explicit confirmation is required." }], details: { updated: false, errorCode: "CONFIRMATION_REQUIRED" }, isError: true };
+      const registered = await registeredDependency(ctx, "delete", params);
+      if (registered) return registered;
       const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features; const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId); const dependency = findTaskByRef(await st.loadAllPhases(), features, params.dependsOn);
       if (!found || !dependency) return { content: [{ type: "text", text: "Dependency target not found." }], details: { updated: false, errorCode: "DEPENDENCY_TASK_NOT_FOUND" }, isError: true };
@@ -5031,6 +5937,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       subtasks: Type.Optional(Type.Array(Type.Object({ id: Type.Optional(Type.String()), title: Type.String(), description: Type.Optional(Type.String()), status: Type.Optional(Type.String()) }), { description: "Replace subtasks; existing IDs must belong to this task and omitted IDs are planner-generated." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const { taskId, ...updates } = params;
+      const registered = await registeredCall<{ ref: string; updatedFields: string[]; lostChecklistTicks?: string[] }>(
+        ctx, "/entities/update", { kind: "task", ref: taskId, updates, requestId: randomUUID() },
+        (result) => ({ text: `Updated ${result.ref}: ${result.updatedFields.join(", ")}.`, details: { ...result, updated: true } }),
+        { updated: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       // Find the phase hosting this task first.
@@ -5188,6 +6101,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       targetPhase: Type.String({ description: "Destination phase ref. Accepts F00x/P00x, bare P00x, 5-char shortId, UUID, or title." }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ message: string } & Record<string, unknown>>(
+        ctx, "/tasks/move", { tasks: params.taskIds, targetPhase: params.targetPhase, requestId: randomUUID() },
+        ({ message, ...details }) => ({ text: message, details }), { moved: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const phases = await st.loadAllPhases();
@@ -5216,6 +6134,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title to delete" }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ ref: string }>(ctx, "/entities/delete", {
+        kind: "task", ref: params.taskId, requestId: randomUUID(), confirmed: true,
+      }, (result) => ({ text: `Task deleted: ${result.ref}`, details: { deleted: params.taskId } }), { deleted: false });
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features;
@@ -5240,6 +6162,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Return the next-work chain: active task if present, otherwise the lowest-priority ready feature → phase → task, plus bounded typed claims. Only persisted resume-ready handoffs are actionable; Markdown prose and terminal archives are not authority. Never blocks an explicit user choice.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ text: string; structured: Record<string, unknown> }>(
+        ctx, "/recommend", {}, ({ text, structured }) => ({ text, details: structured }), {}, "GET",
+      );
+      if (registered) return registered;
       const plannerSessionId = piSessionIdOf(ctx);
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
@@ -5276,6 +6202,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       reason: Type.String({ description: "Why this approved temporary deviation is needed" }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<DeviationSuccess>(ctx, "/tasks/deviation", {
+        ref: params.temporary_task, resumeTask: params.resume_task, reason: params.reason, requestId: randomUUID(),
+      }, (result) => ({
+        text: `✅ Approved deviation: ${result.temporaryRef} temporarily overrides ${result.resumeRef}. Resume target retained.`,
+        details: { deviation: result.deviation },
+      }));
+      if (registered) return registered;
       const plannerSessionId = piSessionIdOf(ctx);
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
@@ -5315,6 +6248,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       paused_by: Type.Optional(Type.String({ description: "Agent/session identifier" })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ taskRef: string; snapshot: { resumeLocation: string; howToResume: string } }>(
+        ctx, "/tasks/pause", {
+          ref: params.taskId, requestId: randomUUID(), reason: params.reason,
+          whatWasBeingDone: params.what_was_being_done, resumeLocation: params.resume_location, howToResume: params.how_to_resume,
+        }, (result) => ({
+          text: `Checkpoint saved for ${result.taskRef}. Resume from ${result.snapshot.resumeLocation}. ${result.snapshot.howToResume}`,
+          details: { ...result, paused: true },
+        }), { paused: false },
+      );
+      if (registered) return registered;
       const plannerSessionId = piSessionIdOf(ctx);
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
@@ -5371,6 +6314,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       switched_by: Type.Optional(Type.String({ description: "Agent/session identifier" })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ sourceRef: string; targetRef: string; deviationId: string; parkedTakeover?: boolean }>(
+        ctx, "/tasks/switch", {
+          ref: params.from_task, toRef: params.to_task, requestId: randomUUID(), reason: params.reason,
+          whatWasBeingDone: params.what_was_being_done, resumeLocation: params.resume_location, howToResume: params.how_to_resume,
+        }, (result) => ({
+          text: `Switched to ${result.targetRef}. Checkpointed ${result.sourceRef} for return.${result.parkedTakeover ? " The target was parked by another session." : ""}`,
+          details: { ...result, switched: true, started: true },
+        }), { switched: false, started: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       const plannerSessionId = piSessionIdOf(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
@@ -5392,10 +6345,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return { content: [{ type: "text", text: `Task switch denied: source task is owned by another session.` }], details: {} };
       }
       const targetFeature = target.phase.featureId ? features.find((feature) => feature.id === target.phase.featureId) : undefined;
-      const linkedRequirements = [
-        ...(await st.linkedRequirementsForPhase(target.phase.id)),
-        ...(target.phase.featureId ? await st.linkedRequirementsForFeature(target.phase.featureId) : []),
-      ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+      const linkedRequirements = await st.linkedRequirementsForExecution(target.phase);
       const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
       const contextInput = {
         sessionId: plannerSessionId,
@@ -5531,6 +6481,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Atomically reopen a completed task. Requires confirmed=true, retains completion evidence, and never pauses another task.",
     parameters: Type.Object({ taskId: Type.String({ description: "Task reference" }), confirmed: Type.Boolean({ description: "Must be true after explicit user confirmation." }) }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ taskId: string; taskRef: string }>(
+        ctx, "/tasks/reopen", { ref: params.taskId, requestId: randomUUID(), confirmed: params.confirmed },
+        (result) => ({ text: `Task reopened: ${result.taskRef}`, details: { ...result, reopened: true } }), { reopened: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: { reopened: false, errorCode: "PLAN_NOT_FOUND" }, isError: true };
       const features = (await st.loadFeatures()).features;
@@ -5554,6 +6509,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Explicitly recover a stopped caller's complete task ownership, return stack and focus into this fresh session. Confirm that the previous caller has stopped. Registered live processes and callers that already own work are refused. Then read context and use task_start normally.",
     parameters: Type.Object({ taskId: Type.String(), confirmed: Type.Boolean() }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ taskIds: string[]; deviationIds: string[] }>(
+        ctx, "/tasks/recover", { ref: params.taskId, requestId: randomUUID(), confirmed: params.confirmed },
+        (result) => ({ text: "Session recovered. Read scoped task context before continuing.", details: { ...result, recovered: true } }),
+        { recovered: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No planner found." }], details: { recovered: false, errorCode: "PLAN_NOT_FOUND" }, isError: true };
       const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, params.taskId);
@@ -5573,8 +6534,21 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Set a task to in-progress or resume checkpointed work. Call this tool before reading context so it can reuse valid sessionInfo attestations; if denied, perform only the missing/stale reads listed in nextActions, then retry. Reads may be performed in any order within the current session. If nextActions includes project_guidelines_show, read that section and keep it in working memory while doing task work. A denied start is an isError result with started=false; NEVER claim work started unless details.started is true. Success is returned only after persisted in-progress state is verified.",
     parameters: Type.Object({
       taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title to start" }),
+      confirmedTakeover: Type.Optional(Type.Boolean({ description: "Confirm takeover from an idle live owner after explicit user approval." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{
+        taskId: string; taskRef: string; title: string; alreadyStarted: boolean; reclaimed: boolean; tookOver?: boolean; parkedTakeover?: boolean;
+        checkpoint?: { resumeLocation: string; howToResume: string };
+      }>(ctx, "/tasks/start", { ref: params.taskId, confirmedTakeover: params.confirmedTakeover, requestId: randomUUID() }, (result) => ({
+        text: [
+          `Task ${result.tookOver ? "taken over from an idle session" : "started"}: ${result.taskRef} — ${result.title}`,
+          ...(result.parkedTakeover ? ["This task was parked by another session. The prior session will see the takeover when it returns."] : []),
+          ...(result.checkpoint ? [`Resume from: ${result.checkpoint.resumeLocation}`, `How to resume: ${result.checkpoint.howToResume}`] : []),
+        ].join("\n"),
+        details: { ...result, ...taskStartSucceeded(result.taskId, result.alreadyStarted) },
+      }), { started: false });
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       const plannerSessionId = piSessionIdOf(ctx);
       if (!st) return taskStartFailure(taskStartDenied("PLAN_NOT_FOUND", "No .planner/ found.", ["Initialize or load the planner, then retry task_start."]));
@@ -5602,10 +6576,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // stale.
       const projectContextReadState = await st.projectContextReadStateForSession(plannerSessionId);
       const projectContextAdvisory = projectContextStaleAdvisory(projectContextReadState);
-      const linkedRequirements = [
-        ...(await st.linkedRequirementsForPhase(found.phase.id)),
-        ...(found.phase.featureId ? await st.linkedRequirementsForFeature(found.phase.featureId) : []),
-      ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+      const linkedRequirements = await st.linkedRequirementsForExecution(found.phase);
       const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
       const contextInput = {
         sessionId: plannerSessionId,
@@ -5804,6 +6775,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       description_update: Type.String({ minLength: 10, description: "Required evidence: shipped work, verification level including partial verification, remaining/unverified work, files, decisions, and updated code references." }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ taskId: string; taskRef: string; resumeRequired?: { taskRef: string } }>(
+        ctx, "/tasks/complete", {
+          ref: params.taskId, requestId: randomUUID(), descriptionUpdate: params.description_update,
+          force: params.force, motivation: params.motivation,
+        }, (result) => ({
+          text: `Task completed: ${result.taskRef}${result.resumeRequired ? `\nResume required: ${result.resumeRequired.taskRef}` : ""}`,
+          details: { ...result, completed: true },
+        }), { completed: false },
+      );
+      if (registered) return registered;
       const plannerSessionId = piSessionIdOf(ctx);
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
@@ -5890,6 +6871,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       checked: Type.Optional(Type.Boolean({ description: "Set explicitly: true=done, false=open. Omit to toggle." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ message: string; item: unknown }>(
+        ctx, "/tasks/checklist/toggle", { ref: params.taskId, requestId: randomUUID(), item: params.item, checked: params.checked },
+        (result) => ({ text: result.message, details: { ...result, updated: true } }), { updated: false },
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, params.taskId.trim());
@@ -5922,6 +6908,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       title: Type.String({ description: "Checklist item text (a single step)" }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ message: string; item: unknown }>(
+        ctx, "/tasks/checklist/add", { ref: params.taskId, item: params.title, requestId: randomUUID() },
+        (result) => ({ text: result.message, details: result }),
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, params.taskId.trim());
@@ -5953,6 +6944,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       item: Type.String({ description: "Checklist item selector: C{n} (e.g. C2), item id, or title (case-insensitive)" }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ message: string; item: unknown }>(
+        ctx, "/tasks/checklist/remove", { ref: params.taskId, item: params.item, requestId: randomUUID() },
+        (result) => ({ text: result.message, details: result }),
+      );
+      if (registered) return registered;
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, params.taskId.trim());
@@ -5991,27 +6987,37 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const action = params.action ?? "status";
+      if ((await resolvePlannerWorkspace(ctx.cwd)).kind === "descriptor") {
+        if (params.visibility === "lan") {
+          return { content: [{ type: "text", text: "The registered dashboard is available on loopback." }], details: { errorCode: "LAN_UNSUPPORTED" }, isError: true };
+        }
+        const result = await registeredDashboardInfo(ctx.cwd, action, params.port);
+        return { content: [{ type: "text", text: result.text }], details: result.details };
+      }
       if (action === "start") {
         const st = await requirePlan(ctx);
         if (!st) return { content: [{ type: "text", text: "No .planner/ found. Run plan_init first." }], details: { running: false } };
         const visibility = params.visibility ?? "lan";
         if (server) {
-          const srv = server as ServeHandle;
+          const srv = server as PiPlannerEndpoint;
           return { content: [{ type: "text", text: `Web UI already running. Local: ${srv.localUrl}${srv.lanUrl ? ` — LAN: ${srv.lanUrl}` : ""} (mode: ${srv.mode}, port: ${lastKnownWebPort ?? "?"})` }], details: { running: true, localUrl: srv.localUrl, lanUrl: srv.lanUrl, port: lastKnownWebPort, mode: srv.mode } };
         }
         await startServer(ctx, params.port && params.port > 0 ? params.port : undefined, visibility);
-        const srv = server as ServeHandle | null;
+        const srv = server as PiPlannerEndpoint | null;
         if (!srv) return { content: [{ type: "text", text: "Failed to start web server." }], details: { running: false } };
         return { content: [{ type: "text", text: `Web UI started. Local: ${srv.localUrl}${srv.lanUrl ? ` — LAN: ${srv.lanUrl}` : ""} (mode: ${srv.mode}, port: ${lastKnownWebPort ?? "?"})` }], details: { running: true, localUrl: srv.localUrl, lanUrl: srv.lanUrl, port: lastKnownWebPort, mode: srv.mode } };
       }
       if (action === "stop") {
         if (!server) return { content: [{ type: "text", text: "Web UI not running." }], details: { running: false } };
-        const stoppedUrl = (server as ServeHandle).localUrl;
+        const stoppedUrl = server.localUrl;
+        const owned = server.owned;
         await stopServer();
-        return { content: [{ type: "text", text: `Web UI stopped (was ${stoppedUrl}).` }], details: { running: false } };
+        return owned
+          ? { content: [{ type: "text", text: `Web UI stopped (was ${stoppedUrl}).` }], details: { running: false } }
+          : { content: [{ type: "text", text: `Detached from the shared planner service at ${stoppedUrl}.` }], details: { running: true, detached: true, localUrl: stoppedUrl } };
       }
       // status
-      const srv = server as ServeHandle | null;
+      const srv = server as PiPlannerEndpoint | null;
       if (!srv) return { content: [{ type: "text", text: "Web UI not running. Use planner-web with action=start to start the dashboard." }], details: { running: false } };
       return { content: [{ type: "text", text: `Web UI running. Local: ${srv.localUrl}${srv.lanUrl ? ` — LAN: ${srv.lanUrl}` : ""} (mode: ${srv.mode}, port: ${lastKnownWebPort ?? "?"})` }], details: { running: true, localUrl: srv.localUrl, lanUrl: srv.lanUrl, port: lastKnownWebPort, mode: srv.mode } };
     },
@@ -6025,6 +7031,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       maxChars: Type.Optional(Type.Number({ description: `Single-response bound (chars) for the project-context delivery. Default ${DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS}. Raise this and retry if a prior call returned details.projectContext.contextComplete=false.` })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const registered = await registeredCall<{ text: string; structured: Record<string, unknown> }>(
+        ctx, "/context/load", params, ({ text, structured }) => ({
+          text, details: { ...structured, enabled: true, running: true },
+        }), { enabled: false },
+      );
+      if (registered) {
+        registeredPlannerEnabled = !registered.isError;
+        return registered;
+      }
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found. Run plan_init first." }], details: { enabled: false, running: false } };
       let preparation: Awaited<ReturnType<PlanStore["preparePlannerSession"]>>;
@@ -6045,7 +7060,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const plannerSkill = await st.syncPlannerSkill();
       await st.syncGrillMeSkill();
       contextBlockDirty = true;
-      const srv = server as ServeHandle | null;
+      const srv = server as PiPlannerEndpoint | null;
       let recap = "";
       try { recap = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi", sessionId: plannerSessionId }); } catch (e) { recap = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
       if (preparation.changed) recap = `${preparation.legacyProjectContext.summary}\n\n${recap}`;
@@ -6080,8 +7095,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Planner Stop",
     description: "Disable the planner for this project and stop the web dashboard. Alias: planner-disable. Planner operations are NOT code edits.",
     parameters: Type.Object({}),
-    async execute(_id, _params, _signal, _onUpdate, _ctx) {
+    async execute(_id, _params, _signal, _onUpdate, ctx) {
       disablePlannerSession();
+      await registeredPi.end();
+      registeredPlannerEnabled = false;
+      if ((await resolvePlannerWorkspace(ctx.cwd)).kind === "descriptor") {
+        return { content: [{ type: "text", text: "Registered planner session ended." }], details: { disabled: true, sharedRuntime: true } };
+      }
       await stopServer().catch(() => {});
       try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
       return { content: [{ type: "text", text: "Planner disabled. Web UI shut down. Run /planner load or planner-load to re-enable." }], details: { disabled: true, webRunning: false } };
@@ -6092,10 +7112,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
   pi.on("before_agent_start", async (event, ctx) => {
     if (!plannerSessionEnabled) return;
-    const st = ensureStore(ctx);
-    if (!(await st.exists())) return;
-
     try {
+      const st = await ensureStore(ctx);
+      if (!(await st.exists())) return;
       // Session initialization must not mutate canonical planner entities.
       // Migrations/backfills/repairs are explicit tools; resume is `.local`.
       if (!plannerHeavyInitDone) {
@@ -6220,7 +7239,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           decisions: task.acceptedDecisions,
         }))),
       ]);
-      const webServer = server as ServeHandle | null;
+      const webServer = server as PiPlannerEndpoint | null;
       const webLocalUrl = webServer?.localUrl ?? webServer?.url ?? "";
       const webLanUrl = webServer?.lanUrl ?? "";
       let webPort = "";

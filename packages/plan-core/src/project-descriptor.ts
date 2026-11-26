@@ -279,8 +279,31 @@ export interface ProjectStoreRegistration {
  * open port alone is insufficient proof of compatibility).
  */
 export interface ServiceEndpointRecord {
+  authority?: "registered-projects";
   protocolVersion: string;
+  runtimeVersion?: string;
   bootId: string;
   host: "127.0.0.1";
   port: number;
+}
+
+/** Select the legacy root only when discovery confirms that mode. An opted-in
+ * project must wait for its registered authority instead of creating a second plan. */
+export async function resolveLegacyPlannerRoot(cwd: string, explicitRoot?: string): Promise<string> {
+  if (explicitRoot?.trim()) return resolve(explicitRoot);
+  const location = await resolvePlannerWorkspace(cwd);
+  if (location.kind === "descriptor-error") throw location.error;
+  if (location.kind === "descriptor") {
+    throw new ProjectAuthorityUnavailableError(location.descriptor.projectId);
+  }
+  return location.kind === "legacy" ? location.planRoot : join(location.root, LEGACY_PLANNER_DIR_NAME);
+}
+
+export class ProjectAuthorityUnavailableError extends Error {
+  readonly code = "PROJECT_AUTHORITY_UNAVAILABLE";
+
+  constructor(readonly projectId: string) {
+    super(`No registered application service can open project ${projectId} through this client.`);
+    this.name = "ProjectAuthorityUnavailableError";
+  }
 }

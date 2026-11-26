@@ -12,12 +12,13 @@
 import { createHash } from "node:crypto";
 import type { PersistenceDriver } from "./driver.js";
 import { persistenceErrorFrom } from "./driver.js";
+import { recordProjectAudit, resolveProjectCaller, type ProjectCaller } from "./project-access.js";
 
 export const IDEMPOTENCY_RETENTION_COMMANDS = 100_000;
 /** Receipts older than this horizon are explicitly non-replayable (documented, not silent). */
 export const IDEMPOTENCY_RETENTION_HORIZON_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type CommandOutcomeStatus = "committed" | "already-applied" | "conflict" | "revision-conflict" | "busy" | "error";
+export type CommandOutcomeStatus = "committed" | "already-applied" | "conflict" | "revision-conflict" | "forbidden" | "refused" | "busy" | "error";
 
 export interface CommandEnvelope {
   /** Client-generated idempotency key, unique per logical request. */
@@ -36,6 +37,15 @@ export interface CommandOutcome<T> {
   revision?: number | undefined;
   result?: T | undefined;
   reason?: string | undefined;
+  code?: string | undefined;
+  details?: Record<string, unknown> | undefined;
+}
+
+/** A domain refusal rolls back the command before a success receipt is recorded. */
+export class CommandRefusal extends Error {
+  constructor(readonly code: string, message: string, readonly details?: Record<string, unknown>) {
+    super(message);
+  }
 }
 
 export interface AppliedCommandContext {
@@ -97,11 +107,20 @@ export function executeCommand<T>(
   driver: PersistenceDriver,
   envelope: CommandEnvelope,
   apply: (context: AppliedCommandContext) => T,
+  caller?: ProjectCaller,
 ): CommandOutcome<T> {
-  const hash = payloadHash(envelope);
+  const receiptKey = caller
+    ? createHash("sha256").update(JSON.stringify([caller.principalId, envelope.requestId])).digest("hex")
+    : envelope.requestId;
+  const requester = caller?.requesterId && caller.requesterId !== caller.principalId ? [caller.requesterId] : [];
+  const payload = caller ? [caller.workspaceId, envelope.payload, ...requester] : envelope.payload;
+  const hash = payloadHash({ ...envelope, payload });
   try {
     return driver.runExclusive(() => {
-      const receipt = readReceipt(driver, envelope.projectId, envelope.requestId);
+      if (caller && (caller.projectId !== envelope.projectId || !resolveProjectCaller(driver, caller))) {
+        return { status: "forbidden", reason: "The principal has no access to the project and workspace." };
+      }
+      const receipt = readReceipt(driver, envelope.projectId, receiptKey);
       if (receipt !== undefined) {
         if (receipt.payloadHash !== hash) {
           return {
@@ -142,10 +161,16 @@ export function executeCommand<T>(
       const at = new Date().toISOString();
       driver
         .prepare("INSERT INTO command_receipts (request_id, project_id, payload_hash, operation, outcome, created_at) VALUES (?,?,?,?,?,?)")
-        .run(envelope.requestId, envelope.projectId, hash, envelope.operation, JSON.stringify({ status: outcome.status, revision: outcome.revision, result: outcome.result ?? null }), at);
+        .run(receiptKey, envelope.projectId, hash, envelope.operation, JSON.stringify({ status: outcome.status, revision: outcome.revision, result: outcome.result ?? null }), at);
+      if (caller) {
+        recordProjectAudit(driver, caller, envelope.operation, nextRevision, envelope.requestId, at);
+      }
       return outcome;
     });
   } catch (error) {
+    if (error instanceof CommandRefusal) {
+      return { status: "refused", code: error.code, reason: error.message, ...(error.details ? { details: error.details } : {}) };
+    }
     const mapped = persistenceErrorFrom(error, undefined);
     if (mapped.code === "PERSISTENCE_BUSY") {
       return { status: "busy", reason: `Database busy; retry the command with the same requestId. ${mapped.message}` };
@@ -179,6 +204,11 @@ export function readOutbox(driver: PersistenceDriver, projectId: string, consume
     .prepare("SELECT last_event_id FROM event_cursor WHERE project_id = ? AND consumer = ?")
     .get(projectId, consumer);
   const lastEventId = cursorRow === undefined ? 0 : Number(cursorRow.last_event_id);
+  return readProjectEvents(driver, projectId, lastEventId, limit);
+}
+
+/** Replay one project's durable events after a cursor acknowledged by the caller. */
+export function readProjectEvents(driver: PersistenceDriver, projectId: string, lastEventId: number, limit: number): OutboxEvent[] {
   return driver
     .prepare("SELECT event_id, kind, payload, created_at FROM event_outbox WHERE project_id = ? AND event_id > ? ORDER BY event_id LIMIT ?")
     .all(projectId, lastEventId, limit)
@@ -194,7 +224,7 @@ export function advanceEventCursor(driver: PersistenceDriver, projectId: string,
   driver
     .prepare(
       "INSERT INTO event_cursor (project_id, consumer, last_event_id) VALUES (?,?,?) "
-      + "ON CONFLICT (project_id, consumer) DO UPDATE SET last_event_id = excluded.last_event_id",
+      + "ON CONFLICT (project_id, consumer) DO UPDATE SET last_event_id = MAX(event_cursor.last_event_id, excluded.last_event_id)",
     )
     .run(projectId, consumer, lastEventId);
 }

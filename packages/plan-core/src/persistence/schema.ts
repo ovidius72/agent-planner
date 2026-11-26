@@ -11,7 +11,62 @@
 import type { PersistenceDriver } from "./driver.js";
 import { PersistenceError } from "./driver.js";
 
-export const STORE_SCHEMA_VERSION = 1;
+export const STORE_SCHEMA_VERSION = 3;
+
+const TASK_CONTEXT_DDL = `
+CREATE TABLE IF NOT EXISTS task_context_reads (
+  session_id TEXT NOT NULL REFERENCES project_sessions(id) ON DELETE CASCADE,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  fingerprint TEXT NOT NULL,
+  PRIMARY KEY (session_id, task_id)
+);
+`;
+
+const PROJECT_ACCESS_DDL = `
+CREATE TABLE IF NOT EXISTS project_principals (
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  principal_id TEXT NOT NULL,
+  PRIMARY KEY (project_id, principal_id)
+);
+CREATE TABLE IF NOT EXISTS project_workspaces (
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  id TEXT NOT NULL,
+  source_path TEXT NOT NULL,
+  clone_key TEXT NOT NULL,
+  PRIMARY KEY (project_id, id),
+  UNIQUE (project_id, source_path)
+);
+CREATE TABLE IF NOT EXISTS project_sessions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  principal_id TEXT NOT NULL,
+  client_kind TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  ended_at TEXT,
+  FOREIGN KEY (project_id, workspace_id) REFERENCES project_workspaces(project_id, id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_project_sessions_scope
+  ON project_sessions(project_id, workspace_id, principal_id, expires_at);
+CREATE TABLE IF NOT EXISTS project_context_reads (
+  session_id TEXT PRIMARY KEY REFERENCES project_sessions(id) ON DELETE CASCADE,
+  fingerprint TEXT NOT NULL,
+  delivered_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS command_audit (
+  project_id TEXT NOT NULL REFERENCES projects(id),
+  request_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  requester_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (project_id, actor_id, request_id)
+);
+`;
 
 export const STORE_SCHEMA_DDL = `
 CREATE TABLE IF NOT EXISTS store_meta (
@@ -27,6 +82,7 @@ CREATE TABLE IF NOT EXISTS projects (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+${PROJECT_ACCESS_DDL}
 CREATE TABLE IF NOT EXISTS features (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id),
@@ -69,6 +125,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   updated_at TEXT NOT NULL,
   UNIQUE (project_id, number)
 );
+${TASK_CONTEXT_DDL}
 CREATE TABLE IF NOT EXISTS task_dependencies (
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   depends_on TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -237,19 +294,19 @@ export function bootstrapStoreSchema(driver: PersistenceDriver): OpenedStore {
   }
   const versionRow = driver.prepare("SELECT value FROM store_meta WHERE key = 'schema_version'").get();
   const persisted = versionRow === undefined ? undefined : Number(versionRow.value);
-  if (persisted === undefined || !Number.isInteger(persisted) || persisted > STORE_SCHEMA_VERSION) {
+  if (persisted === undefined || !Number.isInteger(persisted) || persisted < 1 || persisted > STORE_SCHEMA_VERSION) {
     throw new PersistenceSchemaIncompatible(persisted, STORE_SCHEMA_VERSION);
   }
   if (persisted < STORE_SCHEMA_VERSION) {
-    // Forward migration seam for T494/T495: apply pending migrations inside
-    // one transaction, then bump the version. Today no migration steps exist.
+    // Upgrades add empty access, audit, and task-context tables.
+    // Previously recorded projects, users and command receipts are preserved.
     driver.runExclusive(() => {
       applyMigrations(driver, persisted, STORE_SCHEMA_VERSION);
       driver.prepare("UPDATE store_meta SET value = ? WHERE key = 'schema_version'").run(String(STORE_SCHEMA_VERSION));
     });
   }
   driver.exec("PRAGMA journal_mode = WAL");
-  return { schemaVersion: persisted, created: false };
+  return { schemaVersion: STORE_SCHEMA_VERSION, created: false };
 }
 
 export class PersistenceSchemaIncompatible extends PersistenceError {
@@ -267,8 +324,13 @@ export class PersistenceSchemaIncompatible extends PersistenceError {
   }
 }
 
-function applyMigrations(_driver: PersistenceDriver, _from: number, _to: number): void {
-  // No migrations exist yet; the seam is reserved for T494/T495.
+function applyMigrations(driver: PersistenceDriver, from: number, to: number): void {
+  if (to === 3 && (from === 1 || from === 2)) {
+    if (from === 1) driver.exec(PROJECT_ACCESS_DDL);
+    driver.exec(TASK_CONTEXT_DDL);
+    return;
+  }
+  throw new PersistenceSchemaIncompatible(from, to);
 }
 
 export function readStoreSchemaVersion(driver: PersistenceDriver): number | undefined {

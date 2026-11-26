@@ -13,6 +13,7 @@ import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readLiveServerRecord, serve } from "../../plan-server/dist/index.js";
 import { createPiHost, closePiHost, cleanupPiHosts, toolText, toolDetails } from "./helpers/pi-host-fixture.mjs";
 
 after(async () => {
@@ -38,6 +39,28 @@ async function injectedPrompt(host, prompt = "continue") {
 }
 
 describe("pi-adapter web lifecycle", () => {
+  test("an API call reconnects after the adopted planner endpoint exits", async () => {
+    const host = await createPiHost({ name: "pi-foreign-service-reconnect", seed: "minimal" });
+    const external = await serve({ planRoot: host.planRoot, port: 0, runtimeHome: host.root, staticDir: "", quiet: true });
+    let externalStopped = false;
+    try {
+      const initial = await host.runTool("idea_list", {});
+      assert.deepEqual(toolDetails(initial).ideas, []);
+      const previous = await readLiveServerRecord(host.planRoot);
+      assert.equal(previous.localUrl, external.localUrl);
+      await external.close();
+      externalStopped = true;
+
+      const idea = await host.runTool("idea_create", { title: "Created after service restart" });
+      assert.equal(toolDetails(idea).created, true);
+      assert.notEqual((await readLiveServerRecord(host.planRoot)).bootId, previous.bootId);
+      assert.equal((await host.store.loadIdeas()).ideas[0].title, "Created after service restart");
+    } finally {
+      if (!externalStopped) await external.close();
+      await closePiHost(host);
+    }
+  });
+
   test("startup: planner disabled by default, no blocking prompt", async () => {
     const host = await createPiHost({ name: "t241-startup", seed: "minimal" });
     try {

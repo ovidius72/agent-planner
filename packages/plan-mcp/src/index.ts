@@ -1,15 +1,17 @@
 #!/usr/bin/env node
+import { formatDescriptionFreshness, type HierarchicalDescriptionFreshness } from "@agent-plan/core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlannerApiError, PlanStore, PlanStoreError, ExportService, findPhaseByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, } from "@agent-plan/core";
+import { PlannerApiError, PlannerServiceFailure, resolveLegacyPlannerRoot, ProjectAuthorityUnavailableError, registeredWorkspaceClient, PlanStore, PlanStoreError, renderAcceptedDecisionsSection, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, } from "@agent-plan/core";
+import { ensureRegisteredPlannerRuntime, registeredDashboardInfo } from "@agent-plan/server";
 import type { PlannerServiceStartup } from "./service.js";
-import { ensurePlannerService, plannerApi, plannerServiceStatus, stopPlannerService } from "./service.js";
-import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, TaskFlowRefusal, updateTaskFlow, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, recordDeviationFlow, recoverSessionFlow, listTaskSummaries, readProjectGuidelinesFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { ensurePlannerService, plannerApi, plannerApiForSession, plannerServiceStatus, resetPlannerSessions, stopPlannerService } from "./service.js";
+import { formatIdeaRef } from "@agent-plan/core/naming";
+import { HandoffFlowRefusal, TaskFlowRefusal, type TaskUpdateFlowOutcome, type RecommendReply, type TaskStartSuccess, type TaskStartRefusal, type TaskCompleteSuccess, type TaskCompleteRefusal, type TaskPauseSuccess, type TaskPauseRefusal, type TaskReopenSuccess, type TaskReopenRefusal, type TaskSwitchSuccess, type TaskSwitchRefusal, type DeviationSuccess, type DeviationRefusal, type RecoverySuccess, type RecoveryRefusal, type PlannerContextLoadOutcome, type TaskListSummary, type exportPlannerReport, type readPlannerOverview, type PhaseHandoffWriteRequest, type PhaseRequirementsOutcome, type ProjectGuidelinesOutcome, type FeatureContextOutcome, type PhaseContextOutcome, type TaskDetailContextOutcome } from "@agent-plan/core";
 import type { Feature, Idea, Phase, Requirement, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput, PlanStoreErrorDetails, HandoffContractErrorCode, PhaseHandoffRefusalCode } from "@agent-plan/core";
 
@@ -20,11 +22,75 @@ startReadSession(fallbackPlannerSessionId);
 
 type McpRequestExtra = { sessionId?: string };
 
-function plannerSessionIdFor(extra?: McpRequestExtra): string {
-  const transportSessionId = extra?.sessionId?.trim();
-  const sessionId = transportSessionId ? `mcp:${transportSessionId}` : fallbackPlannerSessionId;
-  startReadSession(sessionId);
-  return sessionId;
+function plannerSessionApi(extra?: McpRequestExtra) {
+  return plannerApiForSession(planRoot(), extra?.sessionId?.trim() || "process", {
+    clientKind: "mcp",
+    clientVersion: MCP_PACKAGE.version,
+  });
+}
+
+/**
+ * The planner session id this adapter uses. The service issues it: a
+ * transport registers once (provenance: clientKind mcp) and every later
+ * operation — local read accounting and API calls alike — uses that id, so a
+ * receipt, ownership claim and audit row name one caller across processes.
+ * `fallbackPlannerSessionId` only covers a registration that could not reach
+ * the service.
+ */
+async function plannerSessionIdFor(extra?: McpRequestExtra): Promise<string> {
+  try {
+    const { sessionId } = await plannerSessionApi(extra);
+    startReadSession(sessionId);
+    return sessionId;
+  } catch {
+    // A session is only needed for identity-scoped operations; a refusal here
+    // is surfaced by the operation itself. Keep the in-process id so local
+    // read accounting still works.
+    startReadSession(fallbackPlannerSessionId);
+    return fallbackPlannerSessionId;
+  }
+}
+
+async function readPlannerDetail<T, Compact = T>(
+  collection: "features" | "phases" | "tasks",
+  ref: string,
+  full: boolean | undefined,
+  extra: McpRequestExtra | undefined,
+) {
+  const detailPath = `/${collection}/${encodeURIComponent(ref)}`;
+  try {
+    if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+      const { client, prefix } = await discoveryApi();
+      return { data: await client.request<T | Compact>("GET", `${prefix}${detailPath}${full ? "?full=true" : ""}`), sessionId: undefined };
+    }
+    if (full) {
+      const { client, sessionId } = await plannerSessionApi(extra);
+      const scope = collection === "tasks" ? "?scope=task" : "";
+      return { data: await client.request<T>("GET", `/context${detailPath}${scope}`), sessionId };
+    }
+    const client = await plannerApi(planRoot());
+    return { data: await client.request<Compact>("GET", detailPath), sessionId: undefined };
+  } catch (error) {
+    if (error instanceof PlannerApiError && ["FEATURE_NOT_FOUND", "FEATURE_REF_AMBIGUOUS", "PHASE_NOT_FOUND", "TASK_NOT_FOUND"].includes(error.code)) {
+      return { message: error.message };
+    }
+    throw error;
+  }
+}
+
+async function requestLifecycle<Success, Refusal extends { ok: false; code: string; message: string }>(
+  extra: McpRequestExtra | undefined,
+  path: string,
+  body: unknown,
+): Promise<(Success & { ok: true }) | Refusal> {
+  try {
+    const { client } = await plannerSessionApi(extra);
+    return { ...await client.request<Success>("POST", path, body), ok: true };
+  } catch (error) {
+    if (!(error instanceof PlannerApiError) && !(error instanceof PlannerServiceFailure)) throw error;
+    if (error instanceof PlannerServiceFailure && !["PERSISTENCE_VERIFICATION_FAILED", "SESSION_RECOVERY_VERIFICATION_FAILED", "SESSION_RECOVERY_FAILED"].includes(error.code)) throw error;
+    return { ...error.details, ok: false, code: error.code, message: error.message } as Refusal;
+  }
 }
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; structuredContent?: Record<string, unknown>; isError?: boolean };
@@ -128,6 +194,7 @@ function mcpAcceptedDecisionMutationFailure(error: unknown, outcome: "created" |
 
 /** Dependency mutations: flow refusals keep their typed code, store errors keep their own. */
 function taskDependencyFailure(error: unknown, fallbackCode: string, fallbackMessage: string): ToolResult {
+  if (error instanceof PlannerApiError) return { ...text(error.message, { updated: false, errorCode: error.code }), isError: true };
   if (error instanceof TaskFlowRefusal) {
     return { ...text(error.message, { updated: false, errorCode: error.code }), isError: true };
   }
@@ -139,7 +206,7 @@ function taskDependencyFailure(error: unknown, fallbackCode: string, fallbackMes
 }
 
 function taskStartError(
-  outcome: ReturnType<typeof taskStartDenied>,
+  outcome: Omit<ReturnType<typeof taskStartDenied>, "errorCode"> & { errorCode: string },
   structuredContent: Record<string, unknown> = {},
 ): ToolResult {
   return {
@@ -179,8 +246,126 @@ const MCP_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/mcp")
 const CORE_PACKAGE = resolvedPackageVersion("@agent-plan/core", import.meta.url);
 const staleServerNotice = createStaleProcessCheck(MCP_PACKAGE);
 
+let discoveredPlanRoot: string | undefined;
+let workspaceDiscoveryError: Error | undefined;
+
 function planRoot(): string {
-  return process.env.AGENT_PLAN_ROOT || join(process.cwd(), ".planner");
+  if (workspaceDiscoveryError) throw workspaceDiscoveryError;
+  return discoveredPlanRoot ?? process.env.AGENT_PLAN_ROOT ?? join(process.cwd(), ".planner");
+}
+
+async function discoveryApi() {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    return registeredWorkspaceClient(process.cwd());
+  }
+  return { client: await plannerApi(planRoot()), prefix: "" };
+}
+
+let registeredSession: { prefix: string; sessionId: string } | undefined;
+let registeredHeartbeat: ReturnType<typeof setInterval> | undefined;
+let pendingRegisteredSession: { prefix: string; result: Promise<{ sessionId: string }> } | undefined;
+
+function maintainRegisteredSession(session: NonNullable<typeof registeredSession>): void {
+  clearInterval(registeredHeartbeat);
+  let renewing = false;
+  registeredHeartbeat = setInterval(async () => {
+    if (registeredSession !== session || renewing) return;
+    renewing = true;
+    try {
+      const { client, prefix } = await registeredWorkspaceClient(process.cwd());
+      if (registeredSession === session && prefix === session.prefix) {
+        await client.request("POST", `${prefix}/sessions/${encodeURIComponent(session.sessionId)}/heartbeat`);
+      }
+    } catch (error) {
+      if (registeredSession === session && error instanceof PlannerApiError && ["SESSION_EXPIRED", "SESSION_NOT_FOUND"].includes(error.code)) {
+        registeredSession = undefined;
+        clearInterval(registeredHeartbeat);
+      }
+    } finally {
+      renewing = false;
+    }
+  }, 30_000).unref();
+}
+
+async function registeredSessionClient() {
+  const { client, prefix } = await registeredWorkspaceClient(process.cwd());
+  let sessionId = registeredSession?.prefix === prefix ? registeredSession.sessionId : undefined;
+  if (sessionId) {
+    try {
+      await client.request("POST", `${prefix}/sessions/${encodeURIComponent(sessionId)}/heartbeat`);
+    } catch (error) {
+      if (!(error instanceof PlannerApiError) || !["SESSION_EXPIRED", "SESSION_NOT_FOUND"].includes(error.code)) throw error;
+      sessionId = undefined;
+    }
+  }
+  if (!sessionId) {
+    if (pendingRegisteredSession?.prefix !== prefix) {
+      pendingRegisteredSession = {
+        prefix,
+        result: client.request<{ sessionId: string }>("POST", `${prefix}/sessions`, { clientKind: "mcp" }),
+      };
+    }
+    const pending = pendingRegisteredSession;
+    try {
+      sessionId = (await pending.result).sessionId;
+      if (pendingRegisteredSession === pending) {
+        registeredSession = { prefix, sessionId };
+        maintainRegisteredSession(registeredSession);
+      }
+    } finally {
+      if (pendingRegisteredSession === pending) pendingRegisteredSession = undefined;
+    }
+  }
+  client.useSession(sessionId);
+  return { client, prefix, sessionId };
+}
+
+async function createRegisteredPlannerEntity(input: Record<string, unknown>) {
+  try {
+    const { client, prefix } = await registeredSessionClient();
+    const result = await client.request<{ message: string; ref: string }>(
+      "POST", `${prefix}/entities/create`, { ...input, requestId: randomUUID() },
+    );
+    return text(result.message, { ...result, created: true });
+  } catch (error) {
+    if (error instanceof PlannerApiError) return text(error.message, { created: false, errorCode: error.code });
+    throw error;
+  }
+}
+
+async function deletePlannerEntity<T>(
+  kind: "feature" | "phase" | "task", ref: string, options: { cascade?: boolean; confirmed?: boolean } = {},
+): Promise<T> {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    const { client, prefix } = await registeredSessionClient();
+    return client.request<T>("POST", `${prefix}/entities/delete`, { kind, ref, ...options, requestId: randomUUID() });
+  }
+  const api = await plannerApi(planRoot());
+  const query = options.cascade ? "?cascade=true" : options.confirmed ? "?confirmed=true" : "";
+  return api.request<T>("DELETE", `/${kind}s/${encodeURIComponent(ref)}${query}`);
+}
+
+async function updateRegisteredPlannerEntity(kind: string, ref: string, updates: Record<string, unknown>, action: "update" | "discuss" = "update") {
+  try {
+    const { client, prefix } = await registeredSessionClient();
+    const result = await client.request<{ ref: string; updatedFields: string[]; lostChecklistTicks?: string[] }>(
+      "POST", `${prefix}/entities/${action}`, { kind, ref, updates, requestId: randomUUID() },
+    );
+    return text([
+      `Updated ${result.ref}: ${result.updatedFields.join(", ")}.`,
+      ...(result.lostChecklistTicks?.length ? [`Unchecked after replacement: ${result.lostChecklistTicks.join(", ")}.`] : []),
+    ].join("\n"), { ...result, updated: true, ...(action === "discuss" ? { discussed: true } : {}) });
+  } catch (error) {
+    if (error instanceof PlannerApiError) return text(error.message, { updated: false, errorCode: error.code });
+    throw error;
+  }
+}
+
+async function loadRegisteredContext(maxChars: number | undefined) {
+  await ensureRegisteredPlannerRuntime();
+  const { client, prefix, sessionId } = await registeredSessionClient();
+  const reply = await client.request<{ text: string; structured: Record<string, unknown> }>("POST", `${prefix}/context/load`, { maxChars });
+  return text(reply.text, { ...reply.structured, sessionId });
 }
 
 function store(): PlanStore {
@@ -265,34 +450,24 @@ function withStaleServerNotice<T extends ToolResult>(result: T): T {
 }
 
 {
-  const sessionOperations = new Set(["planner-load", "planner-task-start", "planner-task-switch", "planner-task-pause", "planner-task-complete", "planner-task-reopen", "planner-task-update", "planner-task-deviation", "planner-session-recover"]);
+  const sessionOperations = new Set(["planner-load", "planner-task-start", "planner-task-switch", "planner-task-reopen"]);
   const registeredSessions = new Set<string>();
   const registerToolUnwrapped = server.registerTool.bind(server) as (...args: unknown[]) => unknown;
   (server as unknown as { registerTool: (...args: unknown[]) => unknown }).registerTool = (...args: unknown[]) => {
     const handler = args[args.length - 1] as (...handlerArgs: unknown[]) => Promise<ToolResult> | ToolResult;
     const wrapped = async (...handlerArgs: unknown[]) => {
       const invoke = async () => foldTextIntoStructured(withStaleServerNotice(await handler(...handlerArgs)));
-      if (!sessionOperations.has(args[0] as string)) return invoke();
+      if (!sessionOperations.has(args[0] as string) || workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) return invoke();
       const st = store();
       if (!(await st.exists())) return invoke();
-      const sessionId = plannerSessionIdFor(handlerArgs[1] as McpRequestExtra | undefined);
-      const prepare = async () => {
-        if (!registeredSessions.has(sessionId)) {
-          await st.registerSession(sessionId);
-          registeredSessions.add(sessionId);
-        }
-      };
-      // Server/watchers must be created outside a write transaction's async context.
-      if (args[0] === "planner-load") {
-        await st.runBatch(prepare);
-        return invoke();
+      const sessionId = await plannerSessionIdFor(handlerArgs[1] as McpRequestExtra | undefined);
+      // Preserve MCP process-liveness evidence for legacy recovery while
+      // the service owns the lifecycle write and its resume refresh.
+      if (!registeredSessions.has(sessionId)) {
+        await st.registerSession(sessionId);
+        registeredSessions.add(sessionId);
       }
-      return st.runBatch(async () => {
-        await prepare();
-        const result = await invoke();
-        if (!result.isError) await st.refreshResume(undefined, undefined, sessionId);
-        return result;
-      });
+      return invoke();
     };
     return registerToolUnwrapped(...args.slice(0, -1), wrapped);
   };
@@ -323,13 +498,14 @@ server.registerTool("planner-export", {
     full: z.boolean().optional().describe("If true, include full detail for every feature, phase, and task. Defaults to false (summary only)."),
   },
 }, async ({ full = false }) => {
-  const st = await requireStore();
-  const plan = await st.loadAll();
-  const exportService = new ExportService();
-  const markdown = exportService.exportToMarkdown(plan, full);
-
-  const fs = await import("node:fs/promises");
-  await fs.writeFile(join(st.root, "EXPORT.md"), markdown, "utf-8");
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    const { client, prefix } = await discoveryApi();
+    const { markdown } = await client.request<{ markdown: string }>("GET", `${prefix}/project/export?full=${full}`);
+    const preview = markdown.slice(0, 1000);
+    return text(`Project export generated. Summary results:\n\n${preview}${markdown.length > preview.length ? "... (full report in the markdown result)" : ""}`, { markdown });
+  }
+  const client = await plannerApi(planRoot());
+  const { markdown } = await client.request<Awaited<ReturnType<typeof exportPlannerReport>>>("POST", "/project/export", { full });
 
   return text(`Project export generated. Summary results:\n\n${markdown.slice(0, 1000)}${markdown.length > 1000 ? "... (full report in .planner/EXPORT.md)" : ""}`);
 });
@@ -365,6 +541,8 @@ server.registerTool("planner-init", {
   const st = store();
   if (await st.exists()) return text(`.planner/ already exists at ${st.root}`);
   await st.init(projectName.trim());
+  // A brand-new plan root has no issued sessions; forget the previous ones.
+  resetPlannerSessions();
   const project = await st.loadProject();
   if (description !== undefined) project.description = description.trim();
   if (goal !== undefined) project.goal = goal.trim();
@@ -375,93 +553,21 @@ server.registerTool("planner-init", {
 server.registerTool("planner-show", {
   description: "Show a compact planner overview with explicit active-task evidence: project metadata, counts, authoritative active task refs (or a verified-empty state), and a one-line summary of each feature. Never infer that no task is active from omitted task detail. Use planner-feature-list / planner-phase-list / planner-task-list for discovery and planner-*-show for full entity detail.",
 }, async () => {
-  const st = await requireStore();
-  const features = (await st.loadFeatures()).features;
-  const phases = await st.loadAllPhases();
-  const allTasks = phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task })));
-  const totalTasks = allTasks.length;
-  const activeTasks = allTasks
-    .filter(({ task }) => task.status === "in-progress")
-    .map(({ phase, task }) => ({
-      id: task.id,
-      ref: taskCompositeRef(task, phase, features),
-      title: task.title,
-      phaseId: phase.id,
-      featureId: phase.featureId ?? null,
-      status: task.status,
-    }));
-  const activeTaskState = activeTasks.length === 0 ? "none" : activeTasks.length === 1 ? "single" : "conflict";
-  const project = await st.loadProject();
-  const projectDecisionContext = buildBoundedAcceptedDecisionContext([{ scope: "project", decisions: project.acceptedDecisions }]);
-  const manifest = await st.loadManifest();
-  const featureLines = features.map((feature) => {
-    const featurePhases = phases.filter((phase) => phase.featureId === feature.id);
-    const taskCount = featurePhases.reduce((total, phase) => total + phase.tasks.length, 0);
-    return `- ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} — ${feature.name} (${feature.status}; ${featurePhases.length} phases, ${taskCount} tasks)`;
-  });
-  // P104(F005)/T422: a phase can be left in-progress with no active task and
-  // nothing else says so on this cheap read — this renders that fact,
-  // priority-ordered, instead of leaving it discoverable only by paying for
-  // planner-task-recommend.
-  const openPhaseWork = listOpenPhaseWork(phases, features);
-  const openPhaseWorkText = openPhaseWorkLines(openPhaseWork);
-  const summary = [
-    `📋 ${project.name}`,
-    `Description: ${project.description || "(not set)"}`,
-    ...(project.descriptionRef ? [`Description ref: ${project.descriptionRef}`] : []),
-    `Goal: ${project.goal || "(not set)"}`,
-    projectDecisionContext.content,
-    `Features: ${features.length}  |  Phases: ${phases.length}  |  Tasks: ${totalTasks}`,
-    activeTasks.length === 0
-      ? "Active tasks: none (verified from all persisted phase task statuses)"
-      : `Active tasks (${activeTasks.length})${activeTaskState === "conflict" ? " — CONFLICT: multiple tasks are in progress" : ""}:\n${activeTasks.map((task) => `- ${task.ref} — ${task.title} (in-progress)`).join("\n")}`,
-    ...(openPhaseWorkText ? [`In-progress phases with work left (priority order):`, openPhaseWorkText] : []),
-    `Updated: ${manifest.updatedAt || "(unknown)"}`,
-    "",
-    "Features:",
-    featureLines.join("\n") || "(none)",
-  ].join("\n");
-  // Compact structured overview (no full plan: avoids 1M+ char token overflow).
-  const overview = {
-    project: {
-      name: project.name,
-      description: project.description || null,
-      descriptionRef: project.descriptionRef || null,
-      goal: project.goal || null,
-      // Identity only: `summary` above already carries every canonical field
-      // (decision, rationale, implementationNotes) through projectDecisionContext,
-      // bounded at MAX_ACCEPTED_DECISION_CONTEXT_CHARS. Echoing the full
-      // AcceptedDecision objects here too would duplicate that content in both
-      // channels — the discipline handoff-reply.ts and mutation-reply.ts hold
-      // to (P104(F005)/T419). Full canonical detail for every decision: planner-load.
-      acceptedDecisions: project.acceptedDecisions.map((decision) => ({ id: decision.id, title: decision.title, acceptedAt: decision.acceptedAt })),
-      updatedAt: manifest.updatedAt || null,
-    },
-    counts: { features: features.length, phases: phases.length, tasks: totalTasks, activeTasks: activeTasks.length },
-    activeTaskState,
-    activeTasks,
-    openPhaseWork: boundedOpenPhaseWork(openPhaseWork),
-    openPhaseWorkTotal: openPhaseWork.length,
-    features: features.map((feature) => ({
-      ref: formatFeatureRef(feature.number),
-      shortId: feature.shortId || null,
-      name: feature.name,
-      status: feature.status,
-      phases: phases.filter((p) => p.featureId === feature.id).length,
-      tasks: phases.filter((p) => p.featureId === feature.id).reduce((t, p) => t + p.tasks.length, 0),
-    })),
-  };
+  const { client, prefix } = await discoveryApi();
+  const { summary, overview } = await client.request<Awaited<ReturnType<typeof readPlannerOverview>>>("GET", `${prefix}/project/overview`);
   return text(summary, { overview });
 });
 
 server.registerTool("planner-description-freshness", {
   description: "Preview deterministic child-to-parent description drift. Returns exact stale phase/feature refs and leaf-to-root reconciliation steps without rewriting user-authored descriptions.",
 }, async () => {
-  const st = await requireStore();
-  const freshness = await st.previewDescriptionReconciliation();
-  if (!freshness.reconciliationRequired) return text("Description hierarchy is fresh; no parent reconciliation is required.", { ...freshness });
-  const lines = freshness.reconciliationPreview.map((step) => `- ${step.ownerRef} after ${step.causedByRef}: ${step.action}`);
-  return text(`Parent description reconciliation required (${freshness.staleParentRefs.length}):\n${lines.join("\n")}`, { ...freshness });
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    const { client, prefix } = await discoveryApi();
+    const freshness = await client.request<HierarchicalDescriptionFreshness>("GET", `${prefix}/project/description-freshness`);
+    return text(formatDescriptionFreshness(freshness), { ...freshness });
+  }
+  const freshness = await (await requireStore()).previewDescriptionReconciliation();
+  return text(formatDescriptionFreshness(freshness), { ...freshness });
 });
 
 server.registerTool("planner-repair", {
@@ -505,12 +611,19 @@ server.registerTool("planner-project-language", {
     chatLanguage: z.string().optional(),
   },
 }, async ({ contentLanguage, chatLanguage }) => {
-  const api = await plannerApi(planRoot());
+  const fields = { contentLanguage, chatLanguage };
   try {
-    const data = await api.request<{ contentLanguage: string; chatLanguage: string }>("PUT", "/project/language", {
-      ...(contentLanguage !== undefined ? { contentLanguage } : {}),
-      ...(chatLanguage !== undefined ? { chatLanguage } : {}),
-    });
+    type Preferences = { contentLanguage: string; chatLanguage: string };
+    let data: Preferences;
+    if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+      const { client, prefix } = await discoveryApi();
+      data = (await client.request<{ project: Preferences }>("POST", `${prefix}/project/update`, {
+        requestId: randomUUID(), fields,
+      })).project;
+    } else {
+      const api = await plannerApi(planRoot());
+      data = await api.request<Preferences>("PUT", "/project/language", fields);
+    }
     return text(
       `Saved language preferences: content=${data.contentLanguage || "(unset)"}, chat=${data.chatLanguage || "(unset)"}`,
     );
@@ -568,10 +681,14 @@ server.registerTool("planner-project-discuss", {
 server.registerTool("planner-project-guidelines-show", {
   description: "Read the canonical Project Guidelines / Coding Standard section for this project. Call this when planner-task-start or planner-task-switch nextActions require it, and keep the guidance in working memory while doing task work.",
 }, async (extra) => {
-  const plannerSessionId = plannerSessionIdFor(extra);
-  // Same read flow as GET /api/v2/context/guidelines: the receipt is only
-  // recorded when non-empty guidelines were actually delivered.
-  const outcome = await readProjectGuidelinesFlow(await requireStore(), plannerSessionId);
+  let outcome: ProjectGuidelinesOutcome;
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    const { client, prefix } = await discoveryApi();
+    outcome = await client.request<ProjectGuidelinesOutcome>("GET", `${prefix}/project/guidelines`);
+  } else {
+    const { client } = await plannerSessionApi(extra);
+    outcome = await client.request<ProjectGuidelinesOutcome>("GET", "/context/guidelines");
+  }
   const content = outcome.projectGuidelines.content.trim();
   return text(
     content
@@ -587,9 +704,12 @@ server.registerTool("planner-project-guidelines-update", {
     content: z.string().describe("Full Project Guidelines markdown/text. Pass an empty string to clear the section."),
   },
 }, async ({ content }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ cleared: boolean; projectGuidelines: { updatedAt: string } }>("PUT", "/project/guidelines", { content });
+    const { client, prefix } = await discoveryApi();
+    const data = await client.request<{ cleared: boolean; projectGuidelines: { updatedAt: string } }>(
+      prefix ? "POST" : "PUT", prefix ? `${prefix}/project/update` : "/project/guidelines",
+      prefix ? { requestId: randomUUID(), fields: { projectGuidelines: { content } } } : { content },
+    );
     return text(
       data.cleared
         ? "Project Guidelines cleared."
@@ -628,11 +748,11 @@ server.registerTool("planner-project-context-migrate", {
     description: "List features (compact: F00x · shortId — name (status; priority N; N phases, M tasks)). Pass featureRef to filter. Use this to discover refs cheaply — do NOT read .planner/ files or planner-plan-get full=true to find entities.",
     inputSchema: { featureRef: z.string().optional().describe("Optional: filter to one feature (F00x/shortId/UUID/name).") },
   }, async ({ featureRef }) => {
-    const api = await plannerApi(planRoot());
+    const { client, prefix } = await discoveryApi();
     const query = featureRef ? `?featureRef=${encodeURIComponent(featureRef)}` : "";
     let items: Array<{ ref: string; shortId: string; name: string; status: string; priority: number; phaseCount: number; taskCount: number }>;
     try {
-      const data = await api.request<{ features: typeof items }>("GET", `/features${query}`);
+      const data = await client.request<{ features: typeof items }>("GET", `${prefix}/features${query}`);
       items = data.features;
     } catch (error) {
       // An unresolved filter is an empty selection here, like the in-process flow.
@@ -647,14 +767,14 @@ server.registerTool("planner-project-context-migrate", {
     description: "List phases (compact: F00x/P00x · shortId — title (status; priority N; N tasks) [F00x]). Filters: featureRef, status. Cheap discovery — do NOT read .planner/ files or planner-plan-get full=true.",
     inputSchema: { featureRef: z.string().optional().describe("Optional: filter to one feature (F00x/shortId/UUID/name)."), status: z.string().optional().describe("Optional: filter by status name.") },
   }, async ({ featureRef, status }) => {
-    const api = await plannerApi(planRoot());
+    const { client, prefix } = await discoveryApi();
     const params = [
       ...(featureRef ? [`featureRef=${encodeURIComponent(featureRef)}`] : []),
       ...(status ? [`status=${encodeURIComponent(status)}`] : []),
     ];
     let items: Array<{ ref: string; shortId: string; title: string; status: string; priority: number; taskCount: number; featureNumber: number | null }>;
     try {
-      const data = await api.request<{ phases: typeof items }>("GET", `/phases${params.length ? `?${params.join("&")}` : ""}`);
+      const data = await client.request<{ phases: typeof items }>("GET", `${prefix}/phases${params.length ? `?${params.join("&")}` : ""}`);
       items = data.phases;
     } catch (error) {
       // A filter that names no feature is a plain message here, like the flow.
@@ -672,11 +792,19 @@ server.registerTool("planner-project-context-migrate", {
     description: "List tasks (compact: F00x/P00x/T00x · shortId — title (status; priority N)). Filters: featureRef, phaseRef, status. Cheap discovery — do NOT read .planner/ files or planner-plan-get full=true.",
     inputSchema: { featureRef: z.string().optional(), phaseRef: z.string().optional(), status: z.string().optional().describe("Optional: filter by status name.") },
   }, async ({ featureRef, phaseRef, status }) => {
-    const st = await requireStore();
-    const outcome = await listTaskSummaries(st, { featureRef, phaseRef, status });
-    if (!outcome.ok) return text(outcome.message);
-    const out = outcome.items.map((task) => `- ${task.ref}${task.shortId ? ` · ${task.shortId}` : ""} — ${task.title} (${task.status}${task.priority > 0 ? `; priority ${task.priority}` : ""})`);
-    return text(out.join("\n") || "No tasks", { tasks: outcome.items });
+    const { client, prefix } = await discoveryApi();
+    const query = new URLSearchParams();
+    if (featureRef) query.set("featureRef", featureRef);
+    if (phaseRef) query.set("phaseRef", phaseRef);
+    if (status) query.set("status", status);
+    try {
+      const { tasks } = await client.request<{ tasks: TaskListSummary[] }>("GET", `${prefix}/tasks?${query}`);
+      const out = tasks.map((task) => `- ${task.ref}${task.shortId ? ` · ${task.shortId}` : ""} — ${task.title} (${task.status}${task.priority > 0 ? `; priority ${task.priority}` : ""})`);
+      return text(out.join("\n") || "No tasks", { tasks });
+    } catch (error) {
+      if (error instanceof PlannerApiError && ["FEATURE_NOT_FOUND", "PHASE_NOT_FOUND"].includes(error.code)) return text(error.message);
+      throw error;
+    }
   });
 
 server.registerTool("planner-accepted-decision-create", {
@@ -690,16 +818,13 @@ server.registerTool("planner-accepted-decision-create", {
     implementationNotes: z.string().optional(),
   },
 }, async ({ targetType, targetRef, title, decision, rationale, implementationNotes }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ targetRef: string; acceptedDecision: { title: string } }>("POST", "/accepted-decisions", {
-      targetType,
-      ...(targetRef !== undefined ? { targetRef } : {}),
-      title,
-      ...(decision !== undefined ? { decision } : {}),
-      ...(rationale !== undefined ? { rationale } : {}),
-      ...(implementationNotes !== undefined ? { implementationNotes } : {}),
-    });
+    const { client, prefix } = await discoveryApi();
+    const fields = { title, decision, rationale, implementationNotes };
+    const target = { targetType, targetRef };
+    const data = await client.request<{ targetRef: string; acceptedDecision: { title: string } }>("POST",
+      prefix ? `${prefix}/accepted-decisions/create` : "/accepted-decisions",
+      prefix ? { ...target, fields, requestId: randomUUID() } : { ...target, ...fields });
     return text(`Accepted decision created on ${data.targetRef}: ${data.acceptedDecision.title}`, {
       created: true,
       targetType,
@@ -738,20 +863,14 @@ server.registerTool("planner-accepted-decision-update", {
       readBackCommand: "planner-show or the owning entity show tool",
     });
   }
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ targetRef: string; acceptedDecision: { title: string } }>(
-      "PUT",
-      `/accepted-decisions/${encodeURIComponent(decisionId)}`,
-      {
-        targetType,
-        ...(targetRef !== undefined ? { targetRef } : {}),
-        ...(title !== undefined ? { title } : {}),
-        ...(decision !== undefined ? { decision } : {}),
-        ...(rationale !== undefined ? { rationale } : {}),
-        ...(implementationNotes !== undefined ? { implementationNotes } : {}),
-      },
-    );
+    const { client, prefix } = await discoveryApi();
+    const fields = { title, decision, rationale, implementationNotes };
+    const target = { targetType, targetRef };
+    const data = await client.request<{ targetRef: string; acceptedDecision: { title: string } }>(
+      prefix ? "POST" : "PUT",
+      prefix ? `${prefix}/accepted-decisions/update` : `/accepted-decisions/${encodeURIComponent(decisionId)}`,
+      prefix ? { ...target, decisionId, fields, requestId: randomUUID() } : { ...target, ...fields });
     return text(`Accepted decision updated on ${data.targetRef}: ${data.acceptedDecision.title}`, {
       updated: true,
       targetType,
@@ -775,14 +894,13 @@ server.registerTool("planner-accepted-decision-delete", {
     confirmed: z.boolean().describe("Must be true to confirm deleting this accepted decision."),
   },
 }, async ({ targetType, targetRef, decisionId, confirmed }) => {
-  const api = await plannerApi(planRoot());
   const query = new URLSearchParams({ targetType, confirmed: confirmed ? "true" : "false" });
   if (targetRef !== undefined) query.set("targetRef", targetRef);
   try {
-    const data = await api.request<{ targetRef: string; acceptedDecision: { title: string } }>(
-      "DELETE",
-      `/accepted-decisions/${encodeURIComponent(decisionId)}?${query.toString()}`,
-    );
+    const { client, prefix } = await discoveryApi();
+    const data = await client.request<{ targetRef: string; acceptedDecision: { title: string } }>(
+      prefix ? "POST" : "DELETE", prefix ? `${prefix}/accepted-decisions/delete` : `/accepted-decisions/${encodeURIComponent(decisionId)}?${query}`,
+      prefix ? { targetType, targetRef, decisionId, confirmed, requestId: randomUUID() } : undefined);
     return text(`Accepted decision deleted from ${data.targetRef}: ${data.acceptedDecision.title}`, {
       deleted: true,
       targetType,
@@ -818,6 +936,7 @@ server.registerTool("planner-feature-add", {
     status: z.enum(STATUS_VALUES).optional(),
   },
 }, async ({ name, description, status }) => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) return createRegisteredPlannerEntity({ kind: "feature", title: name, description, status });
   const api = await plannerApi(planRoot());
   try {
     const data = await api.request<{ message: string }>("POST", "/features", {
@@ -834,27 +953,25 @@ server.registerTool("planner-feature-add", {
 
 server.registerTool("planner-feature-show", {
   description: "Show a feature by id or name. Pass full=true for the description and every canonical Accepted Decision field.",
-    inputSchema: { feature: z.string().min(1).describe("Feature ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."), full: z.boolean().optional().describe("If true, include the feature description. Default: compact identity only (saves tokens).") },
-  }, async ({ feature: ref, full }, extra) => {
-  const plannerSessionId = plannerSessionIdFor(extra);
-  const st = await requireStore();
-  const outcome = await showFeature(st, ref);
-  if (!outcome.ok) return text(outcome.message);
-  const { feature, ref: featureRef, phaseCount } = outcome;
-    const summary = `${feature.name} — ${featureRef}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phaseCount} phases)`;
-    const descriptionRefBlock = feature.descriptionRef ? `\n\nDescription reference:\n- ${feature.descriptionRef}` : "";
-    if (!full) return text(summary);
-    const decisionBlock = renderAcceptedDecisionsSection("Accepted Decisions", feature.acceptedDecisions);
-    const result = text(`${summary}\n\n${feature.description || ""}${descriptionRefBlock}\n\n${decisionBlock}`, {
-      feature: {
-        ref: featureRef,
-        description: feature.description,
-        descriptionRef: feature.descriptionRef || "",
-        acceptedDecisions: feature.acceptedDecisions,
-      },
-    });
-    markCanonicalFullReadForSessionId(plannerSessionId, "feature", feature, result.content[0]!.text);
-    return result;
+  inputSchema: { feature: z.string().min(1).describe("Feature ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."), full: z.boolean().optional().describe("If true, include the feature description. Default: compact identity only (saves tokens).") },
+}, async ({ feature: ref, full }, extra) => {
+  const outcome = await readPlannerDetail<Pick<FeatureContextOutcome, "feature" | "ref" | "phaseCount">>("features", ref, full, extra);
+  if (!outcome.data) return text(outcome.message);
+  const { feature, ref: featureRef, phaseCount } = outcome.data;
+  const summary = `${feature.name} — ${featureRef}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phaseCount} phases)`;
+  const descriptionRefBlock = feature.descriptionRef ? `\n\nDescription reference:\n- ${feature.descriptionRef}` : "";
+  if (!full) return text(summary);
+  const decisionBlock = renderAcceptedDecisionsSection("Accepted Decisions", feature.acceptedDecisions);
+  const result = text(`${summary}\n\n${feature.description || ""}${descriptionRefBlock}\n\n${decisionBlock}`, {
+    feature: {
+      ref: featureRef,
+      description: feature.description,
+      descriptionRef: feature.descriptionRef || "",
+      acceptedDecisions: feature.acceptedDecisions,
+    },
+  });
+  if (outcome.sessionId) markCanonicalFullReadForSessionId(outcome.sessionId, "feature", feature, result.content[0]!.text);
+  return result;
 });
 
 server.registerTool("planner-feature-discuss", {
@@ -868,6 +985,12 @@ server.registerTool("planner-feature-discuss", {
     dependencies: z.array(z.string()).optional().describe("Cross-feature or external dependencies."),
   },
 }, async ({ feature: ref, description, descriptionRef, workDone, workRemaining, dependencies }) => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    return updateRegisteredPlannerEntity("feature", ref, {
+      description, descriptionRef, workDone, workRemaining, dependencies,
+      contextReadyReason: "Updated through planner-feature-discuss MCP tool.",
+    }, "discuss");
+  }
   const api = await plannerApi(planRoot());
   try {
     const data = await api.request<{ ref: string; feature: Feature; updatedFields: string[] }>(
@@ -930,6 +1053,7 @@ server.registerTool("planner-feature-update", {
     priority: z.number().int().nonnegative().optional().describe("Display order within the project (lower = higher). Tiebreak by number then createdAt."),
   },
 }, async ({ feature: ref, ...updates }) => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) return updateRegisteredPlannerEntity("feature", ref, updates);
   const api = await plannerApi(planRoot());
   try {
     const data = await api.request<{ ref: string; feature: Feature; updatedFields: string[] }>(
@@ -978,11 +1102,9 @@ server.registerTool("planner-feature-delete", {
     cascade: z.boolean().optional().describe("Also delete phases belonging to this feature"),
   },
 }, async ({ feature: ref, cascade }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ ref: string; id: string; phaseCount: number; cascade: boolean }>(
-      "DELETE",
-      `/features/${encodeURIComponent(ref)}${cascade ? "?cascade=true" : ""}`,
+    const data = await deletePlannerEntity<{ ref: string; id: string; phaseCount: number; cascade: boolean }>(
+      "feature", ref, { cascade: cascade === true },
     );
     return text(
       `✅ Feature deleted: ${data.ref}${data.cascade ? `; deleted ${data.phaseCount} phases` : `; unlinked ${data.phaseCount} phases`}`,
@@ -1004,6 +1126,7 @@ server.registerTool("planner-phase-add", {
     description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Prefix with 'design-only' for pre-implementation design tasks.").describe(`Required code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Not a one-liner. ${LONG_TEXT_LIMIT_NOTICE}`),
   },
 }, async ({ title, feature: featureRef, summary, description }) => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) return createRegisteredPlannerEntity({ kind: "phase", title, description, featureRef, summary });
   const api = await plannerApi(planRoot());
   try {
     const data = await api.request<{ message: string }>("POST", "/phases", {
@@ -1021,47 +1144,46 @@ server.registerTool("planner-phase-add", {
 
 server.registerTool("planner-phase-show", {
   description: "Show a phase by id or name, including every canonical Accepted Decision field and derived linked requirements in the full view.",
-    inputSchema: { phase: z.string().min(1).describe("Phase ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."), full: z.boolean().optional().describe("If true, include the phase description. Default: compact identity only (saves tokens).") },
-  }, async ({ phase: ref, full }, extra) => {
-  const plannerSessionId = plannerSessionIdFor(extra);
-  const st = await requireStore();
-    const outcome = await showPhase(st, ref);
-    if (!outcome.ok) return text(outcome.message);
-    const { phase, ref: phaseRef, taskCount, linkedRequirements } = outcome;
-    const reqCount = linkedRequirements.length;
-    const summary = `${phase.title} — ${phaseRef}${phase.shortId ? ` · ${phase.shortId}` : ""} (${phase.status}; ${taskCount} tasks${reqCount ? `; ${reqCount} linked requirement${reqCount === 1 ? "" : "s"}` : ""})`;
-    const descriptionRefBlock = phase.descriptionRef ? `\n\nDescription reference:\n- ${phase.descriptionRef}` : "";
-    const requirementsBlock = reqCount > 0
-      ? `\n\nLinked requirements:\n${linkedRequirements.map((requirement) => `- ${requirement.title}`).join("\n")}`
-      : "";
-    if (!full) return text(summary, {
-      phase: {
-        ref: phaseRef,
-        shortId: phase.shortId,
-        title: phase.title,
-        summary: phase.summary,
-        status: phase.status,
-        taskCount,
-      },
-      linkedRequirements,
-    });
-    const decisionBlock = renderAcceptedDecisionsSection("Accepted Decisions", phase.acceptedDecisions);
-    const result = text(`${summary}\n\n${phase.description || ""}${descriptionRefBlock}${requirementsBlock}\n\n${decisionBlock}`, {
-      phase: {
-        ref: phaseRef,
-        shortId: phase.shortId,
-        title: phase.title,
-        summary: phase.summary,
-        status: phase.status,
-        taskCount,
-        description: phase.description,
-        descriptionRef: phase.descriptionRef || "",
-        acceptedDecisions: phase.acceptedDecisions,
-      },
-      linkedRequirements,
-    });
-    markCanonicalFullReadForSessionId(plannerSessionId, "phase", phase, result.content[0]!.text);
-    return result;
+  inputSchema: { phase: z.string().min(1).describe("Phase ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."), full: z.boolean().optional().describe("If true, include the phase description. Default: compact identity only (saves tokens).") },
+}, async ({ phase: ref, full }, extra) => {
+  const outcome = await readPlannerDetail<Pick<PhaseContextOutcome, "phase" | "ref" | "linkedRequirements">>("phases", ref, full, extra);
+  if (!outcome.data) return text(outcome.message);
+  const { phase, ref: phaseRef, linkedRequirements } = outcome.data;
+  const taskCount = phase.tasks.length;
+  const reqCount = linkedRequirements.length;
+  const summary = `${phase.title} — ${phaseRef}${phase.shortId ? ` · ${phase.shortId}` : ""} (${phase.status}; ${taskCount} tasks${reqCount ? `; ${reqCount} linked requirement${reqCount === 1 ? "" : "s"}` : ""})`;
+  const descriptionRefBlock = phase.descriptionRef ? `\n\nDescription reference:\n- ${phase.descriptionRef}` : "";
+  const requirementsBlock = reqCount > 0
+    ? `\n\nLinked requirements:\n${linkedRequirements.map((requirement) => `- ${requirement.title}`).join("\n")}`
+    : "";
+  if (!full) return text(summary, {
+    phase: {
+      ref: phaseRef,
+      shortId: phase.shortId,
+      title: phase.title,
+      summary: phase.summary,
+      status: phase.status,
+      taskCount,
+    },
+    linkedRequirements,
+  });
+  const decisionBlock = renderAcceptedDecisionsSection("Accepted Decisions", phase.acceptedDecisions);
+  const result = text(`${summary}\n\n${phase.description || ""}${descriptionRefBlock}${requirementsBlock}\n\n${decisionBlock}`, {
+    phase: {
+      ref: phaseRef,
+      shortId: phase.shortId,
+      title: phase.title,
+      summary: phase.summary,
+      status: phase.status,
+      taskCount,
+      description: phase.description,
+      descriptionRef: phase.descriptionRef || "",
+      acceptedDecisions: phase.acceptedDecisions,
+    },
+    linkedRequirements,
+  });
+  if (outcome.sessionId) markCanonicalFullReadForSessionId(outcome.sessionId, "phase", phase, result.content[0]!.text);
+  return result;
 });
 
 server.registerTool("planner-phase-discuss", {
@@ -1080,6 +1202,9 @@ server.registerTool("planner-phase-discuss", {
     completionCriteria: z.array(z.string()).optional(),
   },
 }, async ({ phase: ref, ...updates }) => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    return updateRegisteredPlannerEntity("phase", ref, { ...updates, contextReadyReason: "Updated through planner-phase-discuss MCP tool." }, "discuss");
+  }
   const api = await plannerApi(planRoot());
   try {
     const data = await api.request<{ ref: string; phase: Phase; updatedFields: string[] }>(
@@ -1143,6 +1268,7 @@ server.registerTool("planner-phase-update", {
     completionCriteria: z.array(z.string()).optional(),
   },
 }, async ({ phase: ref, ...updates }) => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) return updateRegisteredPlannerEntity("phase", ref, updates);
   const api = await plannerApi(planRoot());
   try {
     const data = await api.request<{
@@ -1198,9 +1324,8 @@ server.registerTool("planner-phase-delete", {
   description: "Delete a phase and unlink it from features.",
   inputSchema: { phase: z.string().min(1) },
 }, async ({ phase: ref }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ ref: string; shortId: string; phaseId: string }>("DELETE", `/phases/${encodeURIComponent(ref)}`);
+    const data = await deletePlannerEntity<{ ref: string; shortId: string; phaseId: string }>("phase", ref);
     return text(`Phase deleted: ${data.ref}${data.shortId ? ` · ${data.shortId}` : ""}`, { deleted: data.phaseId });
   } catch (error) {
     if (error instanceof PlannerApiError) return text(error.message, { deleted: false, errorCode: error.code });
@@ -1218,6 +1343,7 @@ server.registerTool("planner-task-add", {
     checklist: z.array(z.string()).optional(),
   },
 }, async ({ feature: featureRef, phase: ref, title, description, checklist }) => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) return createRegisteredPlannerEntity({ kind: "task", title, description, featureRef, phaseRef: ref, checklist });
   const api = await plannerApi(planRoot());
   try {
     const data = await api.request<{ message: string }>(
@@ -1239,92 +1365,104 @@ server.registerTool("planner-task-add", {
 
 server.registerTool("planner-task-show", {
   description: "Show a task by id or name. Pass full=true for every canonical Accepted Decision field plus execution and resume context.",
-    inputSchema: { task: z.string().min(1).describe("Task ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."), full: z.boolean().optional().describe("If true, include the task description, resume checkpoint/advisory, and statusLog. Default: compact identity only (saves tokens).") },
-  }, async ({ task: ref, full }, extra) => {
-  const plannerSessionId = plannerSessionIdFor(extra);
-  const st = await requireStore();
-  const outcome = await showTask(st, ref, { sessionId: plannerSessionId });
-  if (!outcome.ok) return text(outcome.message);
-  const { task, phase, feature: parentFeature, ref: taskRef, phaseRef, featureRef, orderContext, snapshot, pendingDeviation, linkedRequirements } = outcome;
-    const summary = `${task.title} — ${taskRef}${task.shortId ? ` · ${task.shortId}` : ""} (${task.status}; phase ${phaseRef})`;
-    if (!full) return text(summary);
-    const project = await st.loadProject(plannerSessionId);
-    const log = (task.statusLog ?? []).map((e) => `  - ${e.date.slice(0,10)} ${e.title}`).join("\n");
-    // P104(F005)/T421: priority and dependsOn at the point an agent reads
-    // the task and decides what to do next — the fact planner-task-list and
-    // planner-task-recommend already have, made visible here instead of
-    // requiring a second call.
-    const sections = [summary, taskOrderContextLine(orderContext, task.status)];
-    const completionMismatch = taskCompletionMismatchLine(task.status, task.checklist);
-    if (completionMismatch) sections.push(completionMismatch);
-    if (task.description?.trim()) sections.push(task.description.trim());
-    if (task.descriptionRef) sections.push(`Description reference:\n- ${task.descriptionRef}`);
-    if (snapshot || pendingDeviation) {
-      sections.push([
-        pendingDeviation
-          ? "Resume advisory: this task has a saved checkpoint that should be evaluated before selecting other work."
-          : "Resume checkpoint:",
-        snapshot ? `Checkpoint reason: ${snapshot.reason}` : "",
-        snapshot ? `Work checkpoint: ${snapshot.whatWasBeingDone}` : "",
-        snapshot ? `Resume from: ${snapshot.resumeLocation}` : "",
-        snapshot ? `How to resume: ${snapshot.howToResume}` : "",
-      ].filter(Boolean).join("\n"));
-    }
-    if (log) sections.push(`Status log:\n${log}`);
-    sections.push(renderAcceptedDecisionsSection("Accepted Decisions", task.acceptedDecisions));
-    const result = text(sections.join("\n\n"), {
-      task: {
-        ref: taskRef,
-        description: task.description,
-        descriptionRef: task.descriptionRef || "",
-        acceptedDecisions: task.acceptedDecisions,
-        priority: orderContext.priority,
-        dependsOn: orderContext.dependsOn,
-        ...(completionMismatch ? { checklistMismatch: completionMismatch } : {}),
-      },
-      taskOrder: {
-        readyCount: orderContext.readyCount,
-        readyAheadCount: orderContext.readyAheadCount,
-        nextByPriorityRef: orderContext.nextByPriorityRef,
-      },
-    });
-    markCanonicalFullReadForSessionId(plannerSessionId, "task", task, result.content[0]!.text);
-
-    // Advisory only (P104(F005)/T420): report whether planner-task-start
-    // would succeed right now, using the exact checks it runs itself, so a
-    // caller reading the task before starting it learns what else is needed
-    // in this same call instead of from a denial. task-start recomputes this
-    // at call time and remains the sole authority on whether work may begin.
-    const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
-    const contextEligibility = contextReadEligibilityForSession({
-      sessionId: plannerSessionId,
-      taskId: task.id,
-      phaseId: phase.id,
-      ...(phase.featureId ? { featureId: phase.featureId } : {}),
-      task,
-      phase,
-      ...(parentFeature ? { feature: parentFeature } : {}),
-      requirements: linkedRequirements,
-      requirementIds: linkedRequirementIds,
-    });
-    const requirementEligibility = requirementReadEligibilityForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
-    const projectGuidelinesReadState = projectGuidelinesReadStateForSession(project, plannerSessionId);
-    const gateState = taskStartGateState(contextEligibility, requirementEligibility, projectGuidelinesReadState);
-    const gateNextActions = gateState.ready ? [] : mcpContextReadActions(
-      contextEligibility,
-      { task: taskRef, phase: phaseRef, ...(featureRef ? { feature: featureRef } : {}) },
-      projectGuidelinesReadState !== "valid" && projectGuidelinesReadState !== "not-required",
-      !requirementEligibility.eligible,
-      `planner-task-start ${taskRef}`,
+  inputSchema: { task: z.string().min(1).describe("Task ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."), maxChars: z.number().int().positive().optional(), full: z.boolean().optional().describe("If true, include the task description, resume checkpoint/advisory, and statusLog. Default: compact identity only (saves tokens).") },
+}, async ({ task: ref, full, maxChars }, extra) => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError && full === true) {
+    const { client, prefix } = await registeredSessionClient();
+    const result = await client.request<
+      { kind: "context"; context: unknown; parkedTakeoverAt?: string } | { kind: "incomplete"; requiredChars: number }
+    >("POST", `${prefix}/tasks/context`, { ref, maxChars });
+    if (result.kind === "incomplete") return text(
+      `Full task context requires at least ${result.requiredChars} characters. Retry with a larger maxChars value.`,
+      { contextComplete: false, requiredChars: result.requiredChars },
     );
-    return {
-      content: [{ type: "text", text: `${result.content[0]!.text}\n\n${taskStartGateStateLine(gateState)}` }],
-      structuredContent: {
-        ...result.structuredContent,
-        taskStartGateState: gateState,
-        ...(gateNextActions.length > 0 ? { taskStartNextActions: gateNextActions } : {}),
-      },
-    };
+    const notice = result.parkedTakeoverAt ? `Another session resumed your parked task at ${result.parkedTakeoverAt}.\n\n` : "";
+    return text(notice + JSON.stringify(result.context), { contextComplete: true, parkedTakeoverAt: result.parkedTakeoverAt });
+  }
+  const outcome = await readPlannerDetail<
+    TaskDetailContextOutcome,
+    Pick<TaskDetailContextOutcome, "task" | "ref" | "phaseRef">
+  >("tasks", ref, full, extra);
+  if (!outcome.data) return text(outcome.message);
+  const { task, ref: taskRef, phaseRef } = outcome.data;
+  const summary = `${task.title} — ${taskRef}${task.shortId ? ` · ${task.shortId}` : ""} (${task.status}; phase ${phaseRef})`;
+  if (!outcome.sessionId) return text(summary);
+  const { phase, feature: parentFeature, featureRef, orderContext, snapshot, pendingDeviation, linkedRequirements, projectGuidelinesReadState } = outcome.data;
+  const log = (task.statusLog ?? []).map((e) => `  - ${e.date.slice(0,10)} ${e.title}`).join("\n");
+  // P104(F005)/T421: priority and dependsOn at the point an agent reads
+  // the task and decides what to do next — the fact planner-task-list and
+  // planner-task-recommend already have, made visible here instead of
+  // requiring a second call.
+  const sections = [summary, taskOrderContextLine(orderContext, task.status)];
+  const completionMismatch = taskCompletionMismatchLine(task.status, task.checklist);
+  if (completionMismatch) sections.push(completionMismatch);
+  if (task.description?.trim()) sections.push(task.description.trim());
+  if (task.descriptionRef) sections.push(`Description reference:\n- ${task.descriptionRef}`);
+  if (snapshot || pendingDeviation) {
+    sections.push([
+      pendingDeviation
+        ? "Resume advisory: this task has a saved checkpoint that should be evaluated before selecting other work."
+        : "Resume checkpoint:",
+      snapshot ? `Checkpoint reason: ${snapshot.reason}` : "",
+      snapshot ? `Work checkpoint: ${snapshot.whatWasBeingDone}` : "",
+      snapshot ? `Resume from: ${snapshot.resumeLocation}` : "",
+      snapshot ? `How to resume: ${snapshot.howToResume}` : "",
+    ].filter(Boolean).join("\n"));
+  }
+  if (log) sections.push(`Status log:\n${log}`);
+  sections.push(renderAcceptedDecisionsSection("Accepted Decisions", task.acceptedDecisions));
+  const result = text(sections.join("\n\n"), {
+    task: {
+      ref: taskRef,
+      description: task.description,
+      descriptionRef: task.descriptionRef || "",
+      acceptedDecisions: task.acceptedDecisions,
+      priority: orderContext.priority,
+      dependsOn: orderContext.dependsOn,
+      ...(completionMismatch ? { checklistMismatch: completionMismatch } : {}),
+    },
+    taskOrder: {
+      readyCount: orderContext.readyCount,
+      readyAheadCount: orderContext.readyAheadCount,
+      nextByPriorityRef: orderContext.nextByPriorityRef,
+    },
+  });
+  markCanonicalFullReadForSessionId(outcome.sessionId, "task", task, result.content[0]!.text);
+
+  // Advisory only (P104(F005)/T420): report whether planner-task-start
+  // would succeed right now, using the exact checks it runs itself, so a
+  // caller reading the task before starting it learns what else is needed
+  // in this same call instead of from a denial. task-start recomputes this
+  // at call time and remains the sole authority on whether work may begin.
+  const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
+  const contextEligibility = contextReadEligibilityForSession({
+    sessionId: outcome.sessionId,
+    taskId: task.id,
+    phaseId: phase.id,
+    ...(phase.featureId ? { featureId: phase.featureId } : {}),
+    task,
+    phase,
+    ...(parentFeature ? { feature: parentFeature } : {}),
+    requirements: linkedRequirements,
+    requirementIds: linkedRequirementIds,
+  });
+  const requirementEligibility = requirementReadEligibilityForSession(outcome.sessionId, linkedRequirementIds, linkedRequirements);
+  const gateState = taskStartGateState(contextEligibility, requirementEligibility, projectGuidelinesReadState);
+  const gateNextActions = gateState.ready ? [] : mcpContextReadActions(
+    contextEligibility,
+    { task: taskRef, phase: phaseRef, ...(featureRef ? { feature: featureRef } : {}) },
+    projectGuidelinesReadState !== "valid" && projectGuidelinesReadState !== "not-required",
+    !requirementEligibility.eligible,
+    `planner-task-start ${taskRef}`,
+  );
+  return {
+    content: [{ type: "text", text: `${result.content[0]!.text}\n\n${taskStartGateStateLine(gateState)}` }],
+    structuredContent: {
+      ...result.structuredContent,
+      taskStartGateState: gateState,
+      ...(gateNextActions.length > 0 ? { taskStartNextActions: gateNextActions } : {}),
+    },
+  };
 });
 
 server.registerTool("planner-task-discuss", {
@@ -1336,6 +1474,9 @@ server.registerTool("planner-task-discuss", {
     checklist: z.array(z.string()).optional().describe("Replace the task checklist (implementation steps, plain strings). Ticks carry over by exact title match, and by position when the new list is the same length (so renaming an item keeps its tick). Use planner-task-checklist-toggle/add/remove for granular edits."),
   },
 }, async ({ task: ref, description, descriptionRef, checklist }) => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    return updateRegisteredPlannerEntity("task", ref, { description, descriptionRef, checklist }, "discuss");
+  }
   const api = await plannerApi(planRoot());
   try {
     const data = await api.request<{ ref: string; task: Task; updatedFields: string[]; checklistLostTicks: string[] }>(
@@ -1389,12 +1530,12 @@ server.registerTool("planner-task-dependency-add", {
   description: "Add a validated task dependency atomically. A task may depend on any task in any phase; the dependency is rejected only when the target does not exist, is the task itself, or would create a cycle.",
   inputSchema: { task: z.string().min(1), dependsOn: z.string().min(1) },
 }, async ({ task: ref, dependsOn }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ ref: string; task: Task; dependsOn: string[]; dependencyRef: string }>(
+    const { client, prefix } = await discoveryApi();
+    const data = await client.request<{ ref: string; task: Task; dependsOn: string[]; dependencyRef: string }>(
       "POST",
-      `/tasks/${encodeURIComponent(ref)}/dependencies`,
-      { dependsOn },
+      prefix ? `${prefix}/tasks/dependencies` : `/tasks/${encodeURIComponent(ref)}/dependencies`,
+      prefix ? { ref, dependsOn, action: "add", requestId: randomUUID() } : { dependsOn },
     );
     const reply = buildMutationReply({
       identity: { entity: "task", ref: data.ref, id: data.task.id, shortId: data.task.shortId, title: data.task.title, status: data.task.status },
@@ -1413,11 +1554,12 @@ server.registerTool("planner-task-dependency-delete", {
   description: "Remove a task dependency atomically after explicit confirmation.",
   inputSchema: { task: z.string().min(1), dependsOn: z.string().min(1), confirmed: z.boolean() },
 }, async ({ task: ref, dependsOn, confirmed }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ ref: string; task: Task; dependsOn: string[]; dependencyRef: string }>(
-      "DELETE",
-      `/tasks/${encodeURIComponent(ref)}/dependencies?dependsOn=${encodeURIComponent(dependsOn)}&confirmed=${confirmed ? "true" : "false"}`,
+    const { client, prefix } = await discoveryApi();
+    const data = await client.request<{ ref: string; task: Task; dependsOn: string[]; dependencyRef: string }>(
+      prefix ? "POST" : "DELETE",
+      prefix ? `${prefix}/tasks/dependencies` : `/tasks/${encodeURIComponent(ref)}/dependencies?dependsOn=${encodeURIComponent(dependsOn)}&confirmed=${confirmed ? "true" : "false"}`,
+      prefix ? { ref, dependsOn, confirmed, action: "delete", requestId: randomUUID() } : undefined,
     );
     const reply = buildMutationReply({
       identity: { entity: "task", ref: data.ref, id: data.task.id, shortId: data.task.shortId, title: data.task.title, status: data.task.status },
@@ -1448,11 +1590,11 @@ server.registerTool("planner-task-update", {
     subtasks: z.array(z.object({ id: z.string().optional(), title: z.string().min(1), description: z.string().optional(), status: z.enum(STATUS_VALUES).optional() })).optional().describe("Replace subtasks; existing IDs must belong to this task and omitted IDs are planner-generated."),
   },
 }, async ({ task: ref, title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist, subtasks }, extra) => {
-  const plannerSessionId = plannerSessionIdFor(extra);
-  const st = await requireStore();
-  let outcome: Awaited<ReturnType<typeof updateTaskFlow>>;
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) return updateRegisteredPlannerEntity("task", ref, { title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist, subtasks });
+  const { client } = await plannerSessionApi(extra);
+  let outcome: TaskUpdateFlowOutcome;
   try {
-    outcome = await updateTaskFlow(st, ref, {
+    outcome = await client.request<TaskUpdateFlowOutcome>("PUT", `/tasks/${encodeURIComponent(ref)}`, {
       title,
       status,
       description,
@@ -1463,9 +1605,9 @@ server.registerTool("planner-task-update", {
       priority,
       checklist,
       subtasks,
-    }, { sessionId: plannerSessionId });
+    });
   } catch (error) {
-    if (error instanceof TaskFlowRefusal) {
+    if (error instanceof PlannerApiError && error.details.failureKind !== "store" && error.code !== "TASK_UPDATE_FAILED") {
       if (error.code === "TASK_LEGACY_DECISIONS_READ_ONLY") {
         return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "task", targetRef: error.details.ref as string } };
       }
@@ -1490,8 +1632,8 @@ server.registerTool("planner-task-update", {
       }
       return text(error.message, { updated: false, errorCode: error.code });
     }
-    const details = error instanceof PlanStoreError ? error.details : undefined;
-    return { ...text(`Task update failed: ${error instanceof Error ? error.message : "unknown error"}`, { updated: false, errorCode: details?.errorCode ?? "TASK_UPDATE_FAILED" }), isError: true };
+    const errorCode = error instanceof PlannerApiError || error instanceof PlannerServiceFailure ? error.code : "TASK_UPDATE_FAILED";
+    return { ...text(`Task update failed: ${error instanceof Error ? error.message : "unknown error"}`, { updated: false, errorCode: errorCode }), isError: true };
   }
   const t = outcome.task;
   const resumeNotice = outcome.resumeRequired
@@ -1523,11 +1665,10 @@ server.registerTool("planner-task-move", {
     targetPhase: z.string().min(1).describe("Destination phase ref. Accepts F00x/P00x, bare P00x, 5-char shortId, UUID, or title."),
   },
 }, async ({ tasks: refs, targetPhase }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const { message, ...structured } = await api.request<Record<string, unknown> & { message: string }>("POST", "/tasks/move", {
-      tasks: refs,
-      targetPhase,
+    const { client, prefix } = await discoveryApi();
+    const { message, ...structured } = await client.request<Record<string, unknown> & { message: string }>("POST", `${prefix}/tasks/move`, {
+      tasks: refs, targetPhase, ...(prefix ? { requestId: randomUUID() } : {}),
     });
     return text(message, structured);
   } catch (error) {
@@ -1547,6 +1688,18 @@ server.registerTool("planner-task-checklist-toggle", {
     checked: z.boolean().optional().describe("Set explicitly: true=done, false=open. Omit to toggle."),
   },
 }, async ({ task: ref, item, checked }) => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    try {
+      const { client, prefix } = await registeredSessionClient();
+      const result = await client.request<{ message: string }>(
+        "POST", `${prefix}/tasks/checklist/toggle`, { ref, item, checked, requestId: randomUUID() },
+      );
+      return text(result.message, { ...result });
+    } catch (error) {
+      if (!(error instanceof PlannerApiError)) throw error;
+      return text(error.message, { updated: false, errorCode: error.code });
+    }
+  }
   const api = await plannerApi(planRoot());
   try {
     const data = await api.request<{ message: string }>(
@@ -1568,8 +1721,13 @@ server.registerTool("planner-task-checklist-add", {
     title: z.string().min(1).describe("Checklist item text (a single step)"),
   },
 }, async ({ task: ref, title }) => {
-  const api = await plannerApi(planRoot());
   try {
+    if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+      const { client, prefix } = await registeredSessionClient();
+      const result = await client.request<{ message: string }>("POST", `${prefix}/tasks/checklist/add`, { ref, item: title, requestId: randomUUID() });
+      return text(result.message, result);
+    }
+    const api = await plannerApi(planRoot());
     const data = await api.request<{ message: string }>("POST", `/tasks/${encodeURIComponent(ref)}/checklist`, { title });
     return text(data.message);
   } catch (error) {
@@ -1585,8 +1743,13 @@ server.registerTool("planner-task-checklist-remove", {
     item: z.string().min(1).describe("Checklist item selector: C{n} (e.g. C2), item id, or title (case-insensitive)"),
   },
 }, async ({ task: ref, item }) => {
-  const api = await plannerApi(planRoot());
   try {
+    if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+      const { client, prefix } = await registeredSessionClient();
+      const result = await client.request<{ message: string }>("POST", `${prefix}/tasks/checklist/remove`, { ref, item, requestId: randomUUID() });
+      return text(result.message, result);
+    }
+    const api = await plannerApi(planRoot());
     const data = await api.request<{ message: string }>(
       "DELETE",
       `/tasks/${encodeURIComponent(ref)}/checklist?item=${encodeURIComponent(item)}`,
@@ -1602,14 +1765,9 @@ server.registerTool("planner-task-delete", {
   description: "Delete a task.",
   inputSchema: { task: z.string().min(1) },
 }, async ({ task: ref }) => {
-  const api = await plannerApi(planRoot());
   try {
-    // The host obtains the approval conversationally; the API's mechanical
-    // flag states that it happened. There is no tool input to pass through.
-    const data = await api.request<{ taskId: string; ref: string; shortId: string }>(
-      "DELETE",
-      `/tasks/${encodeURIComponent(ref)}?confirmed=true`,
-    );
+    // The host obtains explicit approval conversationally before invoking this tool.
+    const data = await deletePlannerEntity<{ taskId: string; ref: string; shortId: string }>("task", ref, { confirmed: true });
     return text(
       `Task deleted: ${data.ref}${data.shortId ? ` · ${data.shortId}` : ""}`,
       { deleted: data.taskId },
@@ -1624,24 +1782,13 @@ server.registerTool("planner-task-recommend", {
   description: "Return the harness-agnostic next-work chain: active task if present, otherwise the lowest-priority ready feature → phase → task, plus bounded typed claims. Only persisted resume-ready handoffs are actionable; Markdown prose and terminal archives are not authority. Does not start or block work.",
   inputSchema: {},
 }, async (_args, extra) => {
-  const plannerSessionId = plannerSessionIdFor(extra);
-  const st = await requireStore();
-  const [features, phases, resume, handoffs, archivedHandoffs] = await Promise.all([
-    st.loadFeatures(),
-    st.loadAllPhases(),
-    st.loadResume(plannerSessionId),
-    st.listHandoffs(),
-    st.listArchivedHandoffs(),
-  ]);
-  const result = recommendNextWork(features.features, phases, await st.listAllWorkDeviations(), resume?.currentPhaseId, plannerSessionId, {
-    handoffs: handoffs.map((handoff) => ({
-      compositeRef: handoff.compositeRef,
-      firstLine: handoff.firstLine,
-      resumeReady: handoff.resumeReady,
-    })),
-    archivedHandoffs: archivedHandoffs.map(({ compositeRef, firstLine, reason }) => ({ compositeRef, firstLine, reason })),
-  });
-  const reply = buildRecommendationReply(result, features.features);
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    const { client, prefix } = await registeredSessionClient();
+    const reply = await client.request<RecommendReply>("GET", `${prefix}/recommend`);
+    return text(reply.text, reply.structured);
+  }
+  const { client } = await plannerSessionApi(extra);
+  const reply = await client.request<RecommendReply>("GET", "/recommend?view=summary");
   return text(reply.text, reply.structured);
 });
 
@@ -1649,15 +1796,28 @@ server.registerTool("planner-task-deviation", {
   description: "Record a user-approved temporary task deviation. It preserves the recommended/resume task and never starts, pauses, or blocks work; use normal lifecycle tools for those transitions.",
   inputSchema: { temporary_task: z.string().min(1), resume_task: z.string().min(1).optional(), reason: z.string().min(1) },
 }, async ({ temporary_task, resume_task, reason }, extra) => {
-  const st = await requireStore();
-  // Same bookkeeping as the versioned API (plan-core deviation-flow.ts
-  // recordDeviationFlow). This tool records intent only; it never
-  // transitions a task.
-  const outcome = await recordDeviationFlow(st, plannerSessionIdFor(extra), {
-    temporaryTask: temporary_task,
-    resumeTask: resume_task,
-    reason,
-  });
+  let outcome: DeviationSuccess | DeviationRefusal;
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    try {
+      const { client, prefix } = await registeredSessionClient();
+      outcome = await client.request<DeviationSuccess>("POST", `${prefix}/tasks/deviation`, {
+        ref: temporary_task, resumeTask: resume_task, reason, requestId: randomUUID(),
+      });
+    } catch (error) {
+      if (!(error instanceof PlannerApiError)) throw error;
+      if (error.code === "NO_RESUME_TASK") {
+        const selectionReason = typeof error.details.selectionReason === "string" ? error.details.selectionReason : "";
+        return text(`No resume task is available. Provide resume_task explicitly. ${selectionReason}`.trimEnd());
+      }
+      return text(error.message);
+    }
+  } else {
+    outcome = await requestLifecycle<DeviationSuccess, DeviationRefusal>(extra, "/deviations", {
+      temporaryTask: temporary_task,
+      resumeTask: resume_task,
+      reason,
+    });
+  }
   if (!outcome.ok) {
     if (outcome.code === "NO_RESUME_TASK") {
       return text(`No resume task is available. Provide resume_task explicitly. ${outcome.selectionReason ?? ""}`.trimEnd());
@@ -1681,12 +1841,26 @@ server.registerTool("planner-task-pause", {
     paused_by: z.string().optional(),
   },
 }, async ({ task: ref, reason, what_was_being_done, resume_location, how_to_resume, paused_by }, extra) => {
-  const plannerSessionId = plannerSessionIdFor(extra);
-  const st = await requireStore();
-  // Same checkpoint orchestration as the versioned API
-  // (plan-core task-lifecycle-flow.ts pauseTaskFlow).
-  const outcome = await pauseTaskFlow(st, plannerSessionId, {
-    task: ref,
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    try {
+      const { client, prefix } = await registeredSessionClient();
+      const result = await client.request<{
+        taskRef: string; title: string; snapshot: TaskPauseSuccess["snapshot"]; resumeRequired?: { taskRef: string; title: string };
+      }>("POST", `${prefix}/tasks/pause`, {
+        ref, requestId: randomUUID(), reason, whatWasBeingDone: what_was_being_done, resumeLocation: resume_location, howToResume: how_to_resume,
+      });
+      return text([
+        `Resume checkpoint saved: ${result.taskRef} — ${result.title}`,
+        `Resume from: ${result.snapshot.resumeLocation}`,
+        `How to resume: ${result.snapshot.howToResume}`,
+        ...(result.resumeRequired ? [`Resume required: ${result.resumeRequired.taskRef} — ${result.resumeRequired.title}`] : []),
+      ].join("\n"), result);
+    } catch (error) {
+      if (!(error instanceof PlannerApiError)) throw error;
+      return text(error.message, { paused: false, errorCode: error.code });
+    }
+  }
+  const outcome = await requestLifecycle<TaskPauseSuccess, TaskPauseRefusal>(extra, `/tasks/${encodeURIComponent(ref)}/pause`, {
     reason,
     whatWasBeingDone: what_was_being_done,
     resumeLocation: resume_location,
@@ -1697,7 +1871,7 @@ server.registerTool("planner-task-pause", {
   const resumeNotice = outcome.resumeRequired
     ? `\n↩️ RESUME REQUIRED: ${outcome.resumeRequired.taskRef} — ${outcome.resumeRequired.title}`
     : "";
-  return writeAndSummarize(st, [
+  return text( [
     `💾 Resume checkpoint saved: ${outcome.taskRef} — ${outcome.task.title}`,
     `Why: ${outcome.snapshot.reason}`,
     `Checkpoint: ${outcome.snapshot.whatWasBeingDone}`,
@@ -1722,13 +1896,25 @@ server.registerTool("planner-task-switch", {
     switched_by: z.string().optional(),
   },
 }, async ({ from_task, to_task, reason, what_was_being_done, resume_location, how_to_resume, switched_by }, extra) => {
-  const plannerSessionId = plannerSessionIdFor(extra);
-  const st = await requireStore();
-  // Same atomic switch as the versioned API (plan-core
-  // task-lifecycle-flow.ts switchTaskFlow): pause the source with the
-  // mandatory snapshot, claim the target, push the LIFO return target and
-  // roll the lifecycle writes back on failure.
-  const outcome = await switchTaskFlow(st, plannerSessionId, {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    try {
+      const { client, prefix } = await registeredSessionClient();
+      const result = await client.request<{ switched: true; sourceRef: string; targetRef: string; deviationId: string; parkedTakeover?: boolean }>(
+        "POST", `${prefix}/tasks/switch`, {
+          ref: from_task, toRef: to_task, requestId: randomUUID(), reason,
+          whatWasBeingDone: what_was_being_done, resumeLocation: resume_location, howToResume: how_to_resume,
+        },
+      );
+      const notice = result.parkedTakeover ? " The target was parked by another session." : "";
+      return text(`Switched to ${result.targetRef}. Checkpointed ${result.sourceRef} for return.${notice}`, result);
+    } catch (error) {
+      if (!(error instanceof PlannerApiError)) throw error;
+      const nextActions = error.code === "CONTEXT_READ_REQUIRED"
+        ? [`Read planner-task-show with task=${to_task} and full=true, then retry planner-task-switch.`] : [];
+      return { ...text(error.message, { switched: false, errorCode: error.code, nextActions }), isError: true };
+    }
+  }
+  const outcome = await requestLifecycle<TaskSwitchSuccess, TaskSwitchRefusal>(extra, "/tasks/switch", {
     fromTask: from_task,
     toTask: to_task,
     reason,
@@ -1738,6 +1924,7 @@ server.registerTool("planner-task-switch", {
     switchedBy: switched_by,
   });
   if (!outcome.ok) {
+    if (!outcome.context) return { ...text(outcome.message, { switched: false, errorCode: outcome.code }), isError: true };
     const { targetRef, targetPhaseRef, targetFeatureRef } = outcome.context;
     const retry = `Retry planner-task-switch to ${targetRef}`;
     const refs = { task: targetRef, phase: targetPhaseRef, ...(targetFeatureRef ? { feature: targetFeatureRef } : {}) };
@@ -1780,7 +1967,7 @@ server.registerTool("planner-task-switch", {
         return text(outcome.message);
     }
   }
-  return writeAndSummarize(st, [
+  return text( [
     `🔀 Task switched: ${outcome.sourceRef} → ${outcome.targetRef}`,
     `Resume checkpoint: ${outcome.snapshot.whatWasBeingDone}`,
     `Return target: ${outcome.sourceRef} from ${outcome.snapshot.resumeLocation}`,
@@ -1797,10 +1984,19 @@ server.registerTool("planner-task-reopen", {
   description: "Atomically reopen a completed task. Requires confirmed=true; retains completion evidence and never pauses another task.",
   inputSchema: { task: z.string().min(1), confirmed: z.boolean().optional().default(false) },
 }, async ({ task: ref, confirmed }, extra) => {
-  const st = await requireStore();
-  // Same reopen orchestration as the versioned API
-  // (plan-core task-lifecycle-flow.ts reopenTaskFlow).
-  const outcome = await reopenTaskFlow(st, plannerSessionIdFor(extra), ref, confirmed);
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    try {
+      const { client, prefix } = await registeredSessionClient();
+      const result = await client.request<{ reopened: true; taskId: string; taskRef: string; title: string }>(
+        "POST", `${prefix}/tasks/reopen`, { ref, confirmed, requestId: randomUUID() },
+      );
+      return text(`Task reopened: ${result.taskRef} — ${result.title} (in-progress)`, result);
+    } catch (error) {
+      if (!(error instanceof PlannerApiError)) throw error;
+      return { ...text(error.message, { reopened: false, errorCode: error.code }), isError: true };
+    }
+  }
+  const outcome = await requestLifecycle<TaskReopenSuccess, TaskReopenRefusal>(extra, `/tasks/${encodeURIComponent(ref)}/reopen`, { confirmed });
   if (!outcome.ok) {
     if (outcome.code === "TASK_NOT_FOUND") {
       return { ...text(`Task not found: ${ref}`, { reopened: false, errorCode: "TASK_NOT_FOUND" }), isError: true };
@@ -1814,11 +2010,19 @@ server.registerTool("planner-session-recover", {
   description: "Explicitly recover a stopped caller's task ownership, complete return stack and resume focus into this fresh connection. Identify the old session by an active task or a pending return task, without client-side session-ID mapping. Requires confirmed=true after confirming the previous caller has stopped; refuses a registered live process and a caller that already owns work. Task statuses, checkpoints and context-read gates are preserved. Then read the task context and use planner-task-start normally.",
   inputSchema: { task: z.string().min(1), confirmed: z.boolean() },
 }, async ({ task: ref, confirmed }, extra) => {
-  const st = await requireStore();
-  // Same recovery as the versioned API (plan-core deviation-flow.ts
-  // recoverSessionFlow): the store verifies the previous process is gone
-  // and that this caller owns nothing already.
-  const outcome = await recoverSessionFlow(st, plannerSessionIdFor(extra), ref, confirmed);
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    try {
+      const { client, prefix } = await registeredSessionClient();
+      const result = await client.request<{ recovered: true; taskIds: string[]; deviationIds: string[] }>(
+        "POST", `${prefix}/tasks/recover`, { ref, confirmed, requestId: randomUUID() },
+      );
+      return text("Session recovered. Read the scoped task context before continuing.", result);
+    } catch (error) {
+      if (!(error instanceof PlannerApiError)) throw error;
+      return { ...text(error.message, { recovered: false, errorCode: error.code }), isError: true };
+    }
+  }
+  const outcome = await requestLifecycle<RecoverySuccess, RecoveryRefusal>(extra, "/sessions/recover", { task: ref, confirmed });
   if (!outcome.ok) {
     if (outcome.code === "TASK_NOT_FOUND") {
       return { ...text(`Task not found: ${ref}`, { recovered: false, errorCode: outcome.code }), isError: true };
@@ -1834,21 +2038,40 @@ server.registerTool("planner-session-recover", {
 
 server.registerTool("planner-task-start", {
   description: "Set a task to in-progress or resume checkpointed work. Call this tool before reading context so it can reuse valid sessionInfo attestations; if denied, perform only the missing/stale reads listed in nextActions, then retry. Reads may be performed in any order within the current session. If nextActions includes planner-project-guidelines-show, read that section and keep it in working memory while doing task work. Every denied start is an MCP isError result with started=false; NEVER claim work started unless structuredContent.started is true. Success is returned only after persisted in-progress state is verified.",
-  inputSchema: { task: z.string().min(1) },
-}, async ({ task: ref }, extra) => {
-  const plannerSessionId = plannerSessionIdFor(extra);
-  let st: PlanStore;
-  try {
-    st = await requireStore();
-  } catch {
-    return taskStartError(taskStartDenied("PLAN_NOT_FOUND", "No .planner/ found.", ["Initialize or load the planner, then retry planner-task-start."]));
+  inputSchema: { task: z.string().min(1), confirmedTakeover: z.boolean().optional().describe("Confirm takeover from an idle live owner after explicit user approval.") },
+}, async ({ task: ref, confirmedTakeover }, extra) => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    try {
+      const { client, prefix } = await registeredSessionClient();
+      const started = await client.request<{ taskId: string; taskRef: string; title: string; alreadyStarted: boolean; reclaimed: boolean; tookOver?: boolean; parkedTakeover?: boolean; checkpoint?: TaskPauseSuccess["snapshot"] }>(
+        "POST", `${prefix}/tasks/start`, { ref, confirmedTakeover, requestId: randomUUID() },
+      );
+      const state = started.tookOver ? "taken over from an idle session" : started.reclaimed ? "reclaimed after lease expiry" : started.alreadyStarted ? "already started" : started.checkpoint ? "resumed" : "started";
+      return text([
+        `Task ${state}: ${started.taskRef} — ${started.title}`,
+        ...(started.parkedTakeover ? ["This task was parked by another session. The prior session will see the takeover when it returns."] : []),
+        ...(started.checkpoint ? [`Resume from: ${started.checkpoint.resumeLocation}`, `How to resume: ${started.checkpoint.howToResume}`] : []),
+      ].join("\n"), {
+        ...taskStartSucceeded(started.taskId, started.alreadyStarted), ...started,
+      });
+    } catch (error) {
+      if (!(error instanceof PlannerApiError)) throw error;
+      const actions = error.code === "CONTEXT_READ_REQUIRED"
+        ? [`Read planner-task-show with task=${ref} and full=true, then retry planner-task-start.`]
+        : [];
+      return taskStartError({ started: false, errorCode: error.code, message: error.message, nextActions: actions });
+    }
   }
-
-  // One lifecycle flow serves this tool and the versioned API
-  // (plan-core task-lifecycle-flow.ts). This adapter renders the pinned
-  // MCP denial/success texts and echoes the flow's evidence.
-  const outcome = await startTaskFlow(st, plannerSessionId, ref);
+  const outcome = await requestLifecycle<TaskStartSuccess, TaskStartRefusal>(extra, `/tasks/${encodeURIComponent(ref)}/start`, {});
   if (!outcome.ok) {
+    if (!outcome.context) {
+      const missing = String(outcome.code) === "PLAN_NOT_FOUND";
+      return { ...text(missing ? "No .planner/ found." : outcome.message, {
+        started: false,
+        errorCode: missing ? "PLAN_NOT_FOUND" : outcome.code,
+        nextActions: [missing ? "Initialize or load the planner, then retry planner-task-start." : "Check the planner service session before retrying."],
+      }), isError: true };
+    }
     const { taskRef, phaseRef, featureRef, requirementReadRequired } = outcome.context;
     const retry = `Retry planner-task-start ${taskRef}`;
     const refs = { task: taskRef, phase: phaseRef, ...(featureRef ? { feature: featureRef } : {}) };
@@ -1951,12 +2174,23 @@ server.registerTool("planner-task-complete", {
     description_update: z.string().min(10).describe("Required evidence: shipped work, verification level including partial verification, remaining/unverified work, files, decisions, and updated code references."),
   },
 }, async ({ task: ref, force, motivation, description_update }, extra) => {
-  const plannerSessionId = plannerSessionIdFor(extra);
-  const st = await requireStore();
-  // Same completion orchestration as the versioned API
-  // (plan-core task-lifecycle-flow.ts completeTaskFlow).
-  const outcome = await completeTaskFlow(st, plannerSessionId, {
-    task: ref,
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    try {
+      const { client, prefix } = await registeredSessionClient();
+      const result = await client.request<{
+        completed: true; taskId: string; taskRef: string; title: string;
+        archivedHandoffs: number; resumeRequired?: { taskRef: string; title: string };
+      }>("POST", `${prefix}/tasks/complete`, { ref, requestId: randomUUID(), descriptionUpdate: description_update, force, motivation });
+      return text([
+        `Task completed: ${result.taskRef} — ${result.title}`,
+        ...(result.resumeRequired ? [`Resume required: ${result.resumeRequired.taskRef} — ${result.resumeRequired.title}`] : []),
+      ].join("\n"), result);
+    } catch (error) {
+      if (!(error instanceof PlannerApiError)) throw error;
+      return text(error.message, { completed: false, errorCode: error.code });
+    }
+  }
+  const outcome = await requestLifecycle<TaskCompleteSuccess, TaskCompleteRefusal & { uncheckedChecklistItems?: Task["checklist"] }>(extra, `/tasks/${encodeURIComponent(ref)}/complete`, {
     force,
     motivation,
     descriptionUpdate: description_update,
@@ -1964,14 +2198,14 @@ server.registerTool("planner-task-complete", {
   if (!outcome.ok) {
     if (outcome.code === "CHECKLIST_INCOMPLETE") {
       return text(
-        taskCompletionChecklistRefusal(outcome.uncheckedItems ?? [], `planner-task-checklist-toggle ${outcome.taskRef} <item>`),
-        { completed: false, errorCode: outcome.code, uncheckedItems: (outcome.uncheckedItems ?? []).map((item) => item.title) },
+        taskCompletionChecklistRefusal(outcome.uncheckedChecklistItems ?? [], `planner-task-checklist-toggle ${outcome.taskRef} <item>`),
+        { completed: false, errorCode: outcome.code, uncheckedItems: (outcome.uncheckedChecklistItems ?? []).map((item) => item.title) },
       );
     }
     if (outcome.code === "FORCE_MOTIVATION_REQUIRED") {
       return text(
-        taskCompletionForceMotivationRequired(outcome.uncheckedItems ?? []),
-        { completed: false, errorCode: outcome.code, uncheckedItems: (outcome.uncheckedItems ?? []).map((item) => item.title) },
+        taskCompletionForceMotivationRequired(outcome.uncheckedChecklistItems ?? []),
+        { completed: false, errorCode: outcome.code, uncheckedItems: (outcome.uncheckedChecklistItems ?? []).map((item) => item.title) },
       );
     }
     if (outcome.code === "TASK_CHECKPOINT_PENDING") {
@@ -1990,8 +2224,7 @@ server.registerTool("planner-task-complete", {
       `Next action: planner-task-start ${resume.taskRef}`,
     ].filter(Boolean).join("\n")
     : "";
-  return writeAndSummarize(
-    st,
+  return text(
     `✅ Task completed: ${outcome.taskRef} — ${outcome.task.title} (done)${outcome.task.shortId ? ` · ${outcome.task.shortId}` : ""}${outcome.clearedHandoffRef ? ` — phase handoff auto-cleared (${outcome.clearedHandoffRef})` : ""}${resumeNotice}`,
     resume ? { resumeRequired: { taskId: resume.taskId, phaseId: resume.phaseId, snapshot: resume.snapshot } } : undefined,
   );
@@ -2004,14 +2237,14 @@ server.registerTool("planner-handoff-list", {
     pageSize: z.number().int().min(1).max(25).default(10).describe("Summaries per page; maximum 25."),
   },
 }, async ({ page, pageSize }) => {
-  const api = await plannerApi(planRoot());
-  const list = await api.request<{
+  const { client, prefix } = await discoveryApi();
+  const list = await client.request<{
     page: number;
     pageSize: number;
     total: number;
     totalPages: number;
     items: Array<{ compositeRef: string; firstLine: string; updatedAt: string; contentLength: number; resumeReady: boolean }>;
-  }>("GET", `/handoffs?page=${page}&pageSize=${pageSize}`);
+  }>("GET", `${prefix}/handoffs?page=${page}&pageSize=${pageSize}`);
   if (list.total === 0) return text("No phase handoffs set.", { count: 0, total: 0, page: 1, pageSize, totalPages: 1, handoffs: [] });
   const lines = list.items.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt}; ${e.contentLength} chars; ${e.resumeReady ? "resume-ready" : "verification required"})`);
   return text(`Phase handoffs — page ${list.page}/${list.totalPages} (${list.total} total):\n${lines.join("\n")}`, { count: list.items.length, page: list.page, pageSize: list.pageSize, total: list.total, totalPages: list.totalPages, handoffs: list.items });
@@ -2021,15 +2254,16 @@ server.registerTool("planner-handoff-show", {
   description: "Read the active entity-scoped handoff of a phase, or its latest terminal archive, together with a bounded priority-ordered phase work map. Reread the canonical phase and relevant sibling tasks before proposing work so capability ownership is not duplicated. phaseRef is required; never infer a phase from in-progress status or stale context.",
   inputSchema: { phaseRef: z.string().min(1).describe("Exact phase ref: P00x | P00x(F00x) | UUID | title. Ask the user when ambiguous.") },
 }, async ({ phaseRef }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const { message, ...structured } = await api.request<Record<string, unknown> & { message: string }>(
+    const { client, prefix } = await discoveryApi();
+    const { message, ...structured } = await client.request<Record<string, unknown> & { message: string }>(
       "GET",
-      `/phases/${encodeURIComponent(phaseRef)}/handoff`,
+      prefix ? `${prefix}/handoffs/${encodeURIComponent(phaseRef)}` : `/phases/${encodeURIComponent(phaseRef)}/handoff`,
     );
     return text(message, structured);
   } catch (error) {
     if (!(error instanceof PlannerApiError)) throw error;
+    if (error.code === "PHASE_NOT_FOUND") return text(`❌ ${error.message}`);
     const failure = handoffApiFailure(error);
     if (failure instanceof HandoffFlowRefusal) return text(`❌ ${failure.message}`);
     if (failure instanceof HandoffContractError) throw failure;
@@ -2049,17 +2283,12 @@ server.registerTool("planner-handoff-verify", {
     omissionsFound: z.array(z.string().min(1)).optional().describe("Optional read-back gaps; omit when the persisted capsule is complete."),
   },
 }, async ({ phaseRef, expectedContentHash, sourceReviews, omissionsFound }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ phaseRef: string } & Record<string, unknown>>(
-      "POST",
-      `/phases/${encodeURIComponent(phaseRef)}/handoff/verify`,
-      {
-        expectedContentHash,
-        ...(sourceReviews ? { sourceReviews } : {}),
-        ...(omissionsFound ? { omissionsFound } : {}),
-      },
-    );
+    const { client, prefix } = await discoveryApi();
+    const fields = { expectedContentHash, sourceReviews, omissionsFound };
+    const data = await client.request<{ phaseRef: string } & Record<string, unknown>>("POST",
+      prefix ? `${prefix}/handoffs/verify` : `/phases/${encodeURIComponent(phaseRef)}/handoff/verify`,
+      prefix ? { ref: phaseRef, fields, requestId: randomUUID() } : fields);
     return text(`✅ Handoff on ${data.phaseRef} is resume-ready after persisted read-back and source reconciliation.`, data);
   } catch (error) {
     if (!(error instanceof PlannerApiError)) throw error;
@@ -2079,30 +2308,37 @@ server.registerTool("planner-requirement-list", {
   if (!phaseRef?.trim()) {
     // Unscoped inventory: no attestation, so it needs no session and runs
     // through the service like every other bridged read.
-    const api = await plannerApi(planRoot());
-    const data = await api.request<{ requirements: Requirement[] }>("GET", "/requirements");
+    const { client, prefix } = await discoveryApi();
+    const data = await client.request<{ requirements: Requirement[] }>("GET", `${prefix}/requirements`);
     return text(data.requirements.map((req) => `- ${req.id} — ${req.title}`).join("\n") || "No requirements", {
       requirements: { requirements: data.requirements },
       attestedRequirementIds: [],
       readScope: "inventory",
     });
   }
-  // Phase-scoped delivery stays in-process until the adapter adopts the
-  // service-issued session id for its read attestations (C3 session slice):
-  // a receipt written under a different session id would not satisfy the
-  // local start gate.
-  const plannerSessionId = plannerSessionIdFor(extra);
-  const st = await requireStore();
-  const requirements = await st.loadRequirements();
-  const features = (await st.loadFeatures()).features;
-  const phase = findPhaseByRef(await st.loadAllPhases(), features, phaseRef.trim());
-  if (!phase) return { ...text(`Phase not found: ${phaseRef}`, { attestedRequirementIds: [] }), isError: true };
-  const delivered = [
-    ...(await st.linkedRequirementsForPhase(phase.id)),
-    ...(phase.featureId ? await st.linkedRequirementsForFeature(phase.featureId) : []),
-  ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
-  delivered.forEach((requirement) => markRequirementReadForSessionId(plannerSessionId, requirement.id));
-  const targetRef = formatPhaseRef(phase.number, featureNumberOfPhase(phase, features));
+  const query = new URLSearchParams({ phaseRef: phaseRef.trim() });
+  let deliveredContext: Omit<PhaseRequirementsOutcome, "featureId"> & { featureId: string | null };
+  try {
+    if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+      const { client, prefix } = await discoveryApi();
+      const data = await client.request<{
+        requirements: Requirement[];
+        target: { phaseId: string; phaseRef: string; featureId?: string };
+      }>("GET", `${prefix}/requirements?${query}`);
+      deliveredContext = { ...data.target, featureId: data.target.featureId ?? null, requirements: data.requirements, attestedRequirementIds: [] };
+    } else {
+      const { client, sessionId } = await plannerSessionApi(extra);
+      deliveredContext = await client.request<typeof deliveredContext>("GET", `/context/requirements?${query}`);
+      // Legacy lifecycle keeps the service attestations in the same session.
+      deliveredContext.attestedRequirementIds.forEach((id) => markRequirementReadForSessionId(sessionId, id));
+    }
+  } catch (error) {
+    if (error instanceof PlannerApiError && error.code === "PHASE_NOT_FOUND") {
+      return { ...text(`Phase not found: ${phaseRef}`, { attestedRequirementIds: [] }), isError: true };
+    }
+    throw error;
+  }
+  const { phaseId, phaseRef: targetRef, featureId, requirements: delivered, attestedRequirementIds } = deliveredContext;
   const body = delivered.map((requirement) => [
     `- ${requirement.id} — ${requirement.title}`,
     `  Description: ${requirement.description || "None"}`,
@@ -2110,10 +2346,10 @@ server.registerTool("planner-requirement-list", {
     `  Macro tasks: ${requirement.macroTasks.map((item) => `${item.title} (${item.status})`).join("; ") || "None"}`,
   ].join("\n")).join("\n");
   return text(body || `No requirements linked to ${targetRef}`, {
-    requirements: { ...requirements, requirements: delivered },
-    attestedRequirementIds: delivered.map((requirement) => requirement.id),
+    requirements: { requirements: delivered },
+    attestedRequirementIds,
     readScope: "target",
-    target: { phaseId: phase.id, phaseRef: targetRef, featureId: phase.featureId },
+    target: { phaseId, phaseRef: targetRef, featureId: featureId ?? undefined },
   });
 });
 
@@ -2130,14 +2366,17 @@ server.registerTool("planner-requirement-create", {
     })).optional(),
   },
 }, async ({ title, description, linkedPhaseIds, macroTasks }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ requirement: Requirement }>("POST", "/requirements", {
+    const fields = {
       title,
       ...(description !== undefined ? { description } : {}),
       linkedPhaseIds,
       ...(macroTasks !== undefined ? { macroTasks } : {}),
-    });
+    };
+    const { client, prefix } = await discoveryApi();
+    const data = await client.request<{ requirement: Requirement }>("POST",
+      prefix ? `${prefix}/requirements/create` : "/requirements",
+      prefix ? { requestId: randomUUID(), fields } : fields);
     return text(`Requirement created: ${data.requirement.id}.`, { requirement: data.requirement, created: true });
   } catch (error) {
     if (error instanceof PlannerApiError) return text(`❌ ${error.message}`, { created: false, errorCode: error.code });
@@ -2169,18 +2408,12 @@ server.registerTool("planner-requirement-update", {
       retryCommand: `planner-requirement-update ${requirementId}`,
     });
   }
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ requirement: Requirement; updatedFields: string[] }>(
-      "PUT",
-      `/requirements/${encodeURIComponent(requirementId)}`,
-      {
-        ...(title !== undefined ? { title } : {}),
-        ...(description !== undefined ? { description } : {}),
-        ...(linkedPhaseIds !== undefined ? { linkedPhaseIds } : {}),
-        ...(macroTasks !== undefined ? { macroTasks } : {}),
-      },
-    );
+    const { client, prefix } = await discoveryApi();
+    const fields = { title, description, linkedPhaseIds, macroTasks };
+    const data = await client.request<{ requirement: Requirement; updatedFields: string[] }>(
+      prefix ? "POST" : "PUT", prefix ? `${prefix}/requirements/update` : `/requirements/${encodeURIComponent(requirementId)}`,
+      prefix ? { requestId: randomUUID(), requirementId, fields } : fields);
     const next = data.requirement;
     const requirementUpdateReply = buildMutationReply({
       identity: { entity: "requirement", ref: next.id, id: next.id, title: next.title },
@@ -2200,9 +2433,10 @@ server.registerTool("planner-requirement-delete", {
   description: "Permanently delete a top-level requirement. Confirm the intended requirement first.",
   inputSchema: { requirementId: z.string().min(1) },
 }, async ({ requirementId }) => {
-  const api = await plannerApi(planRoot());
   try {
-    await api.request("DELETE", `/requirements/${encodeURIComponent(requirementId)}`);
+    const { client, prefix } = await discoveryApi();
+    if (prefix) await client.request("POST", `${prefix}/requirements/delete`, { requestId: randomUUID(), requirementId });
+    else await client.request("DELETE", `/requirements/${encodeURIComponent(requirementId)}`);
     return text(`Requirement deleted: ${requirementId}.`, { deleted: true, requirementId });
   } catch (error) {
     if (error instanceof PlannerApiError && error.code === "REQUIREMENT_NOT_FOUND") {
@@ -2213,12 +2447,19 @@ server.registerTool("planner-requirement-delete", {
 });
 
 
+async function requestIdea<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: object): Promise<T> {
+  const { client, prefix } = await discoveryApi();
+  if (!prefix || method === "GET" || path.endsWith("/promotion/begin")) return client.request<T>(method, `${prefix}/ideas${path}`, body);
+  const requestId = randomUUID();
+  if (method === "DELETE") return client.request<T>(method, `${prefix}/ideas${path}&requestId=${requestId}`);
+  return client.request<T>(method, `${prefix}/ideas${path}`, { ...body, requestId });
+}
+
 server.registerTool("planner-idea-list", {
   description: "List top-level Ideas Inbox entries. Ideas never affect feature, phase, or task rollups.",
   inputSchema: {},
 }, async () => {
-  const api = await plannerApi(planRoot());
-  const data = await api.request<{ ideas: Idea[] }>("GET", "/ideas");
+  const data = await requestIdea<{ ideas: Idea[] }>("GET", "");
   return text(
     data.ideas.map((idea) => `- ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}${idea.promotion ? ` → ${idea.promotion.targetRef}` : ""}`).join("\n") || "No ideas",
     { ideas: data.ideas },
@@ -2229,9 +2470,8 @@ server.registerTool("planner-idea-show", {
   description: "Show one Idea Inbox entry by I-number, short ID, UUID, or title.",
   inputSchema: { idea: z.string().min(1) },
 }, async ({ idea: ref }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ idea: Idea }>("GET", `/ideas/${encodeURIComponent(ref)}`);
+    const data = await requestIdea<{ idea: Idea }>("GET", `/${encodeURIComponent(ref)}`);
     const idea = data.idea;
     return text(`${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}\n\n${idea.description || "(no description)"}`, { idea });
   } catch (error) {
@@ -2244,9 +2484,8 @@ server.registerTool("planner-idea-create", {
   description: "Create a rollup-independent Ideas Inbox entry.",
   inputSchema: { title: z.string().min(1), description: z.string().optional() },
 }, async ({ title, description }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ idea: Idea }>("POST", "/ideas", {
+    const data = await requestIdea<{ idea: Idea }>("POST", "", {
       title,
       ...(description !== undefined ? { description } : {}),
     });
@@ -2262,9 +2501,8 @@ server.registerTool("planner-idea-update", {
   description: "Update an unpromoted or promoted Idea Inbox entry title or description.",
   inputSchema: { idea: z.string().min(1), title: z.string().min(1).optional(), description: z.string().optional() },
 }, async ({ idea: ref, title, description }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ idea: Idea; updatedFields: string[] }>("PUT", `/ideas/${encodeURIComponent(ref)}`, {
+    const data = await requestIdea<{ idea: Idea; updatedFields: string[] }>("PUT", `/${encodeURIComponent(ref)}`, {
       ...(title !== undefined ? { title } : {}),
       ...(description !== undefined ? { description } : {}),
     });
@@ -2298,9 +2536,8 @@ server.registerTool("planner-idea-delete", {
   description: "Delete an Idea Inbox entry. Confirm the exact idea with the user before calling.",
   inputSchema: { idea: z.string().min(1), confirmed: z.boolean() },
 }, async ({ idea: ref, confirmed }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ ideaRef: string }>("DELETE", `/ideas/${encodeURIComponent(ref)}?confirmed=${confirmed ? "true" : "false"}`);
+    const data = await requestIdea<{ ideaRef: string }>("DELETE", `/${encodeURIComponent(ref)}?confirmed=${confirmed ? "true" : "false"}`);
     return text(`Idea deleted: ${data.ideaRef}.`, { deleted: true, ideaRef: data.ideaRef });
   } catch (error) {
     if (!(error instanceof PlannerApiError)) throw error;
@@ -2316,16 +2553,15 @@ server.registerTool("planner-idea-promotion-begin", {
   description: "Begin an Idea promotion discussion without persisting a target or promotion. Returns the project-local grill-me instructions; follow them one question at a time, then use planner-idea-promotion-finalize only after target confirmation.",
   inputSchema: { idea: z.string().min(1), targetType: z.enum(["feature", "phase", "task"]) },
 }, async ({ idea: ref, targetType }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{
+    const data = await requestIdea<{
       idea: Idea;
       targetType: "feature" | "phase" | "task";
       recommendation: string;
       grillMeSkill: string;
       persisted: boolean;
       nextActions: string[];
-    }>("POST", `/ideas/${encodeURIComponent(ref)}/promotion/begin`, { targetType });
+    }>("POST", `/${encodeURIComponent(ref)}/promotion/begin`, { targetType });
     return text(`Promotion discussion started for ${formatIdeaRef(data.idea.number)}. ${data.recommendation}`, {
       idea: data.idea,
       targetType: data.targetType,
@@ -2342,7 +2578,7 @@ server.registerTool("planner-idea-promotion-begin", {
       let idea: Idea | undefined;
       const ideaRef = typeof error.details.ideaRef === "string" ? error.details.ideaRef : ref;
       try {
-        idea = (await api.request<{ idea: Idea }>("GET", `/ideas/${encodeURIComponent(ideaRef)}`)).idea;
+        idea = (await requestIdea<{ idea: Idea }>("GET", `/${encodeURIComponent(ideaRef)}`)).idea;
       } catch {
         idea = undefined;
       }
@@ -2356,11 +2592,10 @@ server.registerTool("planner-idea-promotion-finalize", {
   description: "Record a promotion only after grill-me discussion, explicit target confirmation, and successful target creation. targetRef must be the already-created agreed target; no raw UUID is returned.",
   inputSchema: { idea: z.string().min(1), targetType: z.enum(["feature", "phase", "task"]), targetRef: z.string().min(1), discussionCompleted: z.boolean(), confirmed: z.boolean() },
 }, async ({ idea: ref, targetType, targetRef, discussionCompleted, confirmed }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const data = await api.request<{ idea: Idea; promoted: boolean; targetRef: string }>(
+    const data = await requestIdea<{ idea: Idea; promoted: boolean; targetRef: string }>(
       "POST",
-      `/ideas/${encodeURIComponent(ref)}/promotion/finalize`,
+      `/${encodeURIComponent(ref)}/promotion/finalize`,
       { targetType, targetRef, discussionCompleted, confirmed },
     );
     return text(`Idea promoted: ${formatIdeaRef(data.idea.number)} → ${data.targetRef}`, {
@@ -2429,7 +2664,6 @@ server.registerTool("planner-handoff-write", {
     featureNoUpdateReason: z.string().min(1).optional(),
   },
 }, async ({ phaseRef, title, reason, confirmed, content, expectedHandoffUpdatedAt, reconciledExistingHandoff, sectionDispositions, completenessAudit, coldStartInventory, supportingDocuments, taskUpdates, phaseUpdate, phaseNoUpdateReason, featureUpdate, featureNoUpdateReason }) => {
-  const api = await plannerApi(planRoot());
   const request: PhaseHandoffWriteRequest = {
     confirmed: confirmed === true,
     title,
@@ -2451,7 +2685,8 @@ server.registerTool("planner-handoff-write", {
     featureNoUpdateReason,
   };
   try {
-    const data = await api.request<{
+    const { client, prefix } = await discoveryApi();
+    const data = await client.request<{
       phaseRef: string;
       phaseId: string;
       updatedTaskIds: string[];
@@ -2460,7 +2695,8 @@ server.registerTool("planner-handoff-write", {
       persisted: boolean;
       resumeReady: boolean;
       verificationRequired: boolean;
-    }>("POST", `/phases/${encodeURIComponent(phaseRef)}/handoff`, request);
+    }>("POST", prefix ? `${prefix}/handoffs/write` : `/phases/${encodeURIComponent(phaseRef)}/handoff`,
+      prefix ? { ref: phaseRef, requestId: randomUUID(), fields: request } : request);
     return text(`⚠️ Handoff candidate persisted on ${data.phaseRef}, but it is NOT resume-ready yet. Required next action: call planner-handoff-show ${data.phaseRef}, read the persisted compact capsule, then call planner-handoff-verify with the returned contentHash. Rewrite only if resume-critical context is missing.`, {
       phaseRef: data.phaseRef,
       phaseId: data.phaseId,
@@ -2499,15 +2735,14 @@ server.registerTool("planner-handoff-prepare", {
     "Tell the user: 'I propose writing this handoff on P00x(F00x) — <phase title>. Confirm?' Wait for explicit confirmation.",
     "After confirmation, call planner-handoff-prepare again with that exact phaseRef, then reconcile its current handoff and missing task evidence through planner-handoff-write.",
   ].join("\n"));
-  const api = await plannerApi(planRoot());
   // GET has no body, so an already-known manifest travels as a JSON query
   // value; it is optional and usually unnecessary.
   const manifest = supportingDocuments === undefined ? "" : `?supportingDocuments=${encodeURIComponent(JSON.stringify(supportingDocuments))}`;
   try {
-    const { message, ...structured } = await api.request<Record<string, unknown> & { message: string }>(
-      "GET",
-      `/phases/${encodeURIComponent(phaseRef)}/handoff/prepare${manifest}`,
-    );
+    const { client, prefix } = await discoveryApi();
+    const { message, ...structured } = await client.request<Record<string, unknown> & { message: string }>(
+      prefix ? "POST" : "GET", prefix ? `${prefix}/handoffs/prepare` : `/phases/${encodeURIComponent(phaseRef)}/handoff/prepare${manifest}`,
+      prefix ? { ref: phaseRef, supportingDocuments } : undefined);
     return text(message, structured);
   } catch (error) {
     if (!(error instanceof PlannerApiError)) throw error;
@@ -2522,9 +2757,15 @@ server.registerTool("planner-handoff-clear", {
   description: "Clear/archive the entity-scoped handoff of a phase. phaseRef is required; never infer a phase automatically.",
   inputSchema: { phaseRef: z.string().min(1).describe("Exact phase ref: P00x | P00x(F00x) | UUID | title.") },
 }, async ({ phaseRef }) => {
-  const api = await plannerApi(planRoot());
   try {
-    const cleared = await api.request<{ phaseRef: string; phaseId: string }>(
+    const { client, prefix } = await discoveryApi();
+    if (prefix) {
+      const data = await client.request<{ phaseRef: string; phaseId: string }>("POST", `${prefix}/handoffs/clear`, {
+        ref: phaseRef, requestId: randomUUID(), confirmed: true,
+      });
+      return text(`Archived handoff on ${data.phaseRef}.`, data);
+    }
+    const cleared = await client.request<{ phaseRef: string; phaseId: string }>(
       "DELETE",
       `/phases/${encodeURIComponent(phaseRef)}/handoff`,
     );
@@ -2543,6 +2784,10 @@ server.registerTool("planner-web", {
     action: z.enum(["start", "stop", "status"]).default("status"),
   },
 }, async ({ action }) => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    const result = await registeredDashboardInfo(process.cwd(), action);
+    return text(result.text, result.details);
+  }
   const root = planRoot();
   if (action === "start") {
     if (!(await new PlanStore(root).exists())) {
@@ -2560,7 +2805,7 @@ server.registerTool("planner-web", {
     );
   }
   if (action === "stop") {
-    const outcome = await stopPlannerService();
+    const outcome = await stopPlannerService(root);
     if (outcome.stopped) {
       return text(`planner-web stopped (was ${outcome.url}).`, { running: false, address: "", localUrl: "", lanUrl: "", host: "", port: 0, mode: "" });
     }
@@ -2585,65 +2830,75 @@ server.registerTool("planner-web", {
 });
 
 server.registerTool("planner-load", {
-  description: "Load/refresh the planner on explicit user request (NOT automatic): starts the web dashboard on LAN and returns one text with, in order: a recap under '## Recap — show this to the user verbatim', then agent-only context under '## Agent-only context' (the complete project-level context — description, goal, scope, out-of-scope, technologies, tools, language preferences, Project Guidelines, every Requirement, every project Accepted Decision — then Accepted Decisions of features, phases and tasks, then where the Agent Plan operating guide lives). Call it ONLY when the user runs /planner load or /planner recap (or asks to load the planner). Show the user ONLY the recap section, verbatim, including its final Web UI line; never quote the agent-only context. If structuredContent.projectContext.contextComplete is false, the project-level context was NOT delivered — follow structuredContent.projectContext.nextActions and retry before relying on it. A pending handoff is read-only context: NEVER call planner-handoff-show or planner-handoff-clear as part of load/recap. Archive it only when every phase task is done/canceled, when replacing it with a new handoff, or after an explicit user handoff-clear request. Do NOT start the planner/web or show the web URL unless the user explicitly asks (load/recap/web status).",
+  description: "Load/refresh the planner on explicit user request (NOT automatic): starts or reuses the local planner service and returns one text with, in order: a recap under '## Recap — show this to the user verbatim', then agent-only context under '## Agent-only context' (the complete project-level context — description, goal, scope, out-of-scope, technologies, tools, language preferences, Project Guidelines, every Requirement, every project Accepted Decision — then Accepted Decisions of features, phases and tasks, then where the Agent Plan operating guide lives). Call it ONLY when the user runs /planner load or /planner recap (or asks to load the planner). Show the user ONLY the recap section, verbatim, including its final Web UI line; never quote the agent-only context. If structuredContent.projectContext.contextComplete is false, the project-level context was NOT delivered — follow structuredContent.projectContext.nextActions and retry before relying on it. A pending handoff is read-only context: NEVER call planner-handoff-show or planner-handoff-clear as part of load/recap. Archive it only when every phase task is done/canceled, when replacing it with a new handoff, or after an explicit user handoff-clear request. Do NOT start the planner/web or show the web URL unless the user explicitly asks (load/recap/web status).",
   inputSchema: {
     maxChars: z.number().int().positive().optional().describe(`Single-response bound (chars) for the project-context delivery. Default ${DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS}. Raise this and retry if a prior call returned projectContext.contextComplete=false.`),
   },
 }, async ({ maxChars }, extra) => {
-  const st = store();
-  if (!(await st.exists())) return text("No .planner/ found at " + planRoot() + ". Run planner-init first.");
-  const plannerSessionId = plannerSessionIdFor(extra);
-  let preparation: Awaited<ReturnType<PlanStore["preparePlannerSession"]>>;
   try {
-    preparation = await st.preparePlannerSession();
+    if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) return await loadRegisteredContext(maxChars);
+    const { client } = await plannerSessionApi(extra);
+    const reply = await client.request<PlannerContextLoadOutcome>("POST", "/context/load", { maxChars, harness: "mcp" });
+    return text(reply.text, {
+      ...reply.structured,
+      webUi: plannerWebMetadata({ localUrl: client.baseUrl, mode: "local" }),
+      preparation: reply.preparation,
+    });
   } catch (error) {
-    return text(`Planner load aborted: ${error instanceof Error ? error.message : String(error)}`, { errorCode: "PLANNER_SESSION_PREPARATION_FAILED", loaded: false });
+    if (error instanceof PlannerApiError && error.code === "PLANNER_SESSION_PREPARATION_FAILED") {
+      return text(`Planner load aborted: ${error.message}`, { errorCode: error.code, loaded: false });
+    }
+    if (error instanceof PlannerApiError && error.code === "PLAN_NOT_FOUND") {
+      return text("No .planner/ found at " + planRoot() + ". Run planner-init first.");
+    }
+    throw error;
   }
-  const project = preparation.project;
-  await st.runBatch(() => st.refreshResume(undefined, undefined, plannerSessionId));
-  if (project.projectGuidelines.content.trim()) {
-    await st.recordProjectGuidelinesRead({ sessionId: plannerSessionId });
-  }
-  const plannerSkill = await st.syncPlannerSkill();
-  await st.syncGrillMeSkill();
-  const web = await ensurePlannerService(planRoot());
-  const recap = await buildRecap(st, web, { harness: "mcp", sessionId: plannerSessionId });
-  const plan = await st.loadAll();
-
-  // Explicit planner load must deliver the complete project-level context
-  // (P102(F005)/T404), attested through the same lossless contract used
-  // everywhere else: loadProjectContextDelivery + recordProjectContextRead.
-  const boundedMaxChars = maxChars ?? DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS;
-  const projectContextDelivery = await st.loadProjectContextDelivery(boundedMaxChars);
-  const projectContextReply = buildProjectContextLoadReply(projectContextDelivery, boundedMaxChars);
-  if (projectContextReply.structured.contextComplete) {
-    await st.recordProjectContextRead({ sessionId: plannerSessionId, chunks: projectContextDelivery.chunks });
-  }
-
-  // One text, each piece once (shared with Pi via buildPlannerLoadReply).
-  // The guide body is not resent: the /planner command already carries it,
-  // and a bare planner-load call is pointed at the project-local copy.
-  const reply = buildPlannerLoadReply({
-    recap: preparation.changed ? `${preparation.legacyProjectContext.summary}\n\n${recap}` : recap,
-    projectContext: projectContextReply,
-    scopedDecisions: buildScopedDecisionContext(plan),
-    plannerGuide: { mode: "pointer", path: ".planner/SKILL.md", customized: plannerSkill.customized, message: plannerSkill.message },
-  });
-  return text(reply.text, {
-    ...reply.structured,
-    webUi: plannerWebMetadata(web),
-    preparation: preparation.legacyProjectContext,
-  });
 });
 
 server.registerTool("planner-disable", {
-  description: "MCP no-op equivalent of Pi /planner disable. Stop the MCP process from the host to disable it.",
-}, async () => text("To disable planner MCP, remove/disable this MCP server from the host config or stop the process."));
+  description: "End the registered planner session. For a legacy project, disable the MCP server in the host.",
+}, async () => {
+  if (workspaceDiscoveryError instanceof ProjectAuthorityUnavailableError) {
+    await endRegisteredSession();
+    return text("Registered planner session ended.", { disabled: true });
+  }
+  return text("To disable planner MCP, remove/disable this MCP server from the host config or stop the process.");
+});
+
+async function endRegisteredSession() {
+  const session = registeredSession;
+  registeredSession = undefined;
+  pendingRegisteredSession = undefined;
+  clearInterval(registeredHeartbeat);
+  if (!session) return;
+  const { client, prefix } = await registeredWorkspaceClient(process.cwd());
+  if (prefix === session.prefix) await client.request("DELETE", `${prefix}/sessions/${encodeURIComponent(session.sessionId)}`);
+}
 
 export async function startStdioServer(): Promise<void> {
+  try {
+    discoveredPlanRoot = await resolveLegacyPlannerRoot(process.cwd(), process.env.AGENT_PLAN_ROOT);
+    workspaceDiscoveryError = undefined;
+  } catch (cause) {
+    workspaceDiscoveryError = cause instanceof Error ? cause : new Error(String(cause));
+  }
   const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error(`agent-plan MCP server running on stdio (root: ${planRoot()})`);
+  const closeOnEof = () => { void transport.close(); };
+  transport.onclose = () => {
+    process.stdin.off("end", closeOnEof);
+    process.stdin.off("close", closeOnEof);
+    resetPlannerSessions();
+    void endRegisteredSession().catch(() => {});
+  };
+  process.stdin.once("end", closeOnEof);
+  process.stdin.once("close", closeOnEof);
+  try {
+    await server.connect(transport);
+  } catch (error) {
+    await transport.close();
+    throw error;
+  }
+  console.error(`agent-plan MCP server running on stdio (${workspaceDiscoveryError?.message ?? `root: ${planRoot()}`})`);
 }
 
 function isDirectExecution(): boolean {

@@ -146,6 +146,7 @@ export const ResumeSessionsSchema = z.record(z.string().min(1), ResumeFocusSchem
 export const PlannerSessionRecordSchema = z.object({
   sessionId: z.string().min(1),
   projectId: z.string().min(1),
+  principalId: z.string().default(""),
   clientKind: z.string().min(1),
   clientVersion: z.string().default(""),
   agentId: z.string().min(1),
